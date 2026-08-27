@@ -2,6 +2,11 @@
 
 These milestones implement the closed MVP proposed in [specification-review.md](./specification-review.md). They are ordered by dependency, not by team discipline: documentation, tests, and boundary checks ship with the capability they describe. A milestone is complete only when its exit criteria pass from a clean checkout. Later milestones may refine public APIs, but may not erase runtime, lifecycle, trust, or documentation boundaries established earlier.
 
+Milestones 0 and 1 are complete; Milestone 2 is next. The implemented Milestone 1 surface is Core,
+Shared semantic movement, and the headless Server Runtime. Client and Protocol package boundaries exist,
+while Client and Protocol runtime behavior, networking, rendering, and physics remain future work. See
+[Milestone 1 verification](./m1-verification.md) for the acceptance evidence and verification command.
+
 ## Milestone 0 — Freeze the executable contract
 
 **Outcome:** Contributors can name the supported environment, package graph, public surface, runtime ownership, and one objective end-to-end acceptance scenario before product implementation branches.

@@ -1,0 +1,10 @@
+{
+  "files": [],
+  "references": [
+    { "path": "./packages/core" },
+    { "path": "./packages/shared" },
+    { "path": "./packages/protocol" },
+    { "path": "./packages/client" },
+    { "path": "./packages/server" }
+  ]
+}

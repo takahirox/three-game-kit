@@ -1,0 +1,58 @@
+lockfileVersion: '9.0'
+
+settings:
+  autoInstallPeers: true
+  excludeLinksFromLockfile: false
+
+importers:
+
+  .:
+    devDependencies:
+      typescript:
+        specifier: 6.0.3
+        version: 6.0.3
+
+  packages/client:
+    dependencies:
+      '@three-game-kit/core':
+        specifier: workspace:^
+        version: link:../core
+      '@three-game-kit/protocol':
+        specifier: workspace:^
+        version: link:../protocol
+      '@three-game-kit/shared':
+        specifier: workspace:^
+        version: link:../shared
+
+  packages/core: {}
+
+  packages/protocol: {}
+
+  packages/server:
+    dependencies:
+      '@three-game-kit/core':
+        specifier: workspace:^
+        version: link:../core
+      '@three-game-kit/protocol':
+        specifier: workspace:^
+        version: link:../protocol
+      '@three-game-kit/shared':
+        specifier: workspace:^
+        version: link:../shared
+
+  packages/shared:
+    dependencies:
+      '@three-game-kit/core':
+        specifier: workspace:^
+        version: link:../core
+
+packages:
+
+  typescript@6.0.3:
+    resolution: {integrity: sha512-y2TvuxSZPDyQakkFRPZHKFm+KKVqIisdg9/CZwm9ftvKXLP8NRWj38/ODjNbr43SsoXqNuAisEf1GdCxqWcdBw==}
+    engines: {node: '>=14.17'}
+    hasBin: true
+
+snapshots:
+
+  typescript@6.0.3: {}

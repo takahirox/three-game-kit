@@ -1,8 +1,13 @@
 # Package map
 
 This is the operational package contract selected by
-[ADR 0002](../adr/0002-workspace-package-graph-and-public-exports.md). It describes the Milestone 0
-target; the package directories and implementation do not exist yet.
+[ADR 0002](../adr/0002-workspace-package-graph-and-public-exports.md). All five package directories
+and their declared public export boundaries now exist. Milestone 1 implements Core, Shared semantic
+movement, and the headless Server Runtime.
+
+The Client and Protocol packages currently establish their package and export boundaries only. Client and
+Protocol runtime behavior, networking, rendering, and physics remain future work. The dependency, ownership,
+and public import rules below remain the normative package contract.
 
 ## Workspace boundary
 

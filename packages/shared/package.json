@@ -1,0 +1,26 @@
+{
+  "name": "@three-game-kit/shared",
+  "version": "0.1.0",
+  "type": "module",
+  "sideEffects": false,
+  "files": ["dist/**/*.js", "dist/**/*.js.map", "dist/**/*.d.ts", "dist/**/*.d.ts.map"],
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    },
+    "./movement": {
+      "types": "./dist/movement.d.ts",
+      "import": "./dist/movement.js"
+    }
+  },
+  "dependencies": {
+    "@three-game-kit/core": "workspace:^"
+  },
+  "engines": {
+    "node": "24.x"
+  },
+  "publishConfig": {
+    "access": "public"
+  }
+}

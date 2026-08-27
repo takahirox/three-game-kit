@@ -1,0 +1,48 @@
+{
+  "name": "@three-game-kit/client",
+  "version": "0.1.0",
+  "type": "module",
+  "sideEffects": false,
+  "files": ["dist/**/*.js", "dist/**/*.js.map", "dist/**/*.d.ts", "dist/**/*.d.ts.map"],
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    },
+    "./rendering": {
+      "types": "./dist/rendering.d.ts",
+      "import": "./dist/rendering.js"
+    },
+    "./input": {
+      "types": "./dist/input.d.ts",
+      "import": "./dist/input.js"
+    },
+    "./camera": {
+      "types": "./dist/camera.d.ts",
+      "import": "./dist/camera.js"
+    },
+    "./collision": {
+      "types": "./dist/collision.d.ts",
+      "import": "./dist/collision.js"
+    },
+    "./assets": {
+      "types": "./dist/assets.d.ts",
+      "import": "./dist/assets.js"
+    },
+    "./networking": {
+      "types": "./dist/networking.d.ts",
+      "import": "./dist/networking.js"
+    }
+  },
+  "dependencies": {
+    "@three-game-kit/core": "workspace:^",
+    "@three-game-kit/protocol": "workspace:^",
+    "@three-game-kit/shared": "workspace:^"
+  },
+  "engines": {
+    "node": "24.x"
+  },
+  "publishConfig": {
+    "access": "public"
+  }
+}

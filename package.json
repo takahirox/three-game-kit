@@ -1,0 +1,20 @@
+{
+  "name": "three-game-kit-workspace",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "packageManager": "pnpm@11.24.0",
+  "engines": {
+    "node": "24.x",
+    "pnpm": "11.24.0"
+  },
+  "scripts": {
+    "build": "tsc -b",
+    "typecheck": "pnpm run build && tsc -p tsconfig.typecheck.json --noEmit",
+    "test": "pnpm run build && node --test packages/core/test/ecs.test.mjs packages/core/test/feature-lifecycle.test.mjs packages/core/test/runtime-scheduling.test.mjs packages/core/test/telemetry.test.mjs packages/shared/test/movement.test.mjs packages/server/test/runtime.test.mjs",
+    "verify": "pnpm run build && tsc -p tsconfig.typecheck.json --noEmit && node --test packages/core/test/ecs.test.mjs packages/core/test/feature-lifecycle.test.mjs packages/core/test/runtime-scheduling.test.mjs packages/core/test/telemetry.test.mjs packages/shared/test/movement.test.mjs packages/server/test/runtime.test.mjs && node scripts/verify-workspace.mjs"
+  },
+  "devDependencies": {
+    "typescript": "6.0.3"
+  }
+}

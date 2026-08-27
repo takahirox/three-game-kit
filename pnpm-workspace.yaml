@@ -1,0 +1,6 @@
+packages:
+  - packages/core
+  - packages/shared
+  - packages/protocol
+  - packages/client
+  - packages/server

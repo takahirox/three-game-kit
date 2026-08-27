@@ -5,14 +5,14 @@ It is not a game, a general-purpose engine, or a framework that owns a consuming
 
 ## Repository status
 
-Milestone 0 is complete: the executable product contract is frozen, including the supported environment,
-five intended package and public boundaries, runtime ownership, ECS and collision choices, scheduling and lifecycle
-semantics, protocol and trust rules, errors and telemetry, and the objective acceptance procedure.
-Milestone 1 implementation is next: the headless kernel and lifecycle, Shared Simulation, exact fixed-tick scheduling,
-Feature composition, rollback, and idempotent shutdown.
+Milestones 0 and 1 are complete. Milestone 0 froze the executable product contract, including the
+supported environment, package and public boundaries, runtime ownership, scheduling and lifecycle semantics,
+protocol and trust rules, errors and telemetry, and the objective acceptance procedure. Milestone 1 implements
+the Core ECS, resources, scheduling, Feature lifecycle and telemetry, Shared semantic movement, and the headless
+Server Runtime with exact stepping, bounded wall-clock catch-up, rollback, and idempotent shutdown.
 
-Milestone 0 completion is documentation evidence only. No implementation packages, runtimes, product tests,
-CI workflow, or release artifacts exist yet.
+Milestone 2, the local browser slice, is next. Client and Protocol package boundaries exist, but Client and
+Protocol runtime behavior, networking, rendering, and physics remain future work.
 
 ## Bounded MVP
 
@@ -38,6 +38,7 @@ Audio, WebXR, post-processing, reconnect, production authentication, alternate t
 ## Documentation
 
 - [Milestone 0 traceability](./docs/m0-traceability.md)
+- [Milestone 1 verification](./docs/m1-verification.md)
 - [Foundation MVP milestones](./docs/milestones.md)
 - [Specification review](./docs/specification-review.md)
 - [Supported environments](./docs/supported-environments.md)
