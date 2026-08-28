@@ -10,6 +10,29 @@ export interface MovementVector {
   readonly z: number;
 }
 
+export interface CollisionMoveResult {
+  readonly startPosition: MovementVector;
+  readonly desiredTranslation: MovementVector;
+  readonly effectiveTranslation: MovementVector;
+  readonly position: MovementVector;
+  readonly grounded: boolean;
+  readonly collided: boolean;
+  readonly collisionCount: number;
+}
+
+export interface StaticBoxDescriptor {
+  readonly id: string;
+  readonly center: MovementVector;
+  readonly halfExtents: MovementVector;
+}
+
+export interface StaticSceneDescriptor {
+  readonly capsuleRadius: number;
+  readonly capsuleHalfHeight: number;
+  readonly controllerOffset: number;
+  readonly boxes: readonly StaticBoxDescriptor[];
+}
+
 export interface MovementState {
   readonly position: MovementVector;
 }
@@ -17,6 +40,12 @@ export interface MovementState {
 export interface MovementStepOptions {
   readonly speedMetersPerSecond: number;
   readonly dtSeconds: number;
+}
+
+export interface DesiredMovementTranslationOptions {
+  readonly speedMetersPerSecond: number;
+  readonly dtSeconds: number;
+  readonly downwardMetersPerTick?: number;
 }
 
 export interface HeadlessMovementCommandSource {
@@ -37,6 +66,58 @@ function requireFinite(value: number, name: string): number {
     throw new RangeError(`${name} must be finite`);
   }
   return value;
+}
+
+function requirePositiveFinite(value: number, name: string): number {
+  const finite = requireFinite(value, name);
+  if (finite <= 0) {
+    throw new RangeError(`${name} must be positive`);
+  }
+  return finite;
+}
+
+function copyStaticVector(
+  vector: MovementVector,
+  name: string,
+  positive = false,
+): MovementVector {
+  if (typeof vector !== "object" || vector === null) {
+    throw new TypeError(`${name} must be an object`);
+  }
+  const copy = {
+    x: requireFinite(vector.x, `${name} x`),
+    y: requireFinite(vector.y, `${name} y`),
+    z: requireFinite(vector.z, `${name} z`),
+  };
+  if (positive && (copy.x <= 0 || copy.y <= 0 || copy.z <= 0)) {
+    throw new RangeError(`${name} must contain positive dimensions`);
+  }
+  return Object.freeze(copy);
+}
+
+function copyStaticBox(
+  box: StaticBoxDescriptor,
+  ids: Set<string>,
+): StaticBoxDescriptor {
+  if (typeof box !== "object" || box === null) {
+    throw new TypeError("Static boxes must be objects");
+  }
+  if (typeof box.id !== "string" || box.id.length === 0) {
+    throw new TypeError("Static box IDs must be non-empty strings");
+  }
+  if (ids.has(box.id)) {
+    throw new RangeError("Static box IDs must be unique");
+  }
+  ids.add(box.id);
+  return Object.freeze({
+    id: box.id,
+    center: copyStaticVector(box.center, "Static box center"),
+    halfExtents: copyStaticVector(
+      box.halfExtents,
+      "Static box half-extents",
+      true,
+    ),
+  });
 }
 
 function copyCommand(command: MovementCommand): MovementCommand {
@@ -80,10 +161,76 @@ export function createMovementCommand(
     : copyCommand({ kind: "move", x: axesOrX.x, z: axesOrX.z });
 }
 
+export function computeDesiredMovementTranslation(
+  command: MovementCommand,
+  options: DesiredMovementTranslationOptions,
+): MovementVector {
+  if (typeof options !== "object" || options === null) {
+    throw new TypeError("Desired movement translation options must be an object");
+  }
+  const normalized = copyCommand(command);
+  const speed = requirePositiveFinite(
+    options.speedMetersPerSecond,
+    "Movement speed",
+  );
+  const dt = requirePositiveFinite(options.dtSeconds, "Movement dt");
+  const distance = requireFinite(speed * dt, "Movement distance");
+  const downward = requireFinite(
+    options.downwardMetersPerTick === undefined
+      ? 0.001
+      : options.downwardMetersPerTick,
+    "Downward movement",
+  );
+  if (downward < 0) {
+    throw new RangeError("Downward movement must be nonnegative");
+  }
+  if (downward > distance) {
+    throw new RangeError("Downward movement must not exceed movement distance");
+  }
+  return Object.freeze({
+    x: normalized.x * distance,
+    y: -downward,
+    z: normalized.z * distance,
+  });
+}
+
 export function createMovementState(
   position: MovementVector = ORIGIN,
 ): MovementState {
   return Object.freeze({ position: copyVector(position) });
+}
+
+export function createStaticSceneDescriptor(
+  input: StaticSceneDescriptor,
+): StaticSceneDescriptor {
+  if (typeof input !== "object" || input === null) {
+    throw new TypeError("Static scene descriptors must be objects");
+  }
+  if (!Array.isArray(input.boxes)) {
+    throw new TypeError("Static scene boxes must be an array");
+  }
+  const capsuleRadius = requirePositiveFinite(
+    input.capsuleRadius,
+    "Capsule radius",
+  );
+  const capsuleHalfHeight = requirePositiveFinite(
+    input.capsuleHalfHeight,
+    "Capsule half-height",
+  );
+  const controllerOffset = requirePositiveFinite(
+    input.controllerOffset,
+    "Controller offset",
+  );
+  const ids = new Set<string>();
+  const boxes = Object.freeze(
+    Array.from(input.boxes, (box) => copyStaticBox(box, ids)),
+  );
+  return Object.freeze({
+    capsuleRadius,
+    capsuleHalfHeight,
+    controllerOffset,
+    boxes,
+  });
 }
 
 export function applyMovementCommand(

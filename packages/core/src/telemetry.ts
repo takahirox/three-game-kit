@@ -1,3 +1,4 @@
+import type { ClientScheduleReport } from "./client-runtime-scheduling.js";
 import type { ServerScheduleReport } from "./runtime-scheduling.js";
 export const RUNTIME_ERROR_RING_CAPACITY = 256;
 export const RUNTIME_ERROR_SERIALIZED_BYTE_LIMIT = 8_192;
@@ -89,7 +90,7 @@ export interface RuntimeErrorRecordInput {
 }
 export type RuntimeErrorInput = Omit<RuntimeErrorRecordInput, "sequence">;
 export type RuntimeErrorObserver = (record: RuntimeErrorRecord) => void;
-export type RuntimeScheduleReport = ServerScheduleReport;
+export type RuntimeScheduleReport = ServerScheduleReport | ClientScheduleReport;
 export type LiveResourceGauges = Readonly<Record<LiveResourceKind, number>>;
 export type RejectedCommandCounts = Readonly<
   Record<RejectedCommandReason, number>
@@ -162,6 +163,13 @@ export interface TelemetryStore<TRuntime extends HostRuntime = HostRuntime> {
   readonly runtime: TRuntime;
   recordRuntimeError(input: RuntimeErrorInput): RuntimeErrorRecord;
   snapshotTelemetry(): TelemetrySnapshotFor<TRuntime>;
+  observeClientSchedule(report: ClientScheduleReport): void;
+  observeClientTick(tick: number, entityCount: number): void;
+  observeClientPump(cumulativeDroppedSeconds: number): void;
+  observeClientFrame(
+    presentationFrameCount: number,
+    durationSeconds: number,
+  ): void;
   observeServerSchedule(report: ServerScheduleReport): void;
   observeServerTick(
     tick: number,
@@ -624,6 +632,76 @@ class TelemetryStoreImplementation<TRuntime extends HostRuntime>
       clientFrameDurationSeconds: this.clientFrameDurationSeconds,
       presentationFrameCount: this.presentationFrameCount,
     }) as TelemetrySnapshotFor<TRuntime>;
+  }
+  observeClientSchedule(report: ClientScheduleReport): void {
+    let copied: ClientScheduleReport;
+    try {
+      if (
+        !Array.isArray(report) ||
+        !report.every((entry) => isObjectLike(entry))
+      ) {
+        this.invalidTelemetry("observe-client-schedule");
+        return;
+      }
+      copied = Object.freeze(
+        report.map((entry) => Object.freeze({ ...entry })),
+      ) as ClientScheduleReport;
+    } catch {
+      this.invalidTelemetry("observe-client-schedule");
+      return;
+    }
+    if (JSON.stringify(copied) === JSON.stringify(this.scheduleReport)) return;
+    this.scheduleReport = copied;
+    this.bump();
+  }
+  observeClientTick(tick: number, entityCount: number): void {
+    if (
+      !this.validGauge(tick) ||
+      !this.validGauge(entityCount) ||
+      tick < this.simulationTick
+    ) {
+      this.invalidTelemetry("observe-client-tick");
+      return;
+    }
+    if (tick === this.simulationTick && entityCount === this.entityCount)
+      return;
+    this.simulationTick = tick;
+    this.entityCount = entityCount;
+    this.bump();
+  }
+  observeClientPump(cumulativeDroppedSeconds: number): void {
+    if (
+      !Number.isFinite(cumulativeDroppedSeconds) ||
+      cumulativeDroppedSeconds < this.droppedWallTimeSeconds
+    ) {
+      this.invalidTelemetry("observe-client-pump");
+      return;
+    }
+    if (cumulativeDroppedSeconds === this.droppedWallTimeSeconds) return;
+    this.droppedWallTimeSeconds = cumulativeDroppedSeconds;
+    this.bump();
+  }
+  observeClientFrame(
+    presentationFrameCount: number,
+    durationSeconds: number,
+  ): void {
+    if (
+      !this.validGauge(presentationFrameCount) ||
+      presentationFrameCount < this.presentationFrameCount ||
+      !Number.isFinite(durationSeconds) ||
+      durationSeconds < 0
+    ) {
+      this.invalidTelemetry("observe-client-frame");
+      return;
+    }
+    if (
+      presentationFrameCount === this.presentationFrameCount &&
+      durationSeconds === this.clientFrameDurationSeconds
+    )
+      return;
+    this.presentationFrameCount = presentationFrameCount;
+    this.clientFrameDurationSeconds = durationSeconds;
+    this.bump();
   }
   observeServerSchedule(report: ServerScheduleReport): void {
     const copied = Object.freeze(

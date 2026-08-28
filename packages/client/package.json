@@ -3,7 +3,12 @@
   "version": "0.1.0",
   "type": "module",
   "sideEffects": false,
-  "files": ["dist/**/*.js", "dist/**/*.js.map", "dist/**/*.d.ts", "dist/**/*.d.ts.map"],
+  "files": [
+    "dist/**/*.js",
+    "dist/**/*.js.map",
+    "dist/**/*.d.ts",
+    "dist/**/*.d.ts.map"
+  ],
   "exports": {
     ".": {
       "types": "./dist/index.d.ts",
@@ -35,14 +40,19 @@
     }
   },
   "dependencies": {
+    "@dimforge/rapier3d": "0.20.0",
     "@three-game-kit/core": "workspace:^",
     "@three-game-kit/protocol": "workspace:^",
-    "@three-game-kit/shared": "workspace:^"
+    "@three-game-kit/shared": "workspace:^",
+    "three": "0.185.1"
   },
   "engines": {
     "node": "24.x"
   },
   "publishConfig": {
     "access": "public"
+  },
+  "devDependencies": {
+    "@types/three": "0.185.4"
   }
 }

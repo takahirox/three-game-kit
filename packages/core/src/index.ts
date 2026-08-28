@@ -244,5 +244,7 @@ export function createWorld(): World {
 }
 export * from "./telemetry.js";
 export * from "./runtime-scheduling.js";
+export * from "./client-runtime-scheduling.js";
 export * from "./mailbox.js";
 export * from "./feature-lifecycle.js";
+export * from "./client-feature-lifecycle.js";

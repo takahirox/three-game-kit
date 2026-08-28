@@ -42,6 +42,106 @@ const zeroResources = Object.fromEntries(
 const zeroRejections = Object.fromEntries(
   REJECTED_COMMAND_REASONS.map((reason) => [reason, 0]),
 );
+function clientScheduleReport() {
+  return [
+    {
+      domain: "client-simulation",
+      phase: "telemetry",
+      priority: 0,
+      featureId: "simulation-feature",
+      featureDeclarationIndex: 0,
+      systemId: "simulation-telemetry",
+      withinFeatureDeclarationIndex: 0,
+      finalExecutionIndex: 0,
+    },
+    {
+      domain: "client-presentation",
+      phase: "frame-telemetry",
+      priority: 0,
+      featureId: "presentation-feature",
+      featureDeclarationIndex: 1,
+      systemId: "presentation-telemetry",
+      withinFeatureDeclarationIndex: 0,
+      finalExecutionIndex: 0,
+    },
+  ];
+}
+test("Client observations publish detached immutable scheduling and measurement snapshots", () => {
+  const store = createTelemetryStore({ runtime: "client" });
+  const report = clientScheduleReport();
+  const expectedReport = report.map((entry) => ({ ...entry }));
+  store.observeClientSchedule(report);
+  store.observeClientTick(12, 3);
+  store.observeClientPump(0.25);
+  store.observeClientFrame(9, 0.004);
+  report[0].featureId = "mutated-after-observation";
+  const first = store.snapshotTelemetry();
+  const second = store.snapshotTelemetry();
+  assert.deepEqual(first.scheduleReport, expectedReport);
+  assert.equal(first.simulationTick, 12);
+  assert.equal(first.entityCount, 3);
+  assert.equal(first.droppedWallTimeSeconds, 0.25);
+  assert.equal(first.presentationFrameCount, 9);
+  assert.equal(first.clientFrameDurationSeconds, 0.004);
+  assert.notEqual(first, second);
+  assert.notEqual(first.scheduleReport, second.scheduleReport);
+  assert.notEqual(first.scheduleReport[0], second.scheduleReport[0]);
+  assert.equal(Object.isFrozen(first), true);
+  assert.equal(Object.isFrozen(first.scheduleReport), true);
+  assert.ok(first.scheduleReport.every(Object.isFrozen));
+});
+test("repeated identical Client observations are inert", () => {
+  const store = createTelemetryStore({ runtime: "client" });
+  const report = clientScheduleReport();
+  store.observeClientSchedule(report);
+  store.observeClientTick(4, 2);
+  store.observeClientPump(0.5);
+  store.observeClientFrame(2, 0.01);
+  const before = store.snapshotTelemetry();
+  store.observeClientSchedule(report.map((entry) => ({ ...entry })));
+  store.observeClientTick(4, 2);
+  store.observeClientPump(0.5);
+  store.observeClientFrame(2, 0.01);
+  const after = store.snapshotTelemetry();
+  assert.equal(after.telemetrySequence, before.telemetrySequence);
+  assert.equal(after.structuredRuntimeErrorCount, 0);
+});
+test("invalid Client observations record one invariant and preserve prior values", () => {
+  const store = createTelemetryStore({ runtime: "client" });
+  const report = clientScheduleReport();
+  store.observeClientSchedule(report);
+  store.observeClientTick(8, 5);
+  store.observeClientPump(1.5);
+  store.observeClientFrame(6, 0.02);
+  const invalidObservations = [
+    ["observe-client-schedule", () => store.observeClientSchedule(null)],
+    ["observe-client-tick", () => store.observeClientTick(7, 99)],
+    ["observe-client-tick", () => store.observeClientTick(8, -1)],
+    ["observe-client-tick", () => store.observeClientTick(Infinity, 99)],
+    ["observe-client-pump", () => store.observeClientPump(1)],
+    ["observe-client-pump", () => store.observeClientPump(NaN)],
+    ["observe-client-frame", () => store.observeClientFrame(5, 1)],
+    ["observe-client-frame", () => store.observeClientFrame(6, Infinity)],
+    ["observe-client-frame", () => store.observeClientFrame(Infinity, 1)],
+  ];
+  for (const [operation, observe] of invalidObservations) {
+    const beforeCount = store.snapshotTelemetry().structuredRuntimeErrorCount;
+    observe();
+    const current = store.snapshotTelemetry();
+    assert.equal(current.structuredRuntimeErrorCount, beforeCount + 1);
+    const record = current.structuredRuntimeErrors.at(-1);
+    assert.equal(record.code, "invalid-telemetry-state");
+    assert.equal(record.category, "invariant");
+    assert.equal(record.operation, operation);
+  }
+  const snapshot = store.snapshotTelemetry();
+  assert.deepEqual(snapshot.scheduleReport, report);
+  assert.equal(snapshot.simulationTick, 8);
+  assert.equal(snapshot.entityCount, 5);
+  assert.equal(snapshot.droppedWallTimeSeconds, 1.5);
+  assert.equal(snapshot.presentationFrameCount, 6);
+  assert.equal(snapshot.clientFrameDurationSeconds, 0.02);
+});
 test("fresh Server snapshots have the exact zero schema and snapshotting is detached and inert", () => {
   const store = createTelemetryStore({ runtime: "server" });
   const first = store.snapshotTelemetry();

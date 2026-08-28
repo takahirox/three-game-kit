@@ -3,187 +3,91 @@ import {
   hasFeatureConfigurationDefinition,
   parseFeatureConfigurationProvider,
   type FeatureConfigurationIssue,
-  type FeatureConfigurationProvider,
 } from "./feature-configuration.js";
-export {
-  defineFeatureConfiguration,
-  type DefineFeatureConfigurationOptions,
-  type FeatureConfigurationIssue,
-  type FeatureConfigurationParseResult,
-  type FeatureConfigurationProvider,
-} from "./feature-configuration.js";
-
 import { createWorld, type ResourceType, type World } from "./index.js";
 import {
-  SERVER_SIMULATION_PHASES,
-  createServerSchedule,
-  type OperationResult,
-  type ServerSchedule,
-  type ServerScheduleReport,
-  type ServerSystemContext,
-  type WallClockPumpReport,
-} from "./runtime-scheduling.js";
+  CLIENT_PRESENTATION_PHASES,
+  CLIENT_SIMULATION_PHASES,
+  createClientSchedule,
+  type ClientPresentationPhase,
+  type ClientPresentationSystemContext,
+  type ClientSchedule,
+  type ClientScheduleReport,
+  type ClientSimulationPhase,
+  type ClientSimulationSystemContext,
+  type PresentationFrameSource,
+} from "./client-runtime-scheduling.js";
 import { createRuntimeLiveFence, type RuntimeLiveFence } from "./mailbox.js";
+import type {
+  OperationResult,
+  WallClockPumpReport,
+} from "./runtime-scheduling.js";
 import {
   LIVE_RESOURCE_KINDS,
   createTelemetryStore,
+  type ClientTelemetrySnapshot,
   type LiveResourceKind,
   type RuntimeCauseSummary,
-  type ServerTelemetrySnapshot,
   type TelemetryStore,
 } from "./telemetry.js";
-
-export type FeatureLifecycleState =
-  | "created"
-  | "validating"
-  | "setting-up"
-  | "running"
-  | "rolling-back"
-  | "shutting-down"
-  | "stopped";
-
-export type FeatureLifecycleFailureCode =
-  | "duplicate-feature-id"
-  | "invalid-feature-id"
-  | "invalid-descriptor"
-  | "missing-requirement"
-  | "dependency-cycle"
-  | "feature-conflict"
-  | "unknown-configuration"
-  | "invalid-configuration"
-  | "invalid-contribution"
-  | "duplicate-contribution-id"
-  | "duplicate-system-id"
-  | "invalid-state"
-  | "lifecycle-busy"
-  | "setup-failed"
-  | "setup-cancelled"
-  | "dispose-failed"
-  | "resource-release-failed"
-  | "ownership-violation"
-  | "invariant-failed";
-
-export type FeatureLifecycleOperation =
-  | "validate"
-  | "setup"
-  | "rollback-dispose"
-  | "rollback-release"
-  | "shutdown-dispose"
-  | "shutdown-release"
-  | "state";
-
-export interface ServerSystemContribution {
+import type {
+  BorrowedFeatureValue,
+  FeatureAbortSignal,
+  FeatureDependencies,
+  FeatureDescriptor,
+  FeatureLifecycleEvent,
+  FeatureLifecycleFailureCode,
+  FeatureLifecycleOperation,
+  FeatureLifecycleState,
+  FeatureLedgerObservation,
+  FeatureMailbox,
+  FeatureOwnedResourceOptions,
+  FeatureOwnershipLedger,
+  FeatureSetupContext,
+  HostOwnershipTransferToken,
+  OwnedFeatureValue,
+} from "./feature-lifecycle.js";
+export interface ClientSimulationSystemContribution {
   readonly kind: "system";
   readonly id: string;
-  readonly domain: "server-simulation";
-  readonly phase: (typeof SERVER_SIMULATION_PHASES)[number];
+  readonly domain: "client-simulation";
+  readonly phase: ClientSimulationPhase;
   readonly priority: number;
-  readonly run: (context: ServerSystemContext) => unknown;
+  readonly run: (context: ClientSimulationSystemContext) => unknown;
 }
-
-export interface ServerResourceContribution {
+export interface ClientPresentationSystemContribution {
+  readonly kind: "system";
+  readonly id: string;
+  readonly domain: "client-presentation";
+  readonly phase: ClientPresentationPhase;
+  readonly priority: number;
+  readonly run: (context: ClientPresentationSystemContext) => unknown;
+}
+export type ClientSystemContribution =
+  | ClientSimulationSystemContribution
+  | ClientPresentationSystemContribution;
+export interface ClientResourceContribution {
   readonly kind: "resource";
   readonly id: string;
   readonly resourceType: ResourceType<unknown>;
 }
-
-export interface ServerMailboxContribution {
+export interface ClientMailboxContribution {
   readonly kind: "mailbox";
   readonly id: string;
 }
-
-export type ServerRuntimeContribution =
-  | ServerSystemContribution
-  | ServerResourceContribution
-  | ServerMailboxContribution;
-
-export interface FeatureAbortSignal {
-  readonly aborted: boolean;
-  readonly reason: "setup-cancelled" | null;
-  throwIfAborted(): void;
-  onAbort(listener: () => void): () => void;
-}
-
-export interface BorrowedFeatureValue<T = unknown> {
-  readonly ownerFeatureId: string | null;
-  readonly resourceId: string;
-  readonly value: T;
-}
-
-export interface OwnedFeatureValue<T = unknown> {
-  readonly resourceId: string;
-  readonly value: T;
-  release(): Promise<void>;
-}
-
-export interface FeatureOwnedResourceOptions<T = unknown> {
-  readonly resourceId: string;
-  readonly kind: LiveResourceKind;
-  readonly value: T;
-  readonly release: () => void | Promise<void>;
-}
-
-export interface FeatureMailbox {
-  clear(): number;
-  stop(): void;
-}
-
-declare const transferTokenBrand: unique symbol;
-export interface HostOwnershipTransferToken<T = unknown> {
-  readonly resourceId: string;
-  readonly [transferTokenBrand]: T;
-}
-
-export interface FeatureDependencies {
-  borrow<T = unknown>(
-    requiredFeatureId: string,
-    resourceId: string,
-  ): BorrowedFeatureValue<T>;
-  borrowHost<T = unknown>(resourceId: string): BorrowedFeatureValue<T>;
-}
-
-export interface FeatureOwnershipLedger {
-  acquire<T>(options: FeatureOwnedResourceOptions<T>): OwnedFeatureValue<T>;
-  activateSystem(contributionId: string): void;
-  publishResource<T>(
-    contributionId: string,
-    value: T,
-    release?: () => void | Promise<void>,
-  ): OwnedFeatureValue<T>;
-  publishMailbox<T extends FeatureMailbox>(
-    contributionId: string,
-    mailbox: T,
-  ): OwnedFeatureValue<T>;
-  consumeHostTransfer<T>(
-    token: HostOwnershipTransferToken<T>,
-  ): OwnedFeatureValue<T>;
-}
-
-export interface FeatureSetupContext<TConfiguration> {
-  readonly configuration: TConfiguration;
-  readonly dependencies: FeatureDependencies;
-  readonly signal: FeatureAbortSignal;
-  readonly ledger: FeatureOwnershipLedger;
-}
-
-export interface FeatureDescriptor<
-  TConfiguration = unknown,
-  TContribution = ServerRuntimeContribution,
-> {
-  readonly id: string;
-  readonly description: string;
-  readonly runtimeContributions: readonly TContribution[];
-  readonly requires: readonly string[];
-  readonly conflicts: readonly string[];
-  readonly configuration: FeatureConfigurationProvider<TConfiguration>;
-  setup(context: FeatureSetupContext<TConfiguration>): void | Promise<void>;
-  dispose(): void | Promise<void>;
-}
-
-export interface FeatureLifecycleFailure {
+export type ClientRuntimeContribution =
+  | ClientSystemContribution
+  | ClientResourceContribution
+  | ClientMailboxContribution;
+export type ClientFeatureDescriptor<TConfiguration = unknown> =
+  FeatureDescriptor<TConfiguration, ClientRuntimeContribution>;
+export type ClientFeatureOwnershipLedger = FeatureOwnershipLedger;
+export type ClientFeatureSetupContext<TConfiguration> =
+  FeatureSetupContext<TConfiguration>;
+export interface ClientFeatureLifecycleFailure {
   readonly kind: "feature-lifecycle-failure";
   readonly code: FeatureLifecycleFailureCode;
-  readonly runtime: "server";
+  readonly runtime: "client";
   readonly featureId: string | null;
   readonly operation: FeatureLifecycleOperation;
   readonly state: FeatureLifecycleState;
@@ -191,75 +95,29 @@ export interface FeatureLifecycleFailure {
   readonly details: readonly FeatureConfigurationIssue[];
   readonly cause: RuntimeCauseSummary | null;
 }
-
-export interface FeatureContributionInventoryEntry {
+export interface ClientFeatureContributionInventoryEntry {
   readonly featureId: string;
   readonly featureDeclarationIndex: number;
   readonly contributionId: string;
   readonly contributionDeclarationIndex: number;
-  readonly kind: ServerRuntimeContribution["kind"];
+  readonly kind: ClientRuntimeContribution["kind"];
 }
-
-export interface FeatureValidationReport {
+export interface ClientFeatureValidationReport {
   readonly originalFeatureIds: readonly string[];
   readonly resolvedFeatureIds: readonly string[];
-  readonly contributionInventory: readonly FeatureContributionInventoryEntry[];
-  readonly failures: readonly FeatureLifecycleFailure[];
+  readonly contributionInventory: readonly ClientFeatureContributionInventoryEntry[];
+  readonly failures: readonly ClientFeatureLifecycleFailure[];
 }
-
-export interface FeatureLifecycleTransition {
-  readonly runtime: "server";
+export interface ClientFeatureLifecycleTransition {
+  readonly runtime: "client";
   readonly previousState: FeatureLifecycleState;
   readonly nextState: FeatureLifecycleState;
   readonly operation: "boot" | "validate" | "setup" | "rollback" | "shutdown";
   readonly sequence: number;
 }
-
-export interface FeatureLifecycleEvent {
-  readonly kind:
-    | "setup-start"
-    | "setup-success"
-    | "setup-failure"
-    | "dispose-start"
-    | "dispose-success"
-    | "dispose-failure";
-  readonly featureId: string;
-  readonly featureDeclarationIndex: number;
-  readonly sequence: number;
-}
-
-export interface FeatureLedgerObservation {
-  readonly acquisitions: number;
-  readonly commits: number;
-  readonly borrows: number;
-  readonly fences: number;
-  readonly unpublishes: number;
-  readonly releases: number;
-}
-
-export interface FeatureLifecycleInspection {
-  readonly state: FeatureLifecycleState;
-  readonly transitions: readonly FeatureLifecycleTransition[];
-  readonly events: readonly FeatureLifecycleEvent[];
-  readonly validationReport: FeatureValidationReport | null;
-  readonly ledger: FeatureLedgerObservation;
-  readonly installedFeatureIds: readonly string[];
-  readonly scheduleReport: ServerScheduleReport;
-  readonly stoppedResult: FeatureStoppedResult | null;
-}
-
-export interface ServerFeatureRunningResult {
-  readonly state: "running";
-  readonly runtime: "server";
-  readonly originalFeatureIds: readonly string[];
-  readonly resolvedFeatureIds: readonly string[];
-  readonly installedFeatureIds: readonly string[];
-  readonly scheduleReport: ServerScheduleReport;
-}
-
-export interface FeatureStoppedResult {
+export interface ClientFeatureStoppedResult {
   readonly state: "stopped";
-  readonly runtime: "server";
+  readonly runtime: "client";
   readonly reason:
     | "shutdown"
     | "validation-failed"
@@ -268,73 +126,70 @@ export interface FeatureStoppedResult {
   readonly clean: boolean;
   readonly setupOrder: readonly string[];
   readonly disposedOrder: readonly string[];
-  readonly failures: readonly FeatureLifecycleFailure[];
+  readonly failures: readonly ClientFeatureLifecycleFailure[];
 }
-
-export type ServerFeatureBootResult =
-  | ServerFeatureRunningResult
-  | FeatureStoppedResult;
-
-export interface ServerFeatureRuntimeOptions {
-  readonly features: readonly FeatureDescriptor<
-    unknown,
-    ServerRuntimeContribution
-  >[];
+export interface ClientFeatureRunningResult {
+  readonly state: "running";
+  readonly runtime: "client";
+  readonly originalFeatureIds: readonly string[];
+  readonly resolvedFeatureIds: readonly string[];
+  readonly installedFeatureIds: readonly string[];
+  readonly scheduleReport: ClientScheduleReport;
+}
+export type ClientFeatureBootResult =
+  | ClientFeatureRunningResult
+  | ClientFeatureStoppedResult;
+export interface ClientFeatureLifecycleInspection {
+  readonly state: FeatureLifecycleState;
+  readonly transitions: readonly ClientFeatureLifecycleTransition[];
+  readonly events: readonly FeatureLifecycleEvent[];
+  readonly validationReport: ClientFeatureValidationReport | null;
+  readonly ledger: FeatureLedgerObservation;
+  readonly installedFeatureIds: readonly string[];
+  readonly scheduleReport: ClientScheduleReport;
+  readonly stoppedResult: ClientFeatureStoppedResult | null;
+}
+export interface ClientFeatureRuntimeOptions {
+  readonly features: readonly ClientFeatureDescriptor<unknown>[];
+  readonly frameSource: PresentationFrameSource;
   readonly configuration?: Readonly<Record<string, unknown>>;
   readonly driver?: "exact" | "wall-clock";
-  readonly telemetryStore?: TelemetryStore<"server">;
+  readonly telemetryStore?: TelemetryStore<"client">;
   readonly observationClock?: () => number;
   readonly hostServices?: Readonly<Record<string, unknown>>;
 }
-
-export interface ServerFeatureRuntime {
+export interface ClientFeatureRuntime {
   readonly state: FeatureLifecycleState;
-  readonly telemetryStore: TelemetryStore<"server">;
-  boot(): Promise<ServerFeatureBootResult>;
-  shutdown(): Promise<FeatureStoppedResult>;
+  readonly telemetryStore: TelemetryStore<"client">;
+  boot(): Promise<ClientFeatureBootResult>;
+  shutdown(): Promise<ClientFeatureStoppedResult>;
   stepExact(count: number): OperationResult<number>;
   pumpWallClock(elapsedSeconds: number): OperationResult<WallClockPumpReport>;
-  snapshotTelemetry(): ServerTelemetrySnapshot;
-  inspectLifecycle(): FeatureLifecycleInspection;
+  startPresentation(): OperationResult<boolean>;
+  snapshotTelemetry(): ClientTelemetrySnapshot;
+  inspectLifecycle(): ClientFeatureLifecycleInspection;
   createHostTransferToken<T>(
     targetFeatureId: string,
     options: FeatureOwnedResourceOptions<T>,
   ): HostOwnershipTransferToken<T>;
 }
-
 interface InternalContribution {
-  readonly declaration: ServerRuntimeContribution;
+  readonly declaration: ClientRuntimeContribution;
   readonly declarationIndex: number;
 }
-
 interface InternalFeature {
-  readonly descriptor: FeatureDescriptor<unknown, ServerRuntimeContribution>;
+  readonly descriptor: ClientFeatureDescriptor<unknown>;
   readonly id: string;
   readonly declarationIndex: number;
   readonly requires: readonly string[];
   readonly conflicts: readonly string[];
   readonly contributions: ReadonlyMap<string, InternalContribution>;
 }
-
-interface PreflightResult {
-  readonly features: readonly InternalFeature[];
-  readonly resolved: readonly InternalFeature[];
-  readonly configurations: Readonly<Record<string, unknown>>;
-  readonly report: FeatureValidationReport;
-}
-
-interface PendingFailure {
-  readonly featureIndex: number;
-  readonly position: number;
-  readonly failure: FeatureLifecycleFailure;
-}
-
 interface PublishedValue {
   readonly owner: string;
   readonly value: unknown;
   readonly record: LedgerRecord;
 }
-
 interface TransferEntry {
   readonly targetFeatureId: string;
   readonly resourceId: string;
@@ -344,27 +199,35 @@ interface TransferEntry {
   consumed: boolean;
   released: boolean;
 }
-
-const DESCRIPTOR_KEYS = [
-  "configuration",
-  "conflicts",
-  "description",
-  "dispose",
-  "id",
-  "requires",
-  "runtimeContributions",
-  "setup",
-].join("|");
+interface Preflight {
+  readonly resolved: readonly InternalFeature[];
+  readonly configurations: Readonly<Record<string, unknown>>;
+  readonly report: ClientFeatureValidationReport;
+}
+const DESCRIPTOR_KEYS =
+  "configuration|conflicts|description|dispose|id|requires|runtimeContributions|setup";
 const SYSTEM_KEYS = "domain|id|kind|phase|priority|run";
 const RESOURCE_KEYS = "id|kind|resourceType";
 const MAILBOX_KEYS = "id|kind";
-
 function objectLike(value: unknown): value is object {
   return (
     (typeof value === "object" && value !== null) || typeof value === "function"
   );
 }
-
+function safeValue(value: object, key: string): unknown {
+  try {
+    return (value as Record<string, unknown>)[key];
+  } catch {
+    return undefined;
+  }
+}
+function exactKeys(value: object, expected: string): boolean {
+  try {
+    return Object.keys(value).sort().join("|") === expected;
+  } catch {
+    return false;
+  }
+}
 function stableId(value: unknown): value is string {
   return (
     typeof value === "string" &&
@@ -373,23 +236,6 @@ function stableId(value: unknown): value is string {
     value.trim() === value
   );
 }
-
-function exactKeys(value: object, expected: string): boolean {
-  try {
-    return Object.keys(value).sort().join("|") === expected;
-  } catch {
-    return false;
-  }
-}
-
-function safeValue(value: object, key: string): unknown {
-  try {
-    return (value as Record<string, unknown>)[key];
-  } catch {
-    return undefined;
-  }
-}
-
 function boundedText(value: string, limit: number): string {
   return [...value]
     .map((character) => {
@@ -399,8 +245,7 @@ function boundedText(value: string, limit: number): string {
     .join("")
     .slice(0, limit);
 }
-
-function causeSummary(cause: unknown): RuntimeCauseSummary {
+function summarize(cause: unknown): RuntimeCauseSummary {
   if (cause instanceof Error) {
     const code = (cause as Error & { readonly code?: unknown }).code;
     return Object.freeze({
@@ -409,13 +254,12 @@ function causeSummary(cause: unknown): RuntimeCauseSummary {
       message: boundedText(cause.message || "Runtime operation threw", 512),
     });
   }
-  if (cause === null) {
+  if (cause === null)
     return Object.freeze({
       name: "null",
       code: null,
       message: "Null thrown value",
     });
-  }
   const type = typeof cause;
   return Object.freeze({
     name: type,
@@ -426,7 +270,14 @@ function causeSummary(cause: unknown): RuntimeCauseSummary {
         : `${type[0]?.toUpperCase() ?? "U"}${type.slice(1)} thrown value`,
   });
 }
-
+function isClientStore(value: unknown): value is TelemetryStore<"client"> {
+  return (
+    objectLike(value) &&
+    safeValue(value, "runtime") === "client" &&
+    typeof safeValue(value, "recordRuntimeError") === "function" &&
+    typeof safeValue(value, "snapshotTelemetry") === "function"
+  );
+}
 class OwnershipViolation extends Error {
   readonly code = "ownership-violation";
   constructor(message: string) {
@@ -434,7 +285,6 @@ class OwnershipViolation extends Error {
     this.name = "FeatureOwnershipViolation";
   }
 }
-
 class AbortSignalImplementation implements FeatureAbortSignal {
   private currentReason: "setup-cancelled" | null = null;
   private readonly listeners = new Set<() => void>();
@@ -466,27 +316,24 @@ class AbortSignalImplementation implements FeatureAbortSignal {
     for (const listener of listeners) {
       try {
         listener();
-      } catch {
-        // The active setup Promise remains the only supported async completion channel.
-      }
+      } catch {}
     }
   }
 }
-
 class LedgerRecord {
   state: "staged" | "committed" | "unpublished" | "released" = "staged";
   private published = false;
   private releasePromise: Promise<void> | null = null;
   constructor(
     readonly resourceId: string,
-    private readonly host: ServerFeatureRuntimeImplementation,
+    private readonly host: ClientFeatureRuntimeImplementation,
     private readonly liveKind: LiveResourceKind | null,
     private readonly publishAction: (() => void) | null,
     private readonly unpublishAction: (() => void) | null,
     private readonly releaseAction: () => void | Promise<void>,
-    retain = true,
+    private readonly retainKind = true,
   ) {
-    host.retainRecord(liveKind, retain);
+    host.retainRecord(liveKind, retainKind);
   }
   publish(): void {
     if (this.state === "released") return;
@@ -508,26 +355,27 @@ class LedgerRecord {
   private async performRelease(): Promise<void> {
     if (this.state === "released") return;
     this.unpublish();
+    let threw = false;
     let cause: unknown;
     try {
       await this.releaseAction();
     } catch (error) {
+      threw = true;
       cause = error;
     } finally {
       this.state = "released";
-      this.host.releaseRecord(this.liveKind);
+      this.host.releaseRecord(this.liveKind, this.retainKind);
     }
-    if (cause !== undefined) throw cause;
+    if (threw) throw cause;
   }
 }
-
 class FeatureScope implements FeatureOwnershipLedger, FeatureDependencies {
   private readonly records: LedgerRecord[] = [];
-  private readonly stagedContributionIds = new Set<string>();
+  private readonly staged = new Set<string>();
   private committed = false;
   constructor(
     readonly feature: InternalFeature,
-    private readonly host: ServerFeatureRuntimeImplementation,
+    private readonly host: ClientFeatureRuntimeImplementation,
     private readonly signal: AbortSignalImplementation,
   ) {}
   acquire<T>(options: FeatureOwnedResourceOptions<T>): OwnedFeatureValue<T> {
@@ -537,9 +385,8 @@ class FeatureScope implements FeatureOwnershipLedger, FeatureDependencies {
       !stableId(options.resourceId) ||
       !(LIVE_RESOURCE_KINDS as readonly string[]).includes(options.kind) ||
       typeof options.release !== "function"
-    ) {
+    )
       throw new OwnershipViolation("Owned resource declaration is invalid");
-    }
     return this.addOwned(
       options.resourceId,
       options.kind,
@@ -552,7 +399,6 @@ class FeatureScope implements FeatureOwnershipLedger, FeatureDependencies {
   activateSystem(contributionId: string): void {
     this.requireActive();
     const contribution = this.requireContribution(contributionId, "system");
-    const declaration = contribution.declaration as ServerSystemContribution;
     let record: LedgerRecord;
     record = this.addRecord(
       contributionId,
@@ -561,7 +407,6 @@ class FeatureScope implements FeatureOwnershipLedger, FeatureDependencies {
       () => this.host.unpublishSystem(contributionId, record),
       () => undefined,
     );
-    void declaration;
   }
   publishResource<T>(
     contributionId: string,
@@ -570,7 +415,7 @@ class FeatureScope implements FeatureOwnershipLedger, FeatureDependencies {
   ): OwnedFeatureValue<T> {
     this.requireActive();
     const contribution = this.requireContribution(contributionId, "resource");
-    const declaration = contribution.declaration as ServerResourceContribution;
+    const declaration = contribution.declaration as ClientResourceContribution;
     let record: LedgerRecord;
     const handle = this.addOwned(
       contributionId,
@@ -594,9 +439,8 @@ class FeatureScope implements FeatureOwnershipLedger, FeatureDependencies {
       !objectLike(mailbox) ||
       typeof mailbox.clear !== "function" ||
       typeof mailbox.stop !== "function"
-    ) {
+    )
       throw new OwnershipViolation("Mailbox publication is invalid");
-    }
     let record: LedgerRecord;
     const handle = this.addOwned(
       contributionId,
@@ -642,20 +486,21 @@ class FeatureScope implements FeatureOwnershipLedger, FeatureDependencies {
     resourceId: string,
   ): BorrowedFeatureValue<T> {
     this.requireActive();
-    if (!this.feature.requires.includes(requiredFeatureId)) {
+    if (!this.feature.requires.includes(requiredFeatureId))
       throw new OwnershipViolation(
         "A Feature may borrow only from a direct requirement",
       );
-    }
-    const published = this.host.borrowPublished(requiredFeatureId, resourceId);
-    return this.addBorrow<T>(requiredFeatureId, resourceId, published);
+    return this.addBorrow<T>(
+      requiredFeatureId,
+      resourceId,
+      this.host.borrowPublished(requiredFeatureId, resourceId),
+    );
   }
   borrowHost<T = unknown>(resourceId: string): BorrowedFeatureValue<T> {
     this.requireActive();
-    const value = this.host.borrowHost(resourceId);
     return this.addBorrow<T>(null, resourceId, {
       owner: "",
-      value,
+      value: this.host.borrowHost(resourceId),
       record: null as unknown as LedgerRecord,
     });
   }
@@ -670,21 +515,19 @@ class FeatureScope implements FeatureOwnershipLedger, FeatureDependencies {
       this.committed = true;
       this.host.ledgerCommit(published.length);
     } catch (cause) {
-      for (let index = published.length - 1; index >= 0; index -= 1) {
+      for (let index = published.length - 1; index >= 0; index -= 1)
         published[index]?.unpublish();
-      }
       throw cause;
     }
   }
   fenceAndUnpublish(): void {
     this.host.ledgerFence(this.records.length);
-    for (let index = this.records.length - 1; index >= 0; index -= 1) {
+    for (let index = this.records.length - 1; index >= 0; index -= 1)
       this.records[index]?.unpublish();
-    }
   }
   async releaseAll(
     operation: "rollback-release" | "shutdown-release",
-    failures: FeatureLifecycleFailure[],
+    failures: ClientFeatureLifecycleFailure[],
   ): Promise<void> {
     for (let index = this.records.length - 1; index >= 0; index -= 1) {
       const record = this.records[index];
@@ -692,16 +535,16 @@ class FeatureScope implements FeatureOwnershipLedger, FeatureDependencies {
       try {
         await record.release();
       } catch (cause) {
-        failures.push(
-          this.host.makeFailure(
-            "resource-release-failed",
-            this.feature.id,
-            operation,
-            false,
-            [{ path: ["resource", record.resourceId], code: "release-threw" }],
-            cause,
-          ),
+        const failure = this.host.makeFailure(
+          "resource-release-failed",
+          this.feature.id,
+          operation,
+          false,
+          [{ path: ["resource", record.resourceId], code: "release-threw" }],
+          cause,
         );
+        failures.push(failure);
+        this.host.emitFailure(failure);
       }
     }
   }
@@ -732,7 +575,7 @@ class FeatureScope implements FeatureOwnershipLedger, FeatureDependencies {
     publish: (() => void) | null,
     unpublish: (() => void) | null,
     release: () => void | Promise<void>,
-    retain = true,
+    retainKind = true,
   ): LedgerRecord {
     const record = new LedgerRecord(
       resourceId,
@@ -741,7 +584,7 @@ class FeatureScope implements FeatureOwnershipLedger, FeatureDependencies {
       publish,
       unpublish,
       release,
-      retain,
+      retainKind,
     );
     this.records.push(record);
     this.host.ledgerAcquire();
@@ -771,11 +614,10 @@ class FeatureScope implements FeatureOwnershipLedger, FeatureDependencies {
       value: {
         enumerable: true,
         get: () => {
-          if (record.state === "released") {
+          if (record.state === "released")
             throw new OwnershipViolation(
               "Borrowed value is no longer retained",
             );
-          }
           return published.value as T;
         },
       },
@@ -784,61 +626,47 @@ class FeatureScope implements FeatureOwnershipLedger, FeatureDependencies {
   }
   private requireContribution(
     contributionId: string,
-    kind: ServerRuntimeContribution["kind"],
+    kind: ClientRuntimeContribution["kind"],
   ): InternalContribution {
-    if (
-      !stableId(contributionId) ||
-      this.stagedContributionIds.has(contributionId)
-    ) {
+    if (!stableId(contributionId) || this.staged.has(contributionId))
       throw new OwnershipViolation(
         "Contribution was not declared or was already staged",
       );
-    }
     const contribution = this.feature.contributions.get(contributionId);
-    if (contribution === undefined || contribution.declaration.kind !== kind) {
+    if (contribution === undefined || contribution.declaration.kind !== kind)
       throw new OwnershipViolation(
         "Contribution kind or ownership does not match its declaration",
       );
-    }
-    this.stagedContributionIds.add(contributionId);
+    this.staged.add(contributionId);
     return contribution;
   }
   private requireActive(): void {
-    if (
-      this.committed ||
-      this.signal.aborted ||
-      !this.host.scopeIsActive(this)
-    ) {
+    if (this.committed || this.signal.aborted || !this.host.scopeIsActive(this))
       throw new OwnershipViolation("The Feature setup scope is not active");
-    }
   }
 }
-
-export function createServerFeatureRuntime(
-  options: ServerFeatureRuntimeOptions,
-): ServerFeatureRuntime {
-  return new ServerFeatureRuntimeImplementation(options);
+export function createClientFeatureRuntime(
+  options: ClientFeatureRuntimeOptions,
+): ClientFeatureRuntime {
+  return new ClientFeatureRuntimeImplementation(options);
 }
-
-class ServerFeatureRuntimeImplementation implements ServerFeatureRuntime {
+class ClientFeatureRuntimeImplementation implements ClientFeatureRuntime {
   private currentState: FeatureLifecycleState = "created";
   private readonly world: World = createWorld();
   private readonly fence: RuntimeLiveFence = createRuntimeLiveFence();
-  private readonly features: readonly FeatureDescriptor<
-    unknown,
-    ServerRuntimeContribution
-  >[];
+  private readonly features: readonly ClientFeatureDescriptor<unknown>[];
+  private readonly frameSource: PresentationFrameSource;
   private readonly configuration: Readonly<Record<string, unknown>>;
   private readonly driver: "exact" | "wall-clock";
   private readonly observationClock: (() => number) | undefined;
   private readonly hostServices: Readonly<Record<string, unknown>>;
-  private schedule: ServerSchedule | null = null;
-  private preflight: PreflightResult | null = null;
-  private bootPromise: Promise<ServerFeatureBootResult> | null = null;
-  private stoppedResult: FeatureStoppedResult | null = null;
-  private resolveStopped!: (result: FeatureStoppedResult) => void;
-  private readonly stoppedPromise: Promise<FeatureStoppedResult>;
-  private readonly transitions: FeatureLifecycleTransition[] = [];
+  private schedule: ClientSchedule | null = null;
+  private preflight: Preflight | null = null;
+  private bootPromise: Promise<ClientFeatureBootResult> | null = null;
+  private stoppedResult: ClientFeatureStoppedResult | null = null;
+  private resolveStopped!: (result: ClientFeatureStoppedResult) => void;
+  private readonly stoppedPromise: Promise<ClientFeatureStoppedResult>;
+  private readonly transitions: ClientFeatureLifecycleTransition[] = [];
   private readonly events: FeatureLifecycleEvent[] = [];
   private sequence = 0;
   private ledgerCounts = {
@@ -871,40 +699,44 @@ class ServerFeatureRuntimeImplementation implements ServerFeatureRuntime {
   private readonly transfers = new WeakMap<object, TransferEntry>();
   private readonly transferOrder: TransferEntry[] = [];
   private installedIds: readonly string[] = Object.freeze([]);
-  readonly telemetryStore: TelemetryStore<"server">;
-
-  constructor(options: ServerFeatureRuntimeOptions) {
-    if (!objectLike(options) || !Array.isArray(options.features)) {
-      throw new TypeError("Server Feature runtime options are invalid");
-    }
-    this.features = Object.freeze([
-      ...options.features,
-    ]) as readonly FeatureDescriptor<unknown, ServerRuntimeContribution>[];
+  private hostCleaned = false;
+  private readonly emittedFailures = new WeakSet<object>();
+  readonly telemetryStore: TelemetryStore<"client">;
+  constructor(options: ClientFeatureRuntimeOptions) {
+    if (!objectLike(options) || !Array.isArray(options.features))
+      throw new TypeError("Client Feature runtime options are invalid");
+    const frameSource = options.frameSource;
+    if (
+      !objectLike(frameSource) ||
+      typeof safeValue(frameSource, "request") !== "function" ||
+      typeof safeValue(frameSource, "cancel") !== "function"
+    )
+      throw new TypeError("Client Feature runtime frame source is invalid");
+    this.features = Object.freeze([...options.features]);
+    this.frameSource = frameSource;
     this.configuration =
       options.configuration ?? Object.freeze(Object.create(null));
     this.driver = options.driver ?? "exact";
-    if (this.driver !== "exact" && this.driver !== "wall-clock") {
-      throw new TypeError("Server Feature runtime driver is invalid");
-    }
+    if (this.driver !== "exact" && this.driver !== "wall-clock")
+      throw new TypeError("Client Feature runtime driver is invalid");
     this.observationClock = options.observationClock;
     this.hostServices =
       options.hostServices ?? Object.freeze(Object.create(null));
-    this.telemetryStore =
-      options.telemetryStore ?? createTelemetryStore({ runtime: "server" });
+    this.telemetryStore = isClientStore(options.telemetryStore)
+      ? options.telemetryStore
+      : createTelemetryStore({ runtime: "client" });
     this.telemetryStore.retainLiveResource("worlds");
     this.telemetryStore.retainLiveResource("retainedReferences");
     this.stoppedPromise = new Promise((resolve) => {
       this.resolveStopped = resolve;
     });
   }
-
   get state(): FeatureLifecycleState {
     return this.currentState;
   }
-
-  boot(): Promise<ServerFeatureBootResult> {
+  boot(): Promise<ClientFeatureBootResult> {
     if (this.bootPromise !== null) return this.bootPromise;
-    let resolveBoot!: (result: ServerFeatureBootResult) => void;
+    let resolveBoot!: (result: ClientFeatureBootResult) => void;
     this.bootPromise = new Promise((resolve) => {
       resolveBoot = resolve;
     });
@@ -915,22 +747,16 @@ class ServerFeatureRuntimeImplementation implements ServerFeatureRuntime {
       if (this.currentState === "setting-up") {
         this.transition("rolling-back", "rollback");
         this.fenceRuntime();
+        this.activeSignal?.abort();
         await this.rollback(failures);
-      } else {
-        await this.cleanupHost("rollback-release", failures);
-      }
+      } else await this.cleanupHost("rollback-release", failures);
       resolveBoot(this.finishStopped("setup-failed", failures));
     });
     return this.bootPromise;
   }
-
-  shutdown(): Promise<FeatureStoppedResult> {
+  shutdown(): Promise<ClientFeatureStoppedResult> {
     if (this.currentState === "stopped") return this.stoppedPromise;
-    if (this.currentState === "created") {
-      this.transition("shutting-down", "shutdown");
-      this.fenceRuntime();
-      void this.shutdownRunning([]);
-    } else if (this.currentState === "running") {
+    if (this.currentState === "created" || this.currentState === "running") {
       this.transition("shutting-down", "shutdown");
       this.fenceRuntime();
       void this.shutdownRunning([]);
@@ -938,53 +764,31 @@ class ServerFeatureRuntimeImplementation implements ServerFeatureRuntime {
       this.transition("rolling-back", "rollback");
       this.fenceRuntime();
       this.activeSignal?.abort();
-    } else if (this.currentState === "validating") {
+    } else if (this.currentState === "validating")
       this.emitFailure(
         this.makeFailure("lifecycle-busy", null, "state", true, [], null),
       );
-    }
     return this.stoppedPromise;
   }
-
   stepExact(count: number): OperationResult<number> {
-    if (this.currentState === "running" && this.schedule !== null) {
-      return this.schedule.stepExact(count);
-    }
-    return Object.freeze({
-      ok: false,
-      error: this.telemetryStore.recordRuntimeError({
-        code: "invalid-state",
-        category: "expected",
-        runtime: "server",
-        operation: "step-exact",
-        message: "Feature runtime is not running",
-        context: Object.freeze([]),
-      }),
-    });
+    return this.currentState === "running" && this.schedule !== null
+      ? this.schedule.stepExact(count)
+      : this.invalidState("step-exact");
   }
-
   pumpWallClock(elapsedSeconds: number): OperationResult<WallClockPumpReport> {
-    if (this.currentState === "running" && this.schedule !== null) {
-      return this.schedule.pumpWallClock(elapsedSeconds);
-    }
-    return Object.freeze({
-      ok: false,
-      error: this.telemetryStore.recordRuntimeError({
-        code: "invalid-state",
-        category: "expected",
-        runtime: "server",
-        operation: "pump-wall-clock",
-        message: "Feature runtime is not running",
-        context: Object.freeze([]),
-      }),
-    });
+    return this.currentState === "running" && this.schedule !== null
+      ? this.schedule.pumpWallClock(elapsedSeconds)
+      : this.invalidState("pump-wall-clock");
   }
-
-  snapshotTelemetry(): ServerTelemetrySnapshot {
+  startPresentation(): OperationResult<boolean> {
+    return this.currentState === "running" && this.schedule !== null
+      ? this.schedule.startPresentation()
+      : this.invalidState("start-presentation");
+  }
+  snapshotTelemetry(): ClientTelemetrySnapshot {
     return this.telemetryStore.snapshotTelemetry();
   }
-
-  inspectLifecycle(): FeatureLifecycleInspection {
+  inspectLifecycle(): ClientFeatureLifecycleInspection {
     return Object.freeze({
       state: this.currentState,
       transitions: Object.freeze([...this.transitions]),
@@ -992,12 +796,10 @@ class ServerFeatureRuntimeImplementation implements ServerFeatureRuntime {
       validationReport: this.preflight?.report ?? null,
       ledger: Object.freeze({ ...this.ledgerCounts }),
       installedFeatureIds: Object.freeze([...this.installedIds]),
-      scheduleReport:
-        this.schedule?.scheduleReport ?? this.preflightScheduleReport(),
+      scheduleReport: this.schedule?.scheduleReport ?? Object.freeze([]),
       stoppedResult: this.stoppedResult,
     });
   }
-
   createHostTransferToken<T>(
     targetFeatureId: string,
     options: FeatureOwnedResourceOptions<T>,
@@ -1009,11 +811,10 @@ class ServerFeatureRuntimeImplementation implements ServerFeatureRuntime {
       !stableId(options.resourceId) ||
       !(LIVE_RESOURCE_KINDS as readonly string[]).includes(options.kind) ||
       typeof options.release !== "function"
-    ) {
+    )
       throw new OwnershipViolation(
         "Host transfer token request is invalid or late",
       );
-    }
     const token = Object.freeze({
       resourceId: options.resourceId,
     }) as HostOwnershipTransferToken<T>;
@@ -1031,22 +832,18 @@ class ServerFeatureRuntimeImplementation implements ServerFeatureRuntime {
     this.retainKinds(entry.kind);
     return token;
   }
-
   scopeIsActive(scope: FeatureScope): boolean {
     return this.currentState === "setting-up" && this.activeScope === scope;
   }
-
-  retainRecord(kind: LiveResourceKind | null, retain: boolean): void {
+  retainRecord(kind: LiveResourceKind | null, retainKind: boolean): void {
     this.telemetryStore.retainLiveResource("ledgerRecords");
-    if (retain) this.retainKinds(kind);
+    if (retainKind) this.retainKinds(kind);
   }
-
-  releaseRecord(kind: LiveResourceKind | null): void {
+  releaseRecord(kind: LiveResourceKind | null, retainedKind: boolean): void {
     this.telemetryStore.releaseLiveResource("ledgerRecords");
-    this.releaseKinds(kind);
+    if (retainedKind) this.releaseKinds(kind);
     this.ledgerCounts.releases += 1;
   }
-
   ledgerAcquire(): void {
     this.ledgerCounts.acquisitions += 1;
   }
@@ -1062,7 +859,6 @@ class ServerFeatureRuntimeImplementation implements ServerFeatureRuntime {
   ledgerUnpublish(): void {
     this.ledgerCounts.unpublishes += 1;
   }
-
   publishSystem(
     feature: InternalFeature,
     contribution: InternalContribution,
@@ -1079,7 +875,7 @@ class ServerFeatureRuntimeImplementation implements ServerFeatureRuntime {
   }
   publishResource(
     owner: string,
-    declaration: ServerResourceContribution,
+    declaration: ClientResourceContribution,
     value: unknown,
     record: LedgerRecord,
   ): void {
@@ -1087,7 +883,7 @@ class ServerFeatureRuntimeImplementation implements ServerFeatureRuntime {
     this.published.set(declaration.id, { owner, value, record });
   }
   unpublishResource(
-    declaration: ServerResourceContribution,
+    declaration: ClientResourceContribution,
     record: LedgerRecord,
   ): void {
     if (this.published.get(declaration.id)?.record !== record) return;
@@ -1113,17 +909,15 @@ class ServerFeatureRuntimeImplementation implements ServerFeatureRuntime {
       published === undefined ||
       published.owner !== owner ||
       published.record.state !== "committed"
-    ) {
+    )
       throw new OwnershipViolation(
         "Required Feature value is not committed or owned by that Feature",
       );
-    }
     return published;
   }
   borrowHost(id: string): unknown {
-    if (!Object.prototype.hasOwnProperty.call(this.hostServices, id)) {
+    if (!Object.prototype.hasOwnProperty.call(this.hostServices, id))
       throw new OwnershipViolation("Host service is not declared");
-    }
     return this.hostServices[id];
   }
   consumeTransfer(
@@ -1138,11 +932,10 @@ class ServerFeatureRuntimeImplementation implements ServerFeatureRuntime {
       entry.consumed ||
       entry.released ||
       entry.targetFeatureId !== featureId
-    ) {
+    )
       throw new OwnershipViolation(
         "Transfer token is invalid, reused, or belongs to another Feature",
       );
-    }
     entry.consumed = true;
     return entry;
   }
@@ -1155,7 +948,6 @@ class ServerFeatureRuntimeImplementation implements ServerFeatureRuntime {
       this.releaseKinds(entry.kind);
     }
   }
-
   makeFailure(
     code: FeatureLifecycleFailureCode,
     featureId: string | null,
@@ -1164,21 +956,56 @@ class ServerFeatureRuntimeImplementation implements ServerFeatureRuntime {
     details: readonly FeatureConfigurationIssue[],
     cause: unknown,
     state = this.currentState,
-  ): FeatureLifecycleFailure {
+  ): ClientFeatureLifecycleFailure {
     return Object.freeze({
       kind: "feature-lifecycle-failure",
       code,
-      runtime: "server",
+      runtime: "client",
       featureId,
       operation,
       state,
       expected,
       details: freezeFeatureConfigurationIssues(details),
-      cause: cause === null ? null : causeSummary(cause),
+      cause: cause === null ? null : summarize(cause),
     });
   }
-
-  private async performBoot(): Promise<ServerFeatureBootResult> {
+  emitFailure(failure: ClientFeatureLifecycleFailure): void {
+    if (this.emittedFailures.has(failure)) return;
+    this.emittedFailures.add(failure);
+    this.telemetryStore.recordRuntimeError({
+      code: failure.code,
+      category: failure.expected ? "expected" : "invariant",
+      runtime: "client",
+      operation: failure.operation,
+      message: `Feature lifecycle failure: ${failure.code}`,
+      ...(failure.featureId === null ? {} : { featureId: failure.featureId }),
+      context: Object.freeze(
+        failure.details.map((detail, index) =>
+          Object.freeze({ key: `issue-${index}`, value: detail.code }),
+        ),
+      ),
+      ...(failure.cause === null
+        ? {}
+        : { cause: new Error(failure.cause.message) }),
+    });
+  }
+  private invalidState(operation: string): OperationResult<never> {
+    return Object.freeze({
+      ok: false,
+      error: this.telemetryStore.recordRuntimeError({
+        code: "invalid-state",
+        category: "expected",
+        runtime: "client",
+        operation,
+        message: "Client Feature runtime is not running",
+        context: Object.freeze([]),
+      }),
+    });
+  }
+  private readState(): FeatureLifecycleState {
+    return this.currentState;
+  }
+  private async performBoot(): Promise<ClientFeatureBootResult> {
     if (this.currentState !== "created") return this.stoppedPromise;
     this.transition("validating", "boot");
     const preflight = this.validate();
@@ -1199,7 +1026,8 @@ class ServerFeatureRuntimeImplementation implements ServerFeatureRuntime {
       this.activeSignal = signal;
       this.activeScope = scope;
       this.event("setup-start", feature);
-      let setupCause: unknown = null;
+      let setupThrew = false;
+      let setupCause: unknown;
       let invalidResult = false;
       try {
         const raw = feature.descriptor.setup(
@@ -1210,12 +1038,13 @@ class ServerFeatureRuntimeImplementation implements ServerFeatureRuntime {
             ledger: scope,
           }),
         );
-        let output: unknown = raw;
-        if (objectLike(raw) && typeof safeValue(raw, "then") === "function") {
-          output = await raw;
-        }
+        const output =
+          objectLike(raw) && typeof safeValue(raw, "then") === "function"
+            ? await raw
+            : raw;
         invalidResult = output !== undefined;
       } catch (cause) {
+        setupThrew = true;
         setupCause = cause;
       }
       if (this.readState() !== "setting-up" || signal.aborted) {
@@ -1230,7 +1059,7 @@ class ServerFeatureRuntimeImplementation implements ServerFeatureRuntime {
             "setting-up",
           ),
         ];
-        this.emitFailure(failures[0] as FeatureLifecycleFailure);
+        this.emitFailure(failures[0] as ClientFeatureLifecycleFailure);
         this.event("setup-failure", feature);
         await scope.releaseAll("rollback-release", failures);
         this.activeScope = null;
@@ -1239,7 +1068,7 @@ class ServerFeatureRuntimeImplementation implements ServerFeatureRuntime {
         await this.cleanupHost("rollback-release", failures);
         return this.finishStopped("setup-cancelled", failures);
       }
-      if (setupCause !== null || invalidResult) {
+      if (setupThrew || invalidResult) {
         const code =
           setupCause instanceof OwnershipViolation
             ? "ownership-violation"
@@ -1253,10 +1082,10 @@ class ServerFeatureRuntimeImplementation implements ServerFeatureRuntime {
             invalidResult
               ? [{ path: ["result"], code: "invalid-setup-result" }]
               : [],
-            setupCause,
+            setupThrew ? setupCause : null,
           ),
         ];
-        this.emitFailure(failures[0] as FeatureLifecycleFailure);
+        this.emitFailure(failures[0] as ClientFeatureLifecycleFailure);
         this.event("setup-failure", feature);
         this.transition("rolling-back", "rollback");
         this.fenceRuntime();
@@ -1281,7 +1110,7 @@ class ServerFeatureRuntimeImplementation implements ServerFeatureRuntime {
             cause,
           ),
         ];
-        this.emitFailure(failures[0] as FeatureLifecycleFailure);
+        this.emitFailure(failures[0] as ClientFeatureLifecycleFailure);
         this.event("setup-failure", feature);
         this.transition("rolling-back", "rollback");
         this.fenceRuntime();
@@ -1299,33 +1128,52 @@ class ServerFeatureRuntimeImplementation implements ServerFeatureRuntime {
       this.event("setup-success", feature);
     }
     if (this.readState() !== "setting-up") return this.stoppedPromise;
-    const scheduleResult = createServerSchedule({
+    const simulationSystems: Parameters<
+      typeof createClientSchedule
+    >[0]["simulationSystems"][number][] = [];
+    const presentationSystems: Parameters<
+      typeof createClientSchedule
+    >[0]["presentationSystems"][number][] = [];
+    for (const { feature, contribution, record } of this.systems.values()) {
+      const declaration = contribution.declaration as ClientSystemContribution;
+      const common = {
+        priority: declaration.priority,
+        featureId: feature.id,
+        featureDeclarationIndex: feature.declarationIndex,
+        systemId: declaration.id,
+        withinFeatureDeclarationIndex: contribution.declarationIndex,
+      };
+      if (declaration.domain === "client-simulation")
+        simulationSystems.push(
+          Object.freeze({
+            ...common,
+            domain: "client-simulation" as const,
+            phase: declaration.phase,
+            run: (context: ClientSimulationSystemContext) =>
+              this.currentState === "running" && record.state === "committed"
+                ? declaration.run(context)
+                : undefined,
+          }),
+        );
+      else
+        presentationSystems.push(
+          Object.freeze({
+            ...common,
+            domain: "client-presentation" as const,
+            phase: declaration.phase,
+            run: (context: ClientPresentationSystemContext) =>
+              this.currentState === "running" && record.state === "committed"
+                ? declaration.run(context)
+                : undefined,
+          }),
+        );
+    }
+    const scheduleResult = createClientSchedule({
       driver: this.driver,
       world: this.world,
-      systems: [...this.systems.values()].map(
-        ({ feature, contribution, record }) => {
-          const declaration =
-            contribution.declaration as ServerSystemContribution;
-          return Object.freeze({
-            domain: "server-simulation" as const,
-            phase: declaration.phase,
-            priority: declaration.priority,
-            featureId: feature.id,
-            featureDeclarationIndex: feature.declarationIndex,
-            systemId: declaration.id,
-            withinFeatureDeclarationIndex: contribution.declarationIndex,
-            run: (context: ServerSystemContext) => {
-              if (
-                this.currentState === "running" &&
-                record.state === "committed"
-              ) {
-                return declaration.run(context);
-              }
-              return undefined;
-            },
-          });
-        },
-      ),
+      simulationSystems,
+      presentationSystems,
+      frameSource: this.frameSource,
       telemetryStore: this.telemetryStore,
       ...(this.observationClock === undefined
         ? {}
@@ -1342,7 +1190,7 @@ class ServerFeatureRuntimeImplementation implements ServerFeatureRuntime {
           scheduleResult.error,
         ),
       ];
-      this.emitFailure(failures[0] as FeatureLifecycleFailure);
+      this.emitFailure(failures[0] as ClientFeatureLifecycleFailure);
       this.transition("rolling-back", "rollback");
       this.fenceRuntime();
       await this.rollbackCompleted(failures);
@@ -1357,20 +1205,19 @@ class ServerFeatureRuntimeImplementation implements ServerFeatureRuntime {
     this.transition("running", "setup");
     return Object.freeze({
       state: "running",
-      runtime: "server",
+      runtime: "client",
       originalFeatureIds: preflight.report.originalFeatureIds,
       resolvedFeatureIds: preflight.report.resolvedFeatureIds,
       installedFeatureIds: this.installedIds,
       scheduleReport: this.schedule.scheduleReport,
     });
   }
-
-  private readState(): FeatureLifecycleState {
-    return this.currentState;
-  }
-
-  private validate(): PreflightResult {
-    const pending: PendingFailure[] = [];
+  private validate(): Preflight {
+    const pending: Array<{
+      featureIndex: number;
+      position: number;
+      failure: ClientFeatureLifecycleFailure;
+    }> = [];
     const originalIds = Object.freeze(
       this.features.map((feature) =>
         objectLike(feature) && typeof safeValue(feature, "id") === "string"
@@ -1384,7 +1231,7 @@ class ServerFeatureRuntimeImplementation implements ServerFeatureRuntime {
       feature: InternalFeature;
       contribution: InternalContribution;
     }> = [];
-    const inventory: FeatureContributionInventoryEntry[] = [];
+    const inventory: ClientFeatureContributionInventoryEntry[] = [];
     const add = (
       featureIndex: number,
       position: number,
@@ -1405,7 +1252,6 @@ class ServerFeatureRuntimeImplementation implements ServerFeatureRuntime {
         ),
       });
     };
-
     for (
       let featureIndex = 0;
       featureIndex < this.features.length;
@@ -1418,16 +1264,17 @@ class ServerFeatureRuntimeImplementation implements ServerFeatureRuntime {
         ]);
         continue;
       }
-      const id = safeValue(candidate, "id");
-      if (!stableId(id)) {
+      const rawId = safeValue(candidate, "id");
+      if (!stableId(rawId)) {
         add(
           featureIndex,
           -1,
           "invalid-feature-id",
-          typeof id === "string" ? id : null,
+          typeof rawId === "string" ? rawId : null,
         );
         continue;
       }
+      const id = rawId;
       if (idPositions.has(id))
         add(featureIndex, -1, "duplicate-feature-id", id);
       else idPositions.set(id, featureIndex);
@@ -1446,50 +1293,37 @@ class ServerFeatureRuntimeImplementation implements ServerFeatureRuntime {
         !hasFeatureConfigurationDefinition(provider) ||
         typeof safeValue(candidate, "setup") !== "function" ||
         typeof safeValue(candidate, "dispose") !== "function"
-      ) {
+      )
         add(featureIndex, -1, "invalid-descriptor", id);
-      }
-      const requires = Array.isArray(requiresRaw)
-        ? Object.freeze(
-            requiresRaw.filter(
-              (entry): entry is string => typeof entry === "string",
-            ),
-          )
-        : Object.freeze([]);
-      const conflicts = Array.isArray(conflictsRaw)
-        ? Object.freeze(
-            conflictsRaw.filter(
-              (entry): entry is string => typeof entry === "string",
-            ),
-          )
-        : Object.freeze([]);
-      let listsValid = true;
-      for (const [listName, list] of [
-        ["requires", requires],
-        ["conflicts", conflicts],
+      const requires: string[] = [];
+      const conflicts: string[] = [];
+      for (const [listName, rawList, target] of [
+        ["requires", requiresRaw, requires],
+        ["conflicts", conflictsRaw, conflicts],
       ] as const) {
+        if (!Array.isArray(rawList)) continue;
         const seen = new Set<string>();
-        for (let position = 0; position < list.length; position += 1) {
-          const entry = list[position] as string;
-          if (!stableId(entry) || entry === id || seen.has(entry)) {
-            listsValid = false;
+        for (let position = 0; position < rawList.length; position += 1) {
+          const entry = rawList[position];
+          if (!stableId(entry) || entry === id || seen.has(entry))
             add(featureIndex, position, "invalid-descriptor", id, [
               {
                 path: [listName, position],
                 code:
                   entry === id
                     ? "self-reference"
-                    : seen.has(entry)
+                    : seen.has(entry as string)
                       ? "duplicate-list-id"
                       : "invalid-list-id",
               },
             ]);
-          }
-          seen.add(entry);
+          else target.push(entry);
+          if (typeof entry === "string") seen.add(entry);
         }
       }
       const contributionMap = new Map<string, InternalContribution>();
-      if (Array.isArray(contributionsRaw)) {
+      const validContributions: InternalContribution[] = [];
+      if (Array.isArray(contributionsRaw))
         for (
           let position = 0;
           position < contributionsRaw.length;
@@ -1502,19 +1336,25 @@ class ServerFeatureRuntimeImplementation implements ServerFeatureRuntime {
             ? safeValue(raw as object, "id")
             : undefined;
           if (kind === "system") {
+            const domain = safeValue(raw as object, "domain");
+            const phase = safeValue(raw as object, "phase");
             valid =
               exactKeys(raw as object, SYSTEM_KEYS) &&
-              safeValue(raw as object, "domain") === "server-simulation" &&
-              (SERVER_SIMULATION_PHASES as readonly unknown[]).includes(
-                safeValue(raw as object, "phase"),
-              ) &&
+              ((domain === "client-simulation" &&
+                (CLIENT_SIMULATION_PHASES as readonly unknown[]).includes(
+                  phase,
+                )) ||
+                (domain === "client-presentation" &&
+                  (CLIENT_PRESENTATION_PHASES as readonly unknown[]).includes(
+                    phase,
+                  ))) &&
               Number.isSafeInteger(safeValue(raw as object, "priority")) &&
               typeof safeValue(raw as object, "run") === "function";
           } else if (kind === "resource") {
             valid =
               exactKeys(raw as object, RESOURCE_KEYS) &&
               objectLike(safeValue(raw as object, "resourceType"));
-            if (valid) {
+            if (valid)
               try {
                 this.world.hasResource(
                   safeValue(
@@ -1525,12 +1365,9 @@ class ServerFeatureRuntimeImplementation implements ServerFeatureRuntime {
               } catch {
                 valid = false;
               }
-            }
-          } else if (kind === "mailbox") {
+          } else if (kind === "mailbox")
             valid = exactKeys(raw as object, MAILBOX_KEYS);
-          } else {
-            valid = false;
-          }
+          else valid = false;
           if (!valid || !stableId(contributionId)) {
             add(featureIndex, position, "invalid-contribution", id, [
               {
@@ -1542,67 +1379,62 @@ class ServerFeatureRuntimeImplementation implements ServerFeatureRuntime {
           }
           const contribution = Object.freeze({
             declaration: Object.freeze({
-              ...(raw as ServerRuntimeContribution),
+              ...(raw as ClientRuntimeContribution),
             }),
             declarationIndex: position,
           });
-          contributionMap.set(contributionId, contribution);
+          validContributions.push(contribution);
+          if (!contributionMap.has(contributionId))
+            contributionMap.set(contributionId, contribution);
           inventory.push(
             Object.freeze({
               featureId: id,
               featureDeclarationIndex: featureIndex,
               contributionId,
               contributionDeclarationIndex: position,
-              kind: kind as ServerRuntimeContribution["kind"],
+              kind: kind as ClientRuntimeContribution["kind"],
             }),
           );
         }
-      }
-      const descriptor = candidate as FeatureDescriptor<
-        unknown,
-        ServerRuntimeContribution
-      >;
       const feature = Object.freeze({
-        descriptor,
+        descriptor: candidate as ClientFeatureDescriptor<unknown>,
         id,
         declarationIndex: featureIndex,
-        requires: listsValid ? requires : Object.freeze([]),
-        conflicts: listsValid ? conflicts : Object.freeze([]),
+        requires: Object.freeze(requires),
+        conflicts: Object.freeze(conflicts),
         contributions: contributionMap as ReadonlyMap<
           string,
           InternalContribution
         >,
       });
       internal.push(feature);
-      for (const contribution of contributionMap.values()) {
+      for (const contribution of validContributions)
         allContributions.push({ feature, contribution });
-      }
     }
-
     const byId = new Map<string, InternalFeature>();
     for (const feature of internal)
       if (!byId.has(feature.id)) byId.set(feature.id, feature);
-    const contributionIds = new Map<string, { kind: string }>();
+    const contributionIds = new Map<
+      string,
+      ClientRuntimeContribution["kind"]
+    >();
     const resourceTypes = new Set<object>();
     for (const { feature, contribution } of allContributions) {
       const id = contribution.declaration.id;
       const previous = contributionIds.get(id);
-      if (previous !== undefined) {
+      if (previous !== undefined)
         add(
           feature.declarationIndex,
           contribution.declarationIndex,
-          previous.kind === "system" &&
-            contribution.declaration.kind === "system"
+          previous === "system" && contribution.declaration.kind === "system"
             ? "duplicate-system-id"
             : "duplicate-contribution-id",
           feature.id,
         );
-      } else {
-        contributionIds.set(id, { kind: contribution.declaration.kind });
-      }
+      else contributionIds.set(id, contribution.declaration.kind);
       if (contribution.declaration.kind === "resource") {
         const token = contribution.declaration.resourceType as object;
-        if (resourceTypes.has(token)) {
+        if (resourceTypes.has(token))
           add(
             feature.declarationIndex,
             contribution.declarationIndex,
@@ -1615,19 +1447,12 @@ class ServerFeatureRuntimeImplementation implements ServerFeatureRuntime {
               },
             ],
           );
-        }
         resourceTypes.add(token);
       }
     }
-
     for (const feature of internal) {
-      for (
-        let position = 0;
-        position < feature.requires.length;
-        position += 1
-      ) {
-        const required = feature.requires[position] as string;
-        if (!byId.has(required)) {
+      for (let position = 0; position < feature.requires.length; position += 1)
+        if (!byId.has(feature.requires[position] as string))
           add(
             feature.declarationIndex,
             position,
@@ -1635,14 +1460,8 @@ class ServerFeatureRuntimeImplementation implements ServerFeatureRuntime {
             feature.id,
             [{ path: ["requires", position], code: "missing-requirement" }],
           );
-        }
-      }
-      for (
-        let position = 0;
-        position < feature.conflicts.length;
-        position += 1
-      ) {
-        if (byId.has(feature.conflicts[position] as string)) {
+      for (let position = 0; position < feature.conflicts.length; position += 1)
+        if (byId.has(feature.conflicts[position] as string))
           add(
             feature.declarationIndex,
             position,
@@ -1650,10 +1469,7 @@ class ServerFeatureRuntimeImplementation implements ServerFeatureRuntime {
             feature.id,
             [{ path: ["conflicts", position], code: "feature-conflict" }],
           );
-        }
-      }
     }
-
     const reaches = (
       start: string,
       current: string,
@@ -1670,42 +1486,46 @@ class ServerFeatureRuntimeImplementation implements ServerFeatureRuntime {
       }
       return false;
     };
-    for (const feature of internal) {
-      if (reaches(feature.id, feature.id, new Set([feature.id]))) {
+    for (const feature of internal)
+      if (reaches(feature.id, feature.id, new Set([feature.id])))
         add(feature.declarationIndex, 0, "dependency-cycle", feature.id);
-      }
-    }
-
     const configObject =
-      objectLike(this.configuration) && !Array.isArray(this.configuration);
-    if (!configObject) {
+      typeof this.configuration === "object" &&
+      this.configuration !== null &&
+      !Array.isArray(this.configuration);
+    if (!configObject)
       add(Number.MAX_SAFE_INTEGER, 0, "invalid-configuration", null, [
         { path: [], code: "configuration-map-required" },
       ]);
-    }
-    const configKeys = configObject ? Object.keys(this.configuration) : [];
-    for (const [position, key] of [...configKeys].sort().entries()) {
-      if (!byId.has(key)) {
+    let configKeys: string[] = [];
+    if (configObject)
+      try {
+        configKeys = Object.keys(this.configuration);
+      } catch {
+        add(Number.MAX_SAFE_INTEGER, 0, "invalid-configuration", null, [
+          { path: [], code: "configuration-map-required" },
+        ]);
+      }
+    for (const [position, key] of [...configKeys].sort().entries())
+      if (!byId.has(key))
         add(Number.MAX_SAFE_INTEGER, position, "unknown-configuration", null, [
           { path: [key], code: "unknown-configuration" },
         ]);
-      }
-    }
     const parsed: Record<string, unknown> = Object.create(null) as Record<
       string,
       unknown
     >;
     for (const feature of internal) {
       const provider = feature.descriptor.configuration as object;
-      if (!hasFeatureConfigurationDefinition(provider)) continue;
-      const present = Object.prototype.hasOwnProperty.call(
-        this.configuration,
-        feature.id,
-      );
+      if (!objectLike(provider) || !hasFeatureConfigurationDefinition(provider))
+        continue;
+      const present =
+        configObject &&
+        Object.prototype.hasOwnProperty.call(this.configuration, feature.id);
       const result = parseFeatureConfigurationProvider(
         provider,
         present,
-        present ? this.configuration[feature.id] : undefined,
+        present ? safeValue(this.configuration, feature.id) : undefined,
       );
       if (result.ok) parsed[feature.id] = result.value;
       else
@@ -1717,7 +1537,6 @@ class ServerFeatureRuntimeImplementation implements ServerFeatureRuntime {
           result.issues,
         );
     }
-
     pending.sort((left, right) =>
       left.featureIndex !== right.featureIndex
         ? left.featureIndex - right.featureIndex
@@ -1737,13 +1556,11 @@ class ServerFeatureRuntimeImplementation implements ServerFeatureRuntime {
       failures,
     });
     return Object.freeze({
-      features: Object.freeze(internal),
       resolved,
       configurations: Object.freeze(parsed),
       report,
     });
   }
-
   private resolveStable(
     features: readonly InternalFeature[],
     byId: ReadonlyMap<string, InternalFeature>,
@@ -1777,8 +1594,9 @@ class ServerFeatureRuntimeImplementation implements ServerFeatureRuntime {
     }
     return Object.freeze(output);
   }
-
-  private async rollback(failures: FeatureLifecycleFailure[]): Promise<void> {
+  private async rollback(
+    failures: ClientFeatureLifecycleFailure[],
+  ): Promise<void> {
     if (this.activeScope !== null) {
       await this.activeScope.releaseAll("rollback-release", failures);
       this.activeScope = null;
@@ -1787,51 +1605,51 @@ class ServerFeatureRuntimeImplementation implements ServerFeatureRuntime {
     await this.rollbackCompleted(failures);
     await this.cleanupHost("rollback-release", failures);
   }
-
   private async rollbackCompleted(
-    failures: FeatureLifecycleFailure[],
+    failures: ClientFeatureLifecycleFailure[],
   ): Promise<void> {
     for (let index = this.completed.length - 1; index >= 0; index -= 1) {
       const completed = this.completed[index];
-      if (completed === undefined) continue;
-      await this.cleanupFeature(completed, "rollback", failures);
+      if (completed !== undefined)
+        await this.cleanupFeature(completed, "rollback", failures);
     }
     this.completed.length = 0;
   }
-
   private async shutdownRunning(
-    failures: FeatureLifecycleFailure[],
+    failures: ClientFeatureLifecycleFailure[],
   ): Promise<void> {
     for (let index = this.completed.length - 1; index >= 0; index -= 1) {
       const completed = this.completed[index];
-      if (completed === undefined) continue;
-      await this.cleanupFeature(completed, "shutdown", failures);
+      if (completed !== undefined)
+        await this.cleanupFeature(completed, "shutdown", failures);
     }
     this.completed.length = 0;
     await this.cleanupHost("shutdown-release", failures);
     this.finishStopped("shutdown", failures);
   }
-
   private async cleanupFeature(
     completed: { feature: InternalFeature; scope: FeatureScope },
     mode: "rollback" | "shutdown",
-    failures: FeatureLifecycleFailure[],
+    failures: ClientFeatureLifecycleFailure[],
   ): Promise<void> {
     const { feature, scope } = completed;
     scope.fenceAndUnpublish();
     this.event("dispose-start", feature);
-    let disposeCause: unknown = null;
+    let disposeThrew = false;
+    let disposeCause: unknown;
     try {
       const raw = feature.descriptor.dispose();
-      let output: unknown = raw;
-      if (objectLike(raw) && typeof safeValue(raw, "then") === "function")
-        output = await raw;
+      const output =
+        objectLike(raw) && typeof safeValue(raw, "then") === "function"
+          ? await raw
+          : raw;
       if (output !== undefined)
         throw new TypeError("Dispose returned an invalid result");
     } catch (cause) {
+      disposeThrew = true;
       disposeCause = cause;
     }
-    if (disposeCause === null) this.event("dispose-success", feature);
+    if (!disposeThrew) this.event("dispose-success", feature);
     else {
       const failure = this.makeFailure(
         "dispose-failed",
@@ -1849,20 +1667,13 @@ class ServerFeatureRuntimeImplementation implements ServerFeatureRuntime {
       mode === "rollback" ? "rollback-release" : "shutdown-release",
       failures,
     );
-    for (const failure of failures) {
-      if (
-        failure.code === "resource-release-failed" &&
-        !this.failureWasEmitted(failure)
-      ) {
-        this.emitFailure(failure);
-      }
-    }
   }
-
   private async cleanupHost(
     operation: "rollback-release" | "shutdown-release",
-    failures: FeatureLifecycleFailure[],
+    failures: ClientFeatureLifecycleFailure[],
   ): Promise<void> {
+    if (this.hostCleaned) return;
+    this.hostCleaned = true;
     this.schedule?.stop();
     this.schedule = null;
     for (let index = this.transferOrder.length - 1; index >= 0; index -= 1) {
@@ -1908,7 +1719,6 @@ class ServerFeatureRuntimeImplementation implements ServerFeatureRuntime {
     this.telemetryStore.releaseLiveResource("worlds");
     this.telemetryStore.releaseLiveResource("retainedReferences");
   }
-
   private fenceRuntime(): void {
     this.fence.stop();
     this.schedule?.stop();
@@ -1919,13 +1729,12 @@ class ServerFeatureRuntimeImplementation implements ServerFeatureRuntime {
     this.installedIds = Object.freeze([]);
     this.telemetryStore.observeInstalledFeatureIds(this.installedIds);
   }
-
   private finishStopped(
-    reason: FeatureStoppedResult["reason"],
-    failures: readonly FeatureLifecycleFailure[],
-  ): FeatureStoppedResult {
+    reason: ClientFeatureStoppedResult["reason"],
+    failures: readonly ClientFeatureLifecycleFailure[],
+  ): ClientFeatureStoppedResult {
     if (this.stoppedResult !== null) return this.stoppedResult;
-    if (this.currentState !== "stopped") {
+    if (this.currentState !== "stopped")
       this.transition(
         "stopped",
         this.currentState === "validating"
@@ -1934,10 +1743,9 @@ class ServerFeatureRuntimeImplementation implements ServerFeatureRuntime {
             ? "shutdown"
             : "rollback",
       );
-    }
     this.stoppedResult = Object.freeze({
       state: "stopped",
-      runtime: "server",
+      runtime: "client",
       reason,
       clean: failures.length === 0,
       setupOrder: Object.freeze(
@@ -1955,16 +1763,15 @@ class ServerFeatureRuntimeImplementation implements ServerFeatureRuntime {
     this.resolveStopped(this.stoppedResult);
     return this.stoppedResult;
   }
-
   private transition(
     nextState: FeatureLifecycleState,
-    operation: FeatureLifecycleTransition["operation"],
+    operation: ClientFeatureLifecycleTransition["operation"],
   ): void {
     const previousState = this.currentState;
     this.currentState = nextState;
     this.transitions.push(
       Object.freeze({
-        runtime: "server",
+        runtime: "client",
         previousState,
         nextState,
         operation,
@@ -1972,7 +1779,6 @@ class ServerFeatureRuntimeImplementation implements ServerFeatureRuntime {
       }),
     );
   }
-
   private event(
     kind: FeatureLifecycleEvent["kind"],
     feature: InternalFeature,
@@ -1986,37 +1792,10 @@ class ServerFeatureRuntimeImplementation implements ServerFeatureRuntime {
       }),
     );
   }
-
-  private readonly emittedFailures = new WeakSet<object>();
-  private failureWasEmitted(failure: FeatureLifecycleFailure): boolean {
-    return this.emittedFailures.has(failure);
-  }
-  private emitFailure(failure: FeatureLifecycleFailure): void {
-    if (this.failureWasEmitted(failure)) return;
-    this.emittedFailures.add(failure);
-    this.telemetryStore.recordRuntimeError({
-      code: failure.code,
-      category: failure.expected ? "expected" : "invariant",
-      runtime: "server",
-      operation: failure.operation,
-      message: `Feature lifecycle failure: ${failure.code}`,
-      ...(failure.featureId === null ? {} : { featureId: failure.featureId }),
-      context: Object.freeze(
-        failure.details.map((detail, index) =>
-          Object.freeze({ key: `issue-${index}`, value: detail.code }),
-        ),
-      ),
-      ...(failure.cause === null
-        ? {}
-        : { cause: new Error(failure.cause.message) }),
-    });
-  }
-
   private nextSequence(): number {
     this.sequence += 1;
     return this.sequence;
   }
-
   private retainKinds(kind: LiveResourceKind | null): void {
     const kinds = new Set<LiveResourceKind>(["retainedReferences"]);
     if (kind !== null) kinds.add(kind);
@@ -2028,9 +1807,5 @@ class ServerFeatureRuntimeImplementation implements ServerFeatureRuntime {
     if (kind !== null) kinds.add(kind);
     for (const current of kinds)
       this.telemetryStore.releaseLiveResource(current);
-  }
-
-  private preflightScheduleReport(): ServerScheduleReport {
-    return Object.freeze([]);
   }
 }

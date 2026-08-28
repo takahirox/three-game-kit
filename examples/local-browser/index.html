@@ -1,0 +1,50 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Three Game Kit M2 local browser slice</title>
+    <style>
+      :root {
+        color-scheme: dark;
+        font-family: system-ui, sans-serif;
+        background: #101820;
+        color: #eef5f7;
+      }
+
+      body {
+        min-height: 100vh;
+        margin: 0;
+        display: grid;
+        place-content: center;
+        gap: 1rem;
+      }
+
+      h1,
+      p {
+        margin: 0;
+      }
+
+      canvas {
+        width: 640px;
+        height: 360px;
+        border: 1px solid #7ba7b5;
+        border-radius: 0.5rem;
+      }
+
+      #status[data-passed="true"] {
+        color: #7ee787;
+      }
+
+      #status[data-passed="false"] {
+        color: #ff7b72;
+      }
+    </style>
+  </head>
+  <body>
+    <h1>Three Game Kit M2</h1>
+    <canvas id="game" width="640" height="360"></canvas>
+    <p id="status">Running deterministic browser evidence…</p>
+    <script type="module" src="./main.ts"></script>
+  </body>
+</html>

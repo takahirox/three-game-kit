@@ -7,6 +7,7 @@ import {
   type OperationResult,
   type ServerFeatureBootResult,
   type ServerFeatureRuntime,
+  type ServerRuntimeContribution,
   type ServerScheduleReport,
   type ServerTelemetrySnapshot,
   type TelemetryStore,
@@ -14,7 +15,10 @@ import {
 } from "@three-game-kit/core";
 
 export interface RuntimeOptions {
-  readonly features: readonly FeatureDescriptor<unknown>[];
+  readonly features: readonly FeatureDescriptor<
+    unknown,
+    ServerRuntimeContribution
+  >[];
   readonly configuration?: Readonly<Record<string, unknown>>;
   readonly driver?: "exact" | "wall-clock";
   readonly telemetryStore?: TelemetryStore<"server">;
@@ -63,9 +67,7 @@ export class Runtime {
     return this.delegate.stepExact(count);
   }
 
-  pumpWallClock(
-    elapsedSeconds: number,
-  ): OperationResult<WallClockPumpReport> {
+  pumpWallClock(elapsedSeconds: number): OperationResult<WallClockPumpReport> {
     return this.delegate.pumpWallClock(elapsedSeconds);
   }
 

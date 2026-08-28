@@ -34,9 +34,11 @@ const packageContract = {
       "./networking",
     ],
     dependencies: [
+      "@dimforge/rapier3d",
       "@three-game-kit/core",
       "@three-game-kit/protocol",
       "@three-game-kit/shared",
+      "three",
     ],
   },
   server: {
@@ -88,6 +90,8 @@ assert.equal(rootManifest.packageManager, "pnpm@11.24.0");
 assert.equal(rootManifest.engines.node, "24.x");
 assert.equal(rootManifest.engines.pnpm, "11.24.0");
 assert.equal(rootManifest.devDependencies.typescript, "6.0.3");
+assert.equal(rootManifest.devDependencies["@playwright/test"], "1.62.1");
+assert.equal(rootManifest.devDependencies.vite, "8.2.2");
 for (const script of ["build", "typecheck", "test", "verify"]) {
   assert.equal(
     typeof rootManifest.scripts[script],
@@ -153,25 +157,39 @@ function assertSourceBoundaries(source, sourceFile, directory, contract) {
         `${sourceFile} crosses its package root`,
       );
     } else {
-      assert.ok(
-        allPublicSpecifiers.has(specifier),
-        `${sourceFile} imports non-public ${specifier}`,
-      );
-      assert.ok(
-        contract.dependencies.includes(
-          [...Object.values(packageContract)].find(
-            ({ name }) =>
-              specifier === name || specifier.startsWith(`${name}/`),
-          )?.name,
-        ),
-        `${sourceFile} imports an undeclared workspace dependency`,
-      );
+      const workspaceDependency = [...Object.values(packageContract)].find(
+        ({ name }) =>
+          specifier === name || specifier.startsWith(`${name}/`),
+      )?.name;
+      if (workspaceDependency !== undefined) {
+        assert.ok(
+          allPublicSpecifiers.has(specifier),
+          `${sourceFile} imports non-public ${specifier}`,
+        );
+        assert.ok(
+          contract.dependencies.includes(workspaceDependency),
+          `${sourceFile} imports an undeclared workspace dependency`,
+        );
+      } else {
+        assert.ok(
+          contract.dependencies.some(
+            (dependency) =>
+              specifier === dependency || specifier.startsWith(`${dependency}/`),
+          ),
+          `${sourceFile} imports an undeclared external dependency`,
+        );
+      }
     }
   }
 }
 
 function assertDeclarationBoundaries(text, declarationFile, directory, contract) {
   assertSourceBoundaries(text, declarationFile, directory, contract);
+  assert.doesNotMatch(
+    text,
+    /["'](?:three|@dimforge\/rapier3d)(?:[\/"'])/u,
+    `${declarationFile} leaks a vendor declaration`,
+  );
   assert.doesNotMatch(
     text,
     /\b(?:bitECS|bitecs|Window|Document|Navigator|HTMLElement|KeyboardEvent|WebXR|WebSocket|Buffer)\b/u,
@@ -193,12 +211,14 @@ const negativeBoundaryFixtures = [
   {
     category: "three package import",
     directory: "client",
-    text: 'import "three";',
+    declaration: true,
+    text: 'export type { Scene } from "three";',
   },
   {
     category: "rapier package import",
     directory: "client",
-    text: 'import "@dimforge/rapier3d-compat";',
+    declaration: true,
+    text: 'export type { World } from "@dimforge/rapier3d";',
   },
   {
     category: "server importing client",
@@ -311,7 +331,13 @@ for (const [directory, contract] of Object.entries(packageContract)) {
   const actualDependencies = Object.keys(manifest.dependencies ?? {}).sort();
   assert.deepEqual(actualDependencies, [...contract.dependencies].sort());
   for (const dependency of actualDependencies) {
-    assert.equal(manifest.dependencies[dependency], "workspace:^");
+    const expectedVersion =
+      dependency === "three"
+        ? "0.185.1"
+        : dependency === "@dimforge/rapier3d"
+          ? "0.20.0"
+          : "workspace:^";
+    assert.equal(manifest.dependencies[dependency], expectedVersion);
   }
 
   const sourceRoot = path.join(directoryPath, "src");

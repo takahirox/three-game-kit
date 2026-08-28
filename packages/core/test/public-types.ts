@@ -37,7 +37,10 @@ const resourceType: ResourceType<{ tick: number }> = Clock;
 
 world.addComponent(entity, Position, { x: 1 });
 world.addResource(Clock, { tick: 1 });
-const position: { x: number } | undefined = world.getComponent(entity, Position);
+const position: { x: number } | undefined = world.getComponent(
+  entity,
+  Position,
+);
 const clock: { tick: number } | undefined = world.getResource(Clock);
 const entities: readonly EntityId[] = world.queryAll(Position);
 
@@ -60,12 +63,16 @@ type MailboxInput = { value: number };
 type MailboxSnapshot = Readonly<{ value: number }>;
 const fence = createRuntimeLiveFence();
 const generation: RuntimeGeneration = fence.capture();
-const mailbox: BoundedMailbox<MailboxInput, MailboxSnapshot> = createBoundedMailbox({
-  capacity: 2,
-  fence,
-  copySnapshot: (value) => Object.freeze({ value: value.value }),
-});
-const admission: MailboxAdmissionResult = mailbox.enqueue({ value: 1 }, generation);
+const mailbox: BoundedMailbox<MailboxInput, MailboxSnapshot> =
+  createBoundedMailbox({
+    capacity: 2,
+    fence,
+    copySnapshot: (value) => Object.freeze({ value: value.value }),
+  });
+const admission: MailboxAdmissionResult = mailbox.enqueue(
+  { value: 1 },
+  generation,
+);
 const scheduledSystem: ServerSystemDeclaration = {
   domain: "server-simulation",
   phase: "ingress",
@@ -79,14 +86,24 @@ const scheduledSystem: ServerSystemDeclaration = {
     void exactDt;
   },
 };
-const scheduleResult: CreateServerScheduleResult = createServerSchedule({ driver: "exact", world, systems: [scheduledSystem] });
-// @ts-expect-error Client presentation phases are not Server simulation phases.
-const invalidSystem: ServerSystemDeclaration = { ...scheduledSystem, phase: "render" };
+const scheduleResult: CreateServerScheduleResult = createServerSchedule({
+  driver: "exact",
+  world,
+  systems: [scheduledSystem],
+});
+const invalidSystem: ServerSystemDeclaration = {
+  ...scheduledSystem,
+  // @ts-expect-error Client presentation phases are not Server simulation phases.
+  phase: "render",
+};
 void admission;
 void scheduleResult;
 void invalidSystem;
-const telemetryStore: TelemetryStore<"server"> = createTelemetryStore({ runtime: "server" });
-const telemetrySnapshot: ServerTelemetrySnapshot = telemetryStore.snapshotTelemetry();
+const telemetryStore: TelemetryStore<"server"> = createTelemetryStore({
+  runtime: "server",
+});
+const telemetrySnapshot: ServerTelemetrySnapshot =
+  telemetryStore.snapshotTelemetry();
 void telemetryStore;
 void telemetrySnapshot;
 
@@ -99,7 +116,10 @@ const featureConfiguration = defineFeatureConfiguration<{ enabled: boolean }>({
       !("enabled" in input) ||
       typeof input.enabled !== "boolean"
     ) {
-      return { ok: false, issues: [{ path: ["enabled"], code: "boolean-required" }] };
+      return {
+        ok: false,
+        issues: [{ path: ["enabled"], code: "boolean-required" }],
+      };
     }
     return { ok: true, value: { enabled: input.enabled } };
   },
@@ -107,14 +127,16 @@ const featureConfiguration = defineFeatureConfiguration<{ enabled: boolean }>({
 const typedFeature: FeatureDescriptor<{ enabled: boolean }> = {
   id: "typed-feature",
   description: "Exercises the public Feature boundary",
-  runtimeContributions: [{
-    kind: "system",
-    id: "typed-system",
-    domain: "server-simulation",
-    phase: "gameplay",
-    priority: 0,
-    run: () => undefined,
-  }],
+  runtimeContributions: [
+    {
+      kind: "system",
+      id: "typed-system",
+      domain: "server-simulation",
+      phase: "gameplay",
+      priority: 0,
+      run: () => undefined,
+    },
+  ],
   requires: [],
   conflicts: [],
   configuration: featureConfiguration,
@@ -125,6 +147,38 @@ const typedFeature: FeatureDescriptor<{ enabled: boolean }> = {
   },
   dispose() {},
 };
+interface HypotheticalRuntimeContribution {
+  readonly kind: "hypothetical";
+  readonly id: string;
+  readonly value: number;
+}
+
+const hypotheticalFeature: FeatureDescriptor<
+  { enabled: boolean },
+  HypotheticalRuntimeContribution
+> = {
+  id: "hypothetical-feature",
+  description: "Exercises a typed non-Server contribution",
+  runtimeContributions: [
+    {
+      kind: "hypothetical",
+      id: "hypothetical-contribution",
+      value: 1,
+    },
+  ],
+  requires: [],
+  conflicts: [],
+  configuration: featureConfiguration,
+  setup({ configuration }) {
+    const enabled: boolean = configuration.enabled;
+    void enabled;
+  },
+  dispose() {},
+};
+
+// @ts-expect-error Non-Server contribution descriptors are not Server runtime options.
+createServerFeatureRuntime({ features: [hypotheticalFeature] });
+
 const featureRuntime: ServerFeatureRuntime = createServerFeatureRuntime({
   features: [typedFeature],
 });
@@ -136,7 +190,8 @@ const transferToken: HostOwnershipTransferToken<{ close(): void }> =
     release() {},
   });
 const featureBoot: Promise<ServerFeatureBootResult> = featureRuntime.boot();
-const featureShutdown: Promise<FeatureStoppedResult> = featureRuntime.shutdown();
+const featureShutdown: Promise<FeatureStoppedResult> =
+  featureRuntime.shutdown();
 declare const lifecycleFailure: FeatureLifecycleFailure;
 void transferToken;
 void featureBoot;

@@ -2,9 +2,14 @@
   "extends": "./tsconfig.base.json",
   "compilerOptions": {
     "noEmit": true,
+    "lib": ["ES2023", "ESNext.Disposable", "DOM"],
     "declaration": false,
     "declarationMap": false,
     "sourceMap": false
   },
-  "include": ["packages/*/src/**/*.ts", "packages/core/test/public-types.ts"]
+  "include": [
+    "packages/*/src/**/*.ts",
+    "packages/core/test/public-types.ts",
+    "packages/client/test/public-types.ts"
+  ]
 }
