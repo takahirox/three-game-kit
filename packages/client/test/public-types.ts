@@ -52,6 +52,29 @@ import {
   type GltfAvatarLoadOutcome,
   type GltfAvatarLoader,
 } from "@three-game-kit/client/assets";
+import {
+  createNativeClientTransport,
+  type Binding as NativeClientTransportBinding,
+  type ErrorCounts as NativeClientTransportErrorCounts,
+  type Inspection as NativeClientTransportInspection,
+  type LiveResourceCounts as NativeClientTransportLiveResourceCounts,
+  type NativeClientTransport,
+  type NativeClientTransportState,
+  type OutboundMessage as NativeClientTransportOutboundMessage,
+  type Options as NativeClientTransportOptions,
+  type Outcome as NativeClientTransportOutcome,
+} from "@three-game-kit/client/networking";
+import {
+  createClientReplicationEngine,
+  type ClientMoveIntent,
+  type ClientPresentationState,
+  type ClientReplicationEngine,
+  type ClientReplicationInspection,
+  type ClientReplicationLiveResourceCounts,
+  type ClientReplicationOptions,
+  type ClientReplicationOutcome,
+  type ClientReplicationState,
+} from "@three-game-kit/client/replication";
 
 const configuration = defineFeatureConfiguration({
   defaultValue: () => ({ enabled: true }),
@@ -220,3 +243,150 @@ function exerciseM2ClientSubpaths(canvas: unknown): void {
   void pendingLoad;
 }
 void exerciseM2ClientSubpaths;
+
+function exerciseM3ClientSubpaths(): void {
+  const networkingOptions: NativeClientTransportOptions = {
+    url: "wss://example.invalid/game",
+    receive(message) {
+      void message;
+    },
+  };
+  const outboundMessage: NativeClientTransportOutboundMessage = {
+    direction: "c2s",
+    routeOrdinal: 1,
+    messageOrdinal: 1,
+    operation: "command",
+    text: "encoded",
+  };
+  const gatedNetworkingOptions: NativeClientTransportOptions = {
+    url: "ws://localhost:3000",
+    receive(message) {
+      void message;
+    },
+    routeOrdinal: 1,
+    outboundGate(metadata) {
+      const typed: NativeClientTransportOutboundMessage = metadata;
+      return Promise.resolve().then(() => {
+        void typed.text;
+      });
+    },
+  };
+  // @ts-expect-error Public outbound metadata is readonly.
+  outboundMessage.text = "replacement";
+  const invalidOutboundDirection: NativeClientTransportOutboundMessage = {
+    ...outboundMessage,
+    // @ts-expect-error Outbound direction is fixed to Client-to-Server.
+    direction: "s2c",
+  };
+  const nativeTransport: NativeClientTransport =
+    createNativeClientTransport(networkingOptions);
+  const networkingConnectOutcome: NativeClientTransportOutcome =
+    nativeTransport.connect();
+  const networkingJoinOutcome: NativeClientTransportOutcome =
+    nativeTransport.join();
+  const networkingState: NativeClientTransportState = nativeTransport.state;
+  const networkingBinding: NativeClientTransportBinding | null =
+    nativeTransport.binding;
+  const networkingInspection: NativeClientTransportInspection =
+    nativeTransport.inspect();
+  const networkingErrorCounts: NativeClientTransportErrorCounts =
+    networkingInspection.errorCounts;
+  const networkingLiveResourceCounts: NativeClientTransportLiveResourceCounts =
+    networkingInspection.liveResourceCounts;
+  const networkingShutdown: Promise<NativeClientTransportOutcome> =
+    nativeTransport.shutdown();
+
+  if (networkingBinding !== null) {
+    // @ts-expect-error Public transport bindings are readonly.
+    networkingBinding.playerId = "replacement";
+  }
+  // @ts-expect-error Public transport inspection data is readonly.
+  networkingInspection.errorCounts["invalid-state"] = 1;
+
+  const replicationCollisionAdapter: ClientCollisionAdapter = {
+    disposed: false,
+    move(startPosition, desiredTranslation) {
+      return {
+        ok: true as const,
+        value: {
+          startPosition,
+          desiredTranslation,
+          effectiveTranslation: desiredTranslation,
+          position: startPosition,
+          grounded: false,
+          collided: false,
+          collisionCount: 0,
+        },
+      };
+    },
+    dispose() {},
+  };
+  const replicationOptions: ClientReplicationOptions = {
+    movementSpeedMetersPerSecond: 6,
+    initialPosition: { x: 0, y: 1, z: 0 },
+    collisionAdapter: replicationCollisionAdapter,
+    emit(message) {
+      void message;
+    },
+  };
+  const replicationEngine: ClientReplicationEngine =
+    createClientReplicationEngine(replicationOptions);
+  const replicationBeginJoin: ClientReplicationOutcome =
+    replicationEngine.beginJoin();
+  const replicationReceive: ClientReplicationOutcome =
+    replicationEngine.receive({
+      protocolVersion: 1,
+      kind: "joined",
+      connectionId: "connection_1",
+      playerId: "player_1",
+      ownedEntityId: "avatar_1",
+      serverTick: 0,
+    });
+  const moveIntent: ClientMoveIntent = { kind: "move", x: 0, z: 0 };
+  const replicationQueueMove: ClientReplicationOutcome =
+    replicationEngine.queueMove(moveIntent);
+  const replicationStep: ClientReplicationOutcome<number> =
+    replicationEngine.stepExact(1);
+  const replicationFrame: ClientReplicationOutcome<ClientPresentationState> =
+    replicationEngine.frame(0);
+  const replicationState: ClientReplicationState = replicationEngine.state;
+  const replicationInspection: ClientReplicationInspection =
+    replicationEngine.inspect();
+  const replicationLiveResourceCounts: ClientReplicationLiveResourceCounts =
+    replicationInspection.liveResourceCounts;
+  const decodedInboxTicks: readonly number[] =
+    replicationInspection.decodedInboxTicks;
+  const decodedInboxCount: number = replicationInspection.decodedInboxCount;
+  const replicationShutdown: ClientReplicationOutcome =
+    replicationEngine.shutdown();
+
+  // @ts-expect-error Public replication inspection arrays are readonly.
+  replicationInspection.stateTrace.push("closed");
+  // @ts-expect-error Public replication inspection counters are readonly.
+  replicationInspection.counters.frameCount = 1;
+  // @ts-expect-error Decoded inbox tick inspection arrays are readonly.
+  decodedInboxTicks.push(1);
+  // @ts-expect-error Decoded inbox counts are readonly.
+  replicationInspection.decodedInboxCount = 0;
+
+  void networkingConnectOutcome;
+  void networkingJoinOutcome;
+  void networkingState;
+  void networkingErrorCounts;
+  void networkingLiveResourceCounts;
+  void networkingShutdown;
+  void outboundMessage;
+  void gatedNetworkingOptions;
+  void invalidOutboundDirection;
+  void replicationBeginJoin;
+  void replicationReceive;
+  void replicationQueueMove;
+  void replicationStep;
+  void replicationFrame;
+  void replicationState;
+  void replicationLiveResourceCounts;
+  void decodedInboxTicks;
+  void decodedInboxCount;
+  void replicationShutdown;
+}
+void exerciseM3ClientSubpaths;

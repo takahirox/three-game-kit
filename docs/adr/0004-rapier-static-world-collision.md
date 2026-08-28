@@ -28,6 +28,10 @@ their own private collision adapter modules. Client never exports its adapter im
 Server, and Server never imports @three-game-kit/client or any Client source, subpath, declaration,
 or generated artifact.
 
+For headless Node, Server uses the official @dimforge/rapier3d-compat distribution of the same Rapier
+0.20 API because the bundler distribution lacks Node ESM exports. This packaging choice does not
+change authority or any public type; Client remains on @dimforge/rapier3d.
+
 Each Client Runtime instance owns a private Rapier World used only for local prediction. Each Server
 Runtime instance owns a different private Rapier World used only for authoritative headless
 collision. A Rapier World, controller, collider, handle, vector, shape, query result, or WebAssembly

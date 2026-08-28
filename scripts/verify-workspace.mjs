@@ -20,7 +20,7 @@ const packageContract = {
   protocol: {
     name: "@three-game-kit/protocol",
     exports: ["."],
-    dependencies: [],
+    dependencies: ["zod"],
   },
   client: {
     name: "@three-game-kit/client",
@@ -32,9 +32,10 @@ const packageContract = {
       "./collision",
       "./assets",
       "./networking",
+      "./replication",
     ],
     dependencies: [
-      "@dimforge/rapier3d",
+      "@dimforge/rapier3d-compat",
       "@three-game-kit/core",
       "@three-game-kit/protocol",
       "@three-game-kit/shared",
@@ -43,11 +44,13 @@ const packageContract = {
   },
   server: {
     name: "@three-game-kit/server",
-    exports: ["."],
+    exports: [".", "./collision", "./authoritative", "./networking"],
     dependencies: [
+      "@dimforge/rapier3d-compat",
       "@three-game-kit/core",
       "@three-game-kit/protocol",
       "@three-game-kit/shared",
+      "ws",
     ],
   },
 };
@@ -92,7 +95,19 @@ assert.equal(rootManifest.engines.pnpm, "11.24.0");
 assert.equal(rootManifest.devDependencies.typescript, "6.0.3");
 assert.equal(rootManifest.devDependencies["@playwright/test"], "1.62.1");
 assert.equal(rootManifest.devDependencies.vite, "8.2.2");
-for (const script of ["build", "typecheck", "test", "verify"]) {
+for (const script of [
+  "build",
+  "typecheck",
+  "test",
+  "test:node",
+  "verify",
+  "typecheck:m2-browser",
+  "test:m2-browser",
+  "verify:m2",
+  "typecheck:m3-browser",
+  "test:m3-browser",
+  "verify:m3",
+]) {
   assert.equal(
     typeof rootManifest.scripts[script],
     "string",
@@ -131,6 +146,7 @@ const allPublicSpecifiers = new Set(
 const environmentNeutralPackages = new Set(["core", "shared", "protocol", "server"]);
 const forbiddenEnvironmentTypes = /\b(?:Window|Document|Navigator|HTMLElement|KeyboardEvent|WebXR)\b/u;
 const forbiddenEnvironmentGlobals = /\b(?:window|document|navigator|requestAnimationFrame|cancelAnimationFrame)\s*(?:\.|\(|\[)/u;
+const serverInternalNodeImports = new Set(["node:buffer", "node:http", "node:stream"]);
 
 function assertSourceBoundaries(source, sourceFile, directory, contract) {
   const directoryPath = path.join(packageRoot, directory);
@@ -150,6 +166,25 @@ function assertSourceBoundaries(source, sourceFile, directory, contract) {
   const importPattern = /(?:from\s+|import\s*)["']([^"']+)["']/gu;
   for (const match of source.matchAll(importPattern)) {
     const specifier = match[1];
+    if (specifier.startsWith("node:")) {
+      assert.equal(
+        directory,
+        "server",
+        `${sourceFile} imports a Node builtin outside Server`,
+      );
+      assert.ok(
+        serverInternalNodeImports.has(specifier),
+        `${sourceFile} imports an undeclared Node builtin`,
+      );
+      continue;
+    }
+    if (specifier === "zod" || specifier.startsWith("zod/")) {
+      assert.equal(
+        directory,
+        "protocol",
+        `${sourceFile} imports zod outside Protocol`,
+      );
+    }
     if (specifier.startsWith(".")) {
       const resolved = path.resolve(path.dirname(sourceFile), specifier);
       assert.ok(
@@ -187,9 +222,16 @@ function assertDeclarationBoundaries(text, declarationFile, directory, contract)
   assertSourceBoundaries(text, declarationFile, directory, contract);
   assert.doesNotMatch(
     text,
-    /["'](?:three|@dimforge\/rapier3d)(?:[\/"'])/u,
+    /["'](?:three|@dimforge\/rapier3d(?:-compat)?)(?:[\/"'])/u,
     `${declarationFile} leaks a vendor declaration`,
   );
+  if (directory === "protocol") {
+    assert.doesNotMatch(
+      text,
+      /\bZod(?:Issue|Error)[A-Za-z0-9_]*\b/u,
+      `${declarationFile} leaks Zod issue/error internals`,
+    );
+  }
   assert.doesNotMatch(
     text,
     /\b(?:bitECS|bitecs|Window|Document|Navigator|HTMLElement|KeyboardEvent|WebXR|WebSocket|Buffer)\b/u,
@@ -207,6 +249,23 @@ const negativeBoundaryFixtures = [
     category: "DOM type",
     directory: "server",
     text: "declare const root: HTMLElement;",
+  },
+  {
+    category: "non-Protocol zod import",
+    directory: "client",
+    text: 'import { z } from "zod";',
+  },
+  {
+    category: "Protocol declaration Zod issue internals",
+    directory: "protocol",
+    declaration: true,
+    text: 'import type { ZodIssue } from "zod"; export type LeakedIssue = ZodIssue;',
+  },
+  {
+    category: "Protocol declaration Zod error internals",
+    directory: "protocol",
+    declaration: true,
+    text: 'import type { ZodError } from "zod"; export type LeakedError = ZodError;',
   },
   {
     category: "three package import",
@@ -314,6 +373,22 @@ assert.doesNotThrow(
   "public package subpath fixture must remain accepted",
 );
 
+assert.doesNotThrow(
+  () =>
+    assertDeclarationBoundaries(
+      'import type { ZodType } from "zod"; export declare const PublicSchema: ZodType<string>;',
+      path.join(
+        packageRoot,
+        "protocol",
+        "dist",
+        "boundary-fixture.d.ts",
+      ),
+      "protocol",
+      packageContract.protocol,
+    ),
+  "Protocol schema declaration fixture must remain accepted",
+);
+
 for (const [directory, contract] of Object.entries(packageContract)) {
   const directoryPath = path.join(packageRoot, directory);
   const manifest = await readJson(path.join(directoryPath, "package.json"));
@@ -332,12 +407,23 @@ for (const [directory, contract] of Object.entries(packageContract)) {
   assert.deepEqual(actualDependencies, [...contract.dependencies].sort());
   for (const dependency of actualDependencies) {
     const expectedVersion =
-      dependency === "three"
-        ? "0.185.1"
-        : dependency === "@dimforge/rapier3d"
-          ? "0.20.0"
-          : "workspace:^";
+      dependency === "zod"
+        ? "^4.4.3"
+        : dependency === "three"
+          ? "0.185.1"
+          : dependency === "@dimforge/rapier3d" ||
+              dependency === "@dimforge/rapier3d-compat"
+            ? "0.20.0"
+            : dependency === "ws"
+              ? "8.21.3"
+              : "workspace:^";
     assert.equal(manifest.dependencies[dependency], expectedVersion);
+  }
+  if (directory === "server") {
+    assert.deepEqual(manifest.devDependencies, {
+      "@types/node": "24.13.3",
+      "@types/ws": "8.18.1",
+    });
   }
 
   const sourceRoot = path.join(directoryPath, "src");
@@ -360,6 +446,153 @@ for (const [directory, contract] of Object.entries(packageContract)) {
     assertDeclarationBoundaries(text, declaration, directory, contract);
   }
 }
+
+const clientReplicationDeclarationFile = path.join(
+  packageRoot,
+  "client",
+  "dist",
+  "replication.d.ts",
+);
+const clientReplicationDeclaration = await readFile(
+  clientReplicationDeclarationFile,
+  "utf8",
+);
+const clientReplicationDeclarationLeakChecks = [
+  {
+    label: "a transport or vendor module",
+    pattern:
+      /["'](?:(?:node:)?(?:buffer|http|https|net|stream|tls)|ws|three|@dimforge\/rapier3d(?:-compat)?)(?:\/[^"']*)?["']/u,
+  },
+  {
+    label: "a browser or transport implementation type",
+    pattern:
+      /\b(?:WebSocket|MessageEvent|Event|EventTarget|EventListener|CloseEvent|ErrorEvent|Socket|Duplex|HTTP[A-Za-z0-9_$]*|Http[A-Za-z0-9_$]*|ServerResponse|ClientRequest|IncomingMessage|RawData|Buffer|[A-Za-z_$][\w$]*(?:Event|Socket|Listener)[\w$]*)\b/u,
+  },
+  {
+    label: "a Rapier or Three implementation type",
+    pattern:
+      /\b(?:RAPIER|THREE|Rapier[A-Za-z0-9_$]*|Three[A-Za-z0-9_$]*|[A-Za-z_$][\w$]*(?:World|Controller|Collider|Handle|WASM|WebAssembly|Scene|Object3D|Vector[234]|Matrix[34]|Quaternion|Euler|Camera|Renderer|Material|Geometry|Texture|Mesh|Raycaster)[\w$]*)\b/u,
+  },
+];
+for (const { label, pattern } of clientReplicationDeclarationLeakChecks) {
+  assert.doesNotMatch(
+    clientReplicationDeclaration,
+    pattern,
+    `${clientReplicationDeclarationFile} exposes ${label}`,
+  );
+}
+const clientReplicationDeclarationImports = [
+  ...clientReplicationDeclaration.matchAll(
+    /(?:from\s+|import\s*(?:\(\s*)?)["']([^"']+)["']/gu,
+  ),
+].map((match) => match[1]);
+for (const specifier of clientReplicationDeclarationImports) {
+  assert.ok(
+    specifier === "./collision.js" ||
+      specifier === "@three-game-kit/protocol" ||
+      specifier === "@three-game-kit/shared",
+    `${clientReplicationDeclarationFile} exposes non-kit type import ${specifier}`,
+  );
+}
+
+const serverAuthoritativeDeclarationFile = path.join(
+  packageRoot,
+  "server",
+  "dist",
+  "authoritative.d.ts",
+);
+const serverAuthoritativeDeclaration = await readFile(
+  serverAuthoritativeDeclarationFile,
+  "utf8",
+);
+const authoritativeDeclarationLeakChecks = [
+  {
+    label: "a crypto implementation",
+    pattern:
+      /\b(?:Crypto|CryptoKey|SubtleCrypto|getRandomValues|randomBytes|randomUUID)\b|["'](?:node:)?crypto(?:\/[^"']*)?["']/u,
+  },
+  {
+    label: "a deterministic ID generator",
+    pattern:
+      /\b(?:AuthoritativeServerTestOptions|createAuthoritativeServerForTesting|idByteGenerator)\b/u,
+  },
+  {
+    label: "a socket, HTTP, WebSocket, or Buffer type",
+    pattern:
+      /\b(?:WebSocket|Socket|IncomingMessage|ServerResponse|ClientRequest|RequestListener|Buffer)\b|["'](?:node:)?(?:buffer|http|https|net|tls|ws)(?:\/[^"']*)?["']/u,
+  },
+  {
+    label: "a Rapier type or value",
+    pattern:
+      /\b(?:RAPIER|[A-Za-z_$][\w$]*(?:World|Controller|Collider|Handle|WASM|WebAssembly)[\w$]*)\b|["']@dimforge\/rapier3d(?:-compat)?(?:\/[^"']*)?["']/iu,
+  },
+  {
+    label: "a Client package type",
+    pattern:
+      /["']@three-game-kit\/client(?:\/[^"']*)?["']|\b(?:ClientRuntime|ClientFeatureRuntime|ClientCollisionAdapter)\b/u,
+  },
+];
+for (const { label, pattern } of authoritativeDeclarationLeakChecks) {
+  assert.doesNotMatch(
+    serverAuthoritativeDeclaration,
+    pattern,
+    serverAuthoritativeDeclarationFile + " exposes " + label,
+  );
+}
+
+const serverNetworkingDeclarationFile = path.join(
+  packageRoot,
+  "server",
+  "dist",
+  "networking.d.ts",
+);
+const serverNetworkingDeclaration = await readFile(
+  serverNetworkingDeclarationFile,
+  "utf8",
+);
+assert.doesNotMatch(
+  serverNetworkingDeclaration,
+  /["'](?:node:(?:http|buffer|stream)|ws)(?:\/[^"']*)?["']/u,
+  `${serverNetworkingDeclarationFile} exposes a Node or ws module`,
+);
+assert.doesNotMatch(
+  serverNetworkingDeclaration,
+  /\b(?:WebSocket|WebSocketServer|Socket|Duplex|HTTP[A-Za-z0-9_$]*|HttpServer|ServerResponse|ClientRequest|IncomingMessage|RawData|Buffer|[A-Za-z_$][\w$]*Listener)\b/u,
+  `${serverNetworkingDeclarationFile} exposes a transport implementation type`,
+);
+const networkingDeclarationImports = [
+  ...serverNetworkingDeclaration.matchAll(
+    /(?:from\s+|import\s*)["']([^"']+)["']/gu,
+  ),
+].map((match) => match[1]);
+for (const specifier of networkingDeclarationImports) {
+  assert.ok(
+    specifier === "./authoritative.js" ||
+      specifier === "@three-game-kit/protocol",
+    `${serverNetworkingDeclarationFile} exposes non-kit type import ${specifier}`,
+  );
+}
+
+const serverCollisionDeclarationFile = path.join(
+  packageRoot,
+  "server",
+  "dist",
+  "collision.d.ts",
+);
+const serverCollisionDeclaration = await readFile(
+  serverCollisionDeclarationFile,
+  "utf8",
+);
+assert.doesNotMatch(
+  serverCollisionDeclaration,
+  /["']@dimforge\/rapier3d(?:-compat)?(?:\/[^"']*)?["']/u,
+  `${serverCollisionDeclarationFile} exposes the Rapier module`,
+);
+assert.doesNotMatch(
+  serverCollisionDeclaration,
+  /\b(?:RAPIER|[A-Za-z_$][\w$]*(?:World|Controller|Collider|Handle|WASM|WebAssembly)[\w$]*)\b/iu,
+  `${serverCollisionDeclarationFile} exposes a Rapier type or value`,
+);
 
 const coreDeclarationFiles = await filesBelow(
   path.join(packageRoot, "core", "dist"),

@@ -8,17 +8,35 @@
     ".": {
       "types": "./dist/index.d.ts",
       "import": "./dist/index.js"
+    },
+    "./collision": {
+      "types": "./dist/collision.d.ts",
+      "import": "./dist/collision.js"
+    },
+    "./authoritative": {
+      "types": "./dist/authoritative.d.ts",
+      "import": "./dist/authoritative.js"
+    },
+    "./networking": {
+      "types": "./dist/networking.d.ts",
+      "import": "./dist/networking.js"
     }
   },
   "dependencies": {
+    "@dimforge/rapier3d-compat": "0.20.0",
     "@three-game-kit/core": "workspace:^",
     "@three-game-kit/protocol": "workspace:^",
-    "@three-game-kit/shared": "workspace:^"
+    "@three-game-kit/shared": "workspace:^",
+    "ws": "8.21.3"
   },
   "engines": {
     "node": "24.x"
   },
   "publishConfig": {
     "access": "public"
+  },
+  "devDependencies": {
+    "@types/node": "24.13.3",
+    "@types/ws": "8.18.1"
   }
 }

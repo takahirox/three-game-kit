@@ -5,7 +5,7 @@ It is not a game, a general-purpose engine, or a framework that owns a consuming
 
 ## Repository status
 
-Milestones 0 through 2 are complete. Milestone 0 froze the executable product contract, including the
+Milestones 0 through 3 are complete. Milestone 0 froze the executable product contract, including the
 supported environment, package and public boundaries, runtime ownership, scheduling and lifecycle semantics,
 protocol and trust rules, errors and telemetry, and the objective acceptance procedure. Milestone 1 implements
 the Core ECS, Shared semantic movement, and the headless Server Runtime with exact stepping, bounded catch-up,
@@ -15,8 +15,9 @@ Milestone 2 implements the local browser Client slice: an injectable presentatio
 independent simulation and presentation clocks, semantic keyboard and programmable input, third-person camera,
 static Rapier collision, Three.js rendering, one local glTF avatar, browser telemetry, rollback, and cleanup.
 
-Milestone 3, authoritative two-client networking, is next. Protocol runtime validation, transport, prediction,
-reconciliation, remote interpolation, and server authority remain future work.
+Milestone 3 implements strict Protocol v1 runtime validation, a real WebSocket server with server-owned bindings
+and bounded rejection observability, owner prediction and reconciliation, peer interpolation, deterministic
+injection, disconnect fencing, exact cleanup, and canonical two-context browser evidence. Milestone 4 optional Interaction/external extensibility is next.
 
 ## Bounded MVP
 
@@ -44,6 +45,7 @@ Audio, WebXR, post-processing, reconnect, production authentication, alternate t
 - [Milestone 0 traceability](./docs/m0-traceability.md)
 - [Milestone 1 verification](./docs/m1-verification.md)
 - [Milestone 2 verification](./docs/m2-verification.md)
+- [Milestone 3 verification](./docs/m3-verification.md)
 - [Foundation MVP milestones](./docs/milestones.md)
 - [Specification review](./docs/specification-review.md)
 - [Supported environments](./docs/supported-environments.md)

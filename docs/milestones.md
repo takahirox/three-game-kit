@@ -2,12 +2,15 @@
 
 These milestones implement the closed MVP proposed in [specification-review.md](./specification-review.md). They are ordered by dependency, not by team discipline: documentation, tests, and boundary checks ship with the capability they describe. A milestone is complete only when its exit criteria pass from a clean checkout. Later milestones may refine public APIs, but may not erase runtime, lifecycle, trust, or documentation boundaries established earlier.
 
-Milestones 0 through 2 are complete; Milestone 3 is next. The implemented surface includes Core,
+Milestones 0 through 3 are complete; Milestone 4 is next. The implemented surface includes Core,
 Shared semantic movement, the headless Server Runtime, and the local browser Client Runtime with independent
 simulation/presentation clocks, semantic input, static collision, third-person camera, rendering, glTF loading,
-telemetry, rollback, and cleanup. Protocol runtime behavior and authoritative networking remain Milestone 3 work.
+telemetry, rollback, and cleanup. It now also includes strict Protocol v1 runtime validation, real authoritative
+WebSocket networking, server-owned identity, bindings, and validation telemetry, client prediction,
+reconciliation, and peer interpolation, deterministic two-context acceptance, and disconnect cleanup.
 See [Milestone 1 verification](./m1-verification.md) and
-[Milestone 2 verification](./m2-verification.md) for acceptance evidence and verification commands.
+[Milestone 2 verification](./m2-verification.md), and
+[Milestone 3 verification](./m3-verification.md) for acceptance evidence and verification commands.
 
 ## Milestone 0 — Freeze the executable contract
 

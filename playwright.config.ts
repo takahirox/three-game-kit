@@ -2,6 +2,7 @@ import { defineConfig, devices } from "@playwright/test";
 
 export default defineConfig({
   testDir: "./tests",
+  testIgnore: "support/**",
   fullyParallel: false,
   timeout: 30_000,
   expect: {
@@ -14,6 +15,12 @@ export default defineConfig({
   projects: [
     {
       name: "chromium",
+      use: { ...devices["Desktop Chrome"] },
+    },
+    {
+      name: "m3-bundled-chromium",
+      workers: 1,
+      retries: 0,
       use: { ...devices["Desktop Chrome"] },
     },
   ],

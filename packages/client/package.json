@@ -37,10 +37,14 @@
     "./networking": {
       "types": "./dist/networking.d.ts",
       "import": "./dist/networking.js"
+    },
+    "./replication": {
+      "types": "./dist/replication.d.ts",
+      "import": "./dist/replication.js"
     }
   },
   "dependencies": {
-    "@dimforge/rapier3d": "0.20.0",
+    "@dimforge/rapier3d-compat": "0.20.0",
     "@three-game-kit/core": "workspace:^",
     "@three-game-kit/protocol": "workspace:^",
     "@three-game-kit/shared": "workspace:^",

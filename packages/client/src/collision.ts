@@ -1,4 +1,6 @@
-import RAPIER from "@dimforge/rapier3d";
+import RAPIER from "@dimforge/rapier3d-compat";
+
+await RAPIER.init();
 import {
   defineFeatureConfiguration,
   type ClientFeatureDescriptor,
