@@ -178,7 +178,7 @@ test("public replication predicts, reconciles, interpolates, and cleans up", (t)
   }));
   assert.deepEqual(predicted.liveResourceCounts, {
     bindings: 1, queuedActions: 0, decodedSnapshots: 0, bufferedSnapshots: 0,
-    predictionHistory: 1, remoteAvatars: 0, collisionAdapters: 1,
+    predictionHistory: 1, remoteAvatars: 0, interactables: 0, collisionAdapters: 1,
     retainedReferences: 5,
   });
 

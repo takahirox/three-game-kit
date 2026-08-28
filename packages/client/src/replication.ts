@@ -1,5 +1,6 @@
 import {
   MAX_BUFFERED_SNAPSHOTS,
+  MAX_ID_LENGTH,
   MAX_MOVEMENT_SPEED,
   MAX_PENDING_COMMANDS,
   MAX_SEQUENCE,
@@ -74,6 +75,13 @@ export interface ClientMoveIntent {
   readonly z: number;
 }
 
+export interface ClientInteractIntent {
+  readonly kind: "interact";
+  readonly targetEntityId: string;
+}
+
+export type ClientActionIntent = ClientMoveIntent | ClientInteractIntent;
+
 export interface ClientReplicationOptions {
   readonly movementSpeedMetersPerSecond: number;
   readonly initialPosition: MovementVector;
@@ -107,11 +115,20 @@ export interface ClientRemotePresentationInspection {
   readonly sourceServerTicks: readonly number[];
 }
 
+export interface ClientInteractablePresentationInspection {
+  readonly entityId: string;
+  readonly position: MovementVector;
+  readonly active: boolean;
+  readonly provenance: "snapshot";
+  readonly sourceServerTick: number;
+}
+
 export interface ClientPresentationState {
   readonly frame: number;
   readonly nowMs: number;
   readonly localPosition: MovementVector;
   readonly remoteAvatars: readonly ClientRemotePresentationInspection[];
+  readonly interactables: readonly ClientInteractablePresentationInspection[];
   readonly phaseTrace: readonly ClientPresentationPhase[];
 }
 
@@ -139,6 +156,7 @@ export interface ClientReplicationLiveResourceCounts {
   readonly bufferedSnapshots: number;
   readonly predictionHistory: number;
   readonly remoteAvatars: number;
+  readonly interactables: number;
   readonly collisionAdapters: number;
   readonly retainedReferences: number;
 }
@@ -155,6 +173,7 @@ export interface ClientReplicationInspection {
   readonly simulationPosition: MovementVector | null;
   readonly localPresentationPosition: MovementVector | null;
   readonly remoteAvatars: readonly ClientRemotePresentationInspection[];
+  readonly interactables: readonly ClientInteractablePresentationInspection[];
   readonly estimatedServerTick: number | null;
   readonly interpolationTargetTick: number | null;
   readonly snapshotBufferTicks: readonly number[];
@@ -177,6 +196,10 @@ export interface ClientReplicationEngine {
   receive(message: ServerMessage): ClientReplicationOutcome;
   queueMove(intent: ClientMoveIntent): ClientReplicationOutcome;
   queueMove(x: number, z: number): ClientReplicationOutcome;
+  queueInteract(intent: ClientInteractIntent): ClientReplicationOutcome;
+  queueInteract(
+    targetEntityId: string,
+  ): ClientReplicationOutcome;
   stepExact(count?: number): ClientReplicationOutcome<number>;
   frame(nowMs: number): ClientReplicationOutcome<ClientPresentationState>;
   disconnect(): ClientReplicationOutcome;
@@ -192,7 +215,7 @@ interface ObservedSnapshot {
 interface PredictionAttempt {
   readonly sequence: number;
   readonly intendedTick: number;
-  readonly action: ClientMoveIntent;
+  readonly action: ClientActionIntent;
 }
 
 interface MutableCounters {
@@ -348,13 +371,17 @@ function createEngine(options: ClientReplicationOptions): ClientReplicationEngin
   let correctionBase = zeroVector();
   let correctionOffset = zeroVector();
   let correctionStartedAtMs: number | null = null;
-  let queuedMove: ClientMoveIntent | null = null;
+  let queuedMove: ClientActionIntent | null = null;
   const decodedInbox: ObservedSnapshot[] = [];
   const snapshotBuffer: ObservedSnapshot[] = [];
   const predictionHistory: PredictionAttempt[] = [];
   let nextSequence = 1;
   let acknowledgedSequence: number | null = null;
   const remoteAvatars = new Map<string, ClientRemotePresentationInspection>();
+  const interactables = new Map<
+    string,
+    ClientInteractablePresentationInspection
+  >();
   let estimatedServerTick: number | null = null;
   let interpolationTargetTick: number | null = null;
   let lastObservationMs: number | null = null;
@@ -516,6 +543,7 @@ function createEngine(options: ClientReplicationOptions): ClientReplicationEngin
       "Authoritative position",
     );
     for (const attempt of predictionHistory) {
+      if (attempt.action.kind !== "move") continue;
       const result = replayMove(replayed, attempt.action);
       if (!result.ok) return result;
       replayed = result.value;
@@ -627,6 +655,53 @@ function createEngine(options: ClientReplicationOptions): ClientReplicationEngin
       mode: remote.mode,
       sourceServerTicks: Object.freeze(Array.from(remote.sourceServerTicks)),
     });
+  }
+
+  function freezeInteractable(
+    interactable: ClientInteractablePresentationInspection,
+  ): ClientInteractablePresentationInspection {
+    return Object.freeze({
+      entityId: interactable.entityId,
+      position: copyFiniteVector(
+        interactable.position,
+        "Interactable presented position",
+      ),
+      active: interactable.active,
+      provenance: "snapshot",
+      sourceServerTick: interactable.sourceServerTick,
+    });
+  }
+
+  function sortedInteractables(): readonly ClientInteractablePresentationInspection[] {
+    return Object.freeze(
+      Array.from(interactables.values(), freezeInteractable).sort(
+        (left, right) =>
+          left.entityId < right.entityId
+            ? -1
+            : left.entityId > right.entityId
+              ? 1
+              : 0,
+      ),
+    );
+  }
+
+  function presentNewestInteractables(): void {
+    interactables.clear();
+    const newest = snapshotBuffer[snapshotBuffer.length - 1];
+    if (newest === undefined) return;
+    for (const entity of newest.message.entities) {
+      if (entity.entityKind !== "interactable") continue;
+      interactables.set(
+        entity.entityId,
+        freezeInteractable({
+          entityId: entity.entityId,
+          position: entity.position,
+          active: entity.active,
+          provenance: "snapshot",
+          sourceServerTick: newest.message.serverTick,
+        }),
+      );
+    }
   }
 
   function interpolateRemoteAvatars(nowMs: number): void {
@@ -741,6 +816,7 @@ function createEngine(options: ClientReplicationOptions): ClientReplicationEngin
     snapshotBuffer.splice(0);
     predictionHistory.splice(0);
     remoteAvatars.clear();
+    interactables.clear();
     connectionId = null;
     playerId = null;
     ownedEntityId = null;
@@ -790,6 +866,34 @@ function createEngine(options: ClientReplicationOptions): ClientReplicationEngin
       x: command.x,
       z: command.z,
     });
+    return succeeded(undefined);
+  }
+
+  function queueInteract(
+    intent: ClientInteractIntent,
+  ): ClientReplicationOutcome;
+  function queueInteract(targetEntityId: string): ClientReplicationOutcome;
+  function queueInteract(
+    intentOrTargetEntityId: ClientInteractIntent | string,
+  ): ClientReplicationOutcome {
+    if (!live || state !== "joined") return failed("phase-invalid");
+    if (queuedMove !== null) return failed("pending-history-full");
+    if (predictionHistory.length >= MAX_PENDING_COMMANDS) {
+      return failed("pending-history-full");
+    }
+    if (nextSequence > MAX_SEQUENCE) return failed("sequence-exhausted");
+    const targetEntityId =
+      typeof intentOrTargetEntityId === "string"
+        ? intentOrTargetEntityId
+        : intentOrTargetEntityId.targetEntityId;
+    if (
+      typeof targetEntityId !== "string" ||
+      targetEntityId.length > MAX_ID_LENGTH ||
+      !/^[A-Za-z0-9_-]+$/.test(targetEntityId)
+    ) {
+      throw new RangeError("Interaction target entity ID is invalid");
+    }
+    queuedMove = Object.freeze({ kind: "interact", targetEntityId });
     return succeeded(undefined);
   }
 
@@ -862,6 +966,7 @@ function createEngine(options: ClientReplicationOptions): ClientReplicationEngin
       }
     },
     queueMove,
+    queueInteract,
     stepExact(count = 1): ClientReplicationOutcome<number> {
       if (!live || state !== "joined") return failed("phase-invalid");
       if (!Number.isSafeInteger(count) || count < 0) {
@@ -872,7 +977,7 @@ function createEngine(options: ClientReplicationOptions): ClientReplicationEngin
       for (let step = 0; step < count; step += 1) {
         clientTick += 1;
         let tickFailure: ClientReplicationOutcome<never> | null = null;
-        let sampled: ClientMoveIntent | null = null;
+        let sampled: ClientActionIntent | null = null;
         let attempt: PredictionAttempt | null = null;
         let predictionStart: MovementVector | null = null;
         let desiredTranslation: MovementVector | null = null;
@@ -938,6 +1043,7 @@ function createEngine(options: ClientReplicationOptions): ClientReplicationEngin
           attempt !== null &&
           predictionHistory.includes(attempt) &&
           simulationPosition !== null &&
+          attempt.action.kind === "move" &&
           live &&
           state === "joined"
         ) {
@@ -983,6 +1089,7 @@ function createEngine(options: ClientReplicationOptions): ClientReplicationEngin
 
       recordPresentationPhase("remote-interpolation");
       interpolateRemoteAvatars(nowMs);
+      presentNewestInteractables();
 
       if (correctionStartedAtMs === null) correctionStartedAtMs = nowMs;
       const elapsed = Math.max(0, nowMs - correctionStartedAtMs);
@@ -1016,6 +1123,7 @@ function createEngine(options: ClientReplicationOptions): ClientReplicationEngin
             "Local presented position",
           ),
           remoteAvatars: remotes,
+          interactables: sortedInteractables(),
           phaseTrace: frameTrace,
         }),
       );
@@ -1030,6 +1138,7 @@ function createEngine(options: ClientReplicationOptions): ClientReplicationEngin
       const remotes = Object.freeze(
         Array.from(remoteAvatars.values(), freezeRemote),
       );
+      const inspectedInteractables = sortedInteractables();
       const inspectedCounters: ClientReplicationCounters = Object.freeze({
         ...counters,
       });
@@ -1064,6 +1173,7 @@ function createEngine(options: ClientReplicationOptions): ClientReplicationEngin
                 "Inspected presentation position",
               ),
         remoteAvatars: remotes,
+        interactables: inspectedInteractables,
         estimatedServerTick,
         interpolationTargetTick,
         snapshotBufferTicks: Object.freeze(
@@ -1097,6 +1207,7 @@ function createEngine(options: ClientReplicationOptions): ClientReplicationEngin
           bufferedSnapshots: snapshotBuffer.length,
           predictionHistory: predictionHistory.length,
           remoteAvatars: remotes.length,
+          interactables: inspectedInteractables.length,
           collisionAdapters: collisionAdapter === null ? 0 : 1,
           retainedReferences,
         }),

@@ -66,6 +66,9 @@ import {
 } from "@three-game-kit/client/networking";
 import {
   createClientReplicationEngine,
+  type ClientActionIntent,
+  type ClientInteractablePresentationInspection,
+  type ClientInteractIntent,
   type ClientMoveIntent,
   type ClientPresentationState,
   type ClientReplicationEngine,
@@ -345,6 +348,15 @@ function exerciseM3ClientSubpaths(): void {
   const moveIntent: ClientMoveIntent = { kind: "move", x: 0, z: 0 };
   const replicationQueueMove: ClientReplicationOutcome =
     replicationEngine.queueMove(moveIntent);
+  const interactIntent: ClientInteractIntent = {
+    kind: "interact",
+    targetEntityId: "target_1",
+  };
+  const actionIntent: ClientActionIntent = interactIntent;
+  const replicationQueueInteract: ClientReplicationOutcome =
+    replicationEngine.queueInteract(interactIntent);
+  const replicationQueueInteractById: ClientReplicationOutcome =
+    replicationEngine.queueInteract("target_1");
   const replicationStep: ClientReplicationOutcome<number> =
     replicationEngine.stepExact(1);
   const replicationFrame: ClientReplicationOutcome<ClientPresentationState> =
@@ -357,6 +369,14 @@ function exerciseM3ClientSubpaths(): void {
   const decodedInboxTicks: readonly number[] =
     replicationInspection.decodedInboxTicks;
   const decodedInboxCount: number = replicationInspection.decodedInboxCount;
+  const presentedInteractables:
+    readonly ClientInteractablePresentationInspection[] =
+      replicationFrame.ok ? replicationFrame.value.interactables : [];
+  const inspectedInteractables:
+    readonly ClientInteractablePresentationInspection[] =
+      replicationInspection.interactables;
+  const liveInteractableCount: number =
+    replicationLiveResourceCounts.interactables;
   const replicationShutdown: ClientReplicationOutcome =
     replicationEngine.shutdown();
 
@@ -368,6 +388,16 @@ function exerciseM3ClientSubpaths(): void {
   decodedInboxTicks.push(1);
   // @ts-expect-error Decoded inbox counts are readonly.
   replicationInspection.decodedInboxCount = 0;
+  // @ts-expect-error Interaction intents are readonly.
+  interactIntent.targetEntityId = "replacement";
+  // @ts-expect-error Presented interactable collections are readonly.
+  presentedInteractables.push(inspectedInteractables[0]);
+  if (inspectedInteractables[0] !== undefined) {
+    // @ts-expect-error Presented interactable positions are readonly.
+    inspectedInteractables[0].position.x = 1;
+  }
+  // @ts-expect-error Live interactable counts are readonly.
+  replicationLiveResourceCounts.interactables = 0;
 
   void networkingConnectOutcome;
   void networkingJoinOutcome;
@@ -381,10 +411,16 @@ function exerciseM3ClientSubpaths(): void {
   void replicationBeginJoin;
   void replicationReceive;
   void replicationQueueMove;
+  void actionIntent;
+  void replicationQueueInteract;
+  void replicationQueueInteractById;
   void replicationStep;
   void replicationFrame;
   void replicationState;
   void replicationLiveResourceCounts;
+  void presentedInteractables;
+  void inspectedInteractables;
+  void liveInteractableCount;
   void decodedInboxTicks;
   void decodedInboxCount;
   void replicationShutdown;

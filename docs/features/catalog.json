@@ -1,0 +1,156 @@
+{
+  "schemaVersion": 1,
+  "features": [
+    {
+      "catalogId": "interaction",
+      "serverFeatureId": "external.interaction.server",
+      "clientFeatureId": "external.interaction.client",
+      "purpose": "Accept a semantic Interaction intent, validate it on the authoritative server, toggle one configured target, replicate that state, and present it on clients.",
+      "ownership": "consumer-owned",
+      "runtimes": [
+        "server",
+        "client"
+      ],
+      "requires": {
+        "server": [
+          "host.server-authority"
+        ],
+        "client": [
+          "host.client-session"
+        ]
+      },
+      "conflicts": [
+        "external.interaction.alternative"
+      ],
+      "configuration": {
+        "targetEntityId": {
+          "type": "string",
+          "default": "switch_1",
+          "bounds": {
+            "minLength": 1,
+            "maxLength": 64,
+            "pattern": "^[A-Za-z0-9_-]{1,64}$"
+          }
+        },
+        "position": {
+          "type": "object",
+          "default": {
+            "x": 2,
+            "y": 0,
+            "z": 0
+          },
+          "bounds": {
+            "additionalProperties": false,
+            "required": [
+              "x",
+              "y",
+              "z"
+            ],
+            "coordinates": {
+              "type": "number",
+              "finite": true,
+              "minimum": -1000000,
+              "maximum": 1000000
+            }
+          }
+        },
+        "range": {
+          "type": "number",
+          "default": 3,
+          "bounds": {
+            "finite": true,
+            "minimum": 0,
+            "maximum": 1000000
+          }
+        },
+        "initialActive": {
+          "type": "boolean",
+          "default": false,
+          "bounds": null
+        },
+        "forceSetupFailure": {
+          "type": "boolean",
+          "default": false,
+          "bounds": null
+        }
+      },
+      "phases": {
+        "server": [
+          "validate-bind",
+          "gameplay",
+          "snapshot-build"
+        ],
+        "clientSimulation": [
+          "snapshot-ingest",
+          "action-sample",
+          "command-send",
+          "presentation-publish"
+        ],
+        "clientPresentation": [
+          "render"
+        ]
+      },
+      "authority": {
+        "owner": "server",
+        "intent": "The client queues only a targetEntityId; it cannot directly change target state.",
+        "validation": [
+          "The command must pass protocol schema, connection phase, sequence, tick-window, queue, and owned-actor validation.",
+          "The targetEntityId must equal the configured targetEntityId.",
+          "The actor position must be within the configured inclusive Euclidean range of the target position.",
+          "Only a previously accepted Interaction is applied, and each application toggles authoritative active state once.",
+          "The server replicates the resulting interactable snapshot state to clients."
+        ],
+        "rejectionReasons": [
+          "schema-invalid",
+          "ownership-violation",
+          "unknown-target",
+          "interaction-out-of-range",
+          "sequence-invalid"
+        ]
+      },
+      "lifecycle": {
+        "setup": "Each descriptor validates its exact configuration before setup. The server acquires its adapter state before activation; the client acquires its control state before activating its presentation system. A setup failure rolls back acquired state.",
+        "dispose": "Each Feature releases only records it acquired through its lifecycle ledger. Shutdown and rollback release remaining owned records in reverse acquisition order, and repeated shutdown is safe.",
+        "borrowedResources": [
+          "The server borrows host.authoritative-interaction and never disposes, closes, transfers, replaces, or republishes it.",
+          "The client borrows host.client-replication and never disposes, closes, transfers, replaces, or republishes it.",
+          "State or listeners created by the Feature remain Feature-owned and must be released without disposing a borrowed host object."
+        ]
+      },
+      "limitations": [
+        "Exactly one configured target is supported by the example adapter.",
+        "Interaction only toggles a boolean active state; it does not provide inventory, combat, damage, dialogue, navigation, or arbitrary actions.",
+        "Feature composition is immutable for a runtime; hot enable, disable, and replacement are unsupported.",
+        "The consumer must provide the required server authority and client session Features plus the two host services.",
+        "The example uses deterministic finite-distance validation and does not perform line-of-sight or physics-occlusion checks."
+      ],
+      "compatibilityRange": "^0.1.0",
+      "publicImports": {
+        "@three-game-kit/core": [
+          "@three-game-kit/core"
+        ],
+        "@three-game-kit/protocol": [
+          "@three-game-kit/protocol"
+        ],
+        "@three-game-kit/shared": [
+          "@three-game-kit/shared"
+        ],
+        "@three-game-kit/client": [
+          "@three-game-kit/client",
+          "@three-game-kit/client/replication"
+        ],
+        "@three-game-kit/server": [
+          "@three-game-kit/server",
+          "@three-game-kit/server/authoritative"
+        ]
+      },
+      "examplePaths": [
+        "examples/external-interaction-consumer/src/interaction-feature.ts",
+        "examples/external-interaction-consumer/src/client-only-feature.ts",
+        "examples/external-interaction-consumer/test/m4.test.mjs",
+        "examples/external-interaction-consumer/README.md"
+      ],
+      "verificationCommand": "pnpm test:m4-packed-consumer"
+    }
+  ]
+}

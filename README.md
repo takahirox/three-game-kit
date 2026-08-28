@@ -5,7 +5,7 @@ It is not a game, a general-purpose engine, or a framework that owns a consuming
 
 ## Repository status
 
-Milestones 0 through 3 are complete. Milestone 0 froze the executable product contract, including the
+Milestones 0 through 4 are complete. Milestone 0 froze the executable product contract, including the
 supported environment, package and public boundaries, runtime ownership, scheduling and lifecycle semantics,
 protocol and trust rules, errors and telemetry, and the objective acceptance procedure. Milestone 1 implements
 the Core ECS, Shared semantic movement, and the headless Server Runtime with exact stepping, bounded catch-up,
@@ -17,7 +17,10 @@ static Rapier collision, Three.js rendering, one local glTF avatar, browser tele
 
 Milestone 3 implements strict Protocol v1 runtime validation, a real WebSocket server with server-owned bindings
 and bounded rejection observability, owner prediction and reconciliation, peer interpolation, deterministic
-injection, disconnect fencing, exact cleanup, and canonical two-context browser evidence. Milestone 4 optional Interaction/external extensibility is next.
+injection, disconnect fencing, exact cleanup, and canonical two-context browser evidence. Milestone 4 adds the
+consumer-owned external server-authoritative Interaction proof, range validation and toggle, semantic client
+queue/latest snapshot presentation, five packed kit tarballs installed outside the workspace, catalog/authoring
+docs, and rollback/idempotent cleanup evidence. Milestone 5 is next.
 
 ## Bounded MVP
 
@@ -46,6 +49,11 @@ Audio, WebXR, post-processing, reconnect, production authentication, alternate t
 - [Milestone 1 verification](./docs/m1-verification.md)
 - [Milestone 2 verification](./docs/m2-verification.md)
 - [Milestone 3 verification](./docs/m3-verification.md)
+- [Milestone 4 verification](./docs/m4-verification.md)
+- [Feature catalog](./docs/features/catalog.json)
+- [Interaction contract](./docs/features/interaction.md)
+- [Client-only Feature authoring](./docs/authoring/client-only-feature.md)
+- [Cross-runtime Interaction authoring](./docs/authoring/cross-runtime-interaction.md)
 - [Foundation MVP milestones](./docs/milestones.md)
 - [Specification review](./docs/specification-review.md)
 - [Supported environments](./docs/supported-environments.md)

@@ -1,0 +1,24 @@
+{
+  "name": "three-game-kit-external-interaction-consumer",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "test": "npm run build && node --test test/m4.test.mjs"
+  },
+  "dependencies": {
+    "@three-game-kit/client": "^0.1.0",
+    "@three-game-kit/core": "^0.1.0",
+    "@three-game-kit/protocol": "^0.1.0",
+    "@three-game-kit/server": "^0.1.0",
+    "@three-game-kit/shared": "^0.1.0"
+  },
+  "devDependencies": {
+    "@types/node": "^24.0.0",
+    "typescript": "^5.9.0"
+  },
+  "engines": {
+    "node": "24.x"
+  }
+}

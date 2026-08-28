@@ -5,6 +5,7 @@ import {
 } from "@three-game-kit/core";
 import {
   MAX_FUTURE_TICKS,
+  MAX_ID_LENGTH,
   MAX_MOVEMENT_SPEED,
   MAX_PAST_TICKS,
   MAX_PENDING_COMMANDS,
@@ -13,13 +14,14 @@ import {
   MAX_SNAPSHOT_ENTITIES,
   MAX_TICK,
   PROTOCOL_VERSION,
-  type AvatarSnapshotEntity,
   type ClientMessage,
   type CommandMessage,
+  type InteractableSnapshotEntity,
   type JoinedMessage,
   type RejectedMessage,
   type RejectedReason,
   type ServerMessage,
+  type SnapshotEntity,
   type SnapshotMessage,
 } from "@three-game-kit/protocol";
 import {
@@ -35,6 +37,7 @@ const MAX_ID_ALLOCATION_ATTEMPTS = 1_024;
 const MAX_PHASE_TRACE_ENTRIES = 4_096;
 const BASE64URL_ALPHABET =
   "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789-_";
+const OPAQUE_ID_PATTERN = /^[A-Za-z0-9_-]+$/;
 
 export type AuthoritativeConnectionPhase =
   | "connected"
@@ -91,11 +94,39 @@ export interface AuthoritativeConnectionOptions {
   readonly emit: (message: ServerMessage) => void;
 }
 
+export interface AuthoritativeInteractionInput {
+  readonly actorEntityId: string;
+  readonly actorPosition: MovementVector;
+  readonly targetEntityId: string;
+  readonly serverTick: number;
+}
+
+export type AuthoritativeInteractionResult =
+  | "accepted"
+  | "unknown-target"
+  | "interaction-out-of-range";
+
+export interface AuthoritativeInteractionAdapter {
+  validate(input: AuthoritativeInteractionInput): AuthoritativeInteractionResult;
+  apply(input: AuthoritativeInteractionInput): void;
+  snapshot(): readonly InteractableSnapshotEntity[];
+}
+
+export interface AuthoritativeInteractionInspection {
+  readonly active: boolean;
+  readonly validationCallCount: number;
+  readonly applyCallCount: number;
+  readonly snapshotCallCount: number;
+  readonly currentInteractableCount: number;
+  readonly liveResourceCount: number;
+}
+
 export interface AuthoritativeServerOptions {
   readonly spawnPosition: MovementVector;
   readonly spawnPositionsByConnectionOrdinal?: readonly MovementVector[];
   readonly movementSpeedMetersPerSecond: number;
   readonly collisionAdapter: ServerCollisionAdapter;
+  readonly interactionAdapter?: AuthoritativeInteractionAdapter;
 }
 
 export interface AuthoritativeConnectionInspection {
@@ -156,6 +187,7 @@ export interface AuthoritativeServerInspection {
   readonly sharedMovementCallCount: number;
   readonly authoritativeCollisionCallCount: number;
   readonly liveResourceCounts: AuthoritativeLiveResourceCounts;
+  readonly interaction: AuthoritativeInteractionInspection;
   readonly forcedPositionFixtures: Readonly<{
     readonly pendingCount: number;
     readonly scheduledCount: number;
@@ -227,6 +259,7 @@ interface QueuedCommand {
 
 interface ScheduledCommand extends QueuedCommand {
   readonly ordinal: number;
+  readonly interactionInput?: AuthoritativeInteractionInput;
 }
 
 interface MovementWork {
@@ -460,6 +493,17 @@ function createEngine(
   );
   const movementSpeedMetersPerSecond = options.movementSpeedMetersPerSecond;
   const collisionAdapter = options.collisionAdapter;
+  let interactionAdapter = options.interactionAdapter;
+  if (
+    interactionAdapter !== undefined &&
+    (typeof interactionAdapter !== "object" ||
+      interactionAdapter === null ||
+      typeof interactionAdapter.validate !== "function" ||
+      typeof interactionAdapter.apply !== "function" ||
+      typeof interactionAdapter.snapshot !== "function")
+  ) {
+    throw new TypeError("Authoritative interaction adapter is invalid");
+  }
   const records: ConnectionRecord[] = [];
   const connectionBindings = new Map<string, ConnectionRecord>();
   const playerBindings = new Map<string, ConnectionRecord>();
@@ -471,6 +515,10 @@ function createEngine(
   let runtimeErrorSequence = 0;
   let sharedMovementCallCount = 0;
   let authoritativeCollisionCallCount = 0;
+  let interactionValidationCallCount = 0;
+  let interactionApplyCallCount = 0;
+  let interactionSnapshotCallCount = 0;
+  let currentInteractableCount = 0;
   let nextOrdinal = 1;
   let nextRuntimeEntityId = 1;
   let tick = 0;
@@ -487,6 +535,24 @@ function createEngine(
   let validationFixtureConsumedCount = 0;
   let lastConsumedValidationFixture: AuthoritativeValidationFixtureInspection | null =
     null;
+
+  function recordUnexpectedInteractionError(operation: string): void {
+    runtimeErrorSequence += 1;
+    structuredRuntimeErrors.push(
+      createRuntimeErrorRecord({
+        sequence: runtimeErrorSequence,
+        code: "interaction-adapter-failure",
+        category: "invariant",
+        runtime: "server",
+        operation,
+        message: "Borrowed interaction adapter call failed or returned invalid data",
+        tick,
+      }),
+    );
+    if (structuredRuntimeErrors.length > RUNTIME_ERROR_RING_CAPACITY) {
+      structuredRuntimeErrors.shift();
+    }
+  }
 
   function allocateId(): string {
     for (
@@ -942,35 +1008,87 @@ function createEngine(
       rejectQueued("ownership-violation");
       return;
     }
+    let interactionInput: AuthoritativeInteractionInput | undefined;
     if (message.action.kind === "interact") {
-      rejectQueued("phase-invalid");
-      return;
+      const activeAdapter = interactionAdapter;
+      if (activeAdapter === undefined || entityId === null) {
+        rejectQueued("phase-invalid");
+        return;
+      }
+      const entity = entities.get(entityId);
+      if (entity === undefined) {
+        rejectQueued("ownership-violation");
+        return;
+      }
+      interactionInput = Object.freeze({
+        actorEntityId: entityId,
+        actorPosition: copyFinitePosition(
+          entity.position,
+          "Interaction actor position",
+        ),
+        targetEntityId: message.action.targetEntityId,
+        serverTick: tick,
+      });
+      let result: unknown;
+      try {
+        interactionValidationCallCount += 1;
+        result = activeAdapter.validate(interactionInput);
+      } catch {
+        recordUnexpectedInteractionError("interaction-validation");
+        rejectQueued("phase-invalid");
+        return;
+      }
+      if (
+        result !== "accepted" &&
+        result !== "unknown-target" &&
+        result !== "interaction-out-of-range"
+      ) {
+        recordUnexpectedInteractionError("interaction-validation");
+        rejectQueued("phase-invalid");
+        return;
+      }
+      if (result !== "accepted") {
+        rejectQueued(result);
+        return;
+      }
     }
     const movementFixture =
-      entityId === null
-        ? undefined
-        : consumeValidationFixture(entityId, "movement-speed");
-    const movementIsWithinLimit = movementWithinLimit(
-      message,
-      movementFixture?.kind === "movement-speed"
-        ? movementFixture.metersPerSecond
-        : movementSpeedMetersPerSecond,
-    );
+      message.action.kind === "move" && entityId !== null
+        ? consumeValidationFixture(entityId, "movement-speed")
+        : undefined;
+    const movementIsWithinLimit =
+      message.action.kind !== "move" ||
+      movementWithinLimit(
+        message,
+        movementFixture?.kind === "movement-speed"
+          ? movementFixture.metersPerSecond
+          : movementSpeedMetersPerSecond,
+      );
     if (
-      record.movementSlots.has(message.intendedTick) ||
+      (message.action.kind === "move" &&
+        record.movementSlots.has(message.intendedTick)) ||
       !movementIsWithinLimit
     ) {
       rejectQueued("movement-limit");
       return;
     }
 
-    const scheduled: ScheduledCommand = Object.freeze({
-      owner: record,
-      ordinal: record.ordinal,
-      message,
-    });
+    const scheduled: ScheduledCommand = Object.freeze(
+      interactionInput === undefined
+        ? {
+            owner: record,
+            ordinal: record.ordinal,
+            message,
+          }
+        : {
+            owner: record,
+            ordinal: record.ordinal,
+            message,
+            interactionInput,
+          },
+    );
     record.acceptedSequence = message.sequence;
-    record.movementSlots.add(message.intendedTick);
+    if (message.action.kind === "move") record.movementSlots.add(message.intendedTick);
     record.scheduled.push(scheduled);
   }
 
@@ -1046,6 +1164,9 @@ function createEngine(
     for (const work of movementWork) {
       const record = work.command.owner;
       const sequence = work.command.message.sequence;
+      if (work.command.message.action.kind === "interact") {
+        continue;
+      }
       const entity =
         record.ownedEntityId === null
           ? undefined
@@ -1079,10 +1200,36 @@ function createEngine(
       );
       completeSequence(record, sequence);
     }
-    movementWork = [];
+    movementWork = movementWork.filter(
+      ({ command }) => command.message.action.kind === "interact",
+    );
   }
 
   function runGameplay(): void {
+    for (const work of movementWork) {
+      const record = work.command.owner;
+      const input = work.command.interactionInput;
+      if (
+        input !== undefined &&
+        record.live &&
+        record.phase === "joined" &&
+        interactionAdapter !== undefined
+      ) {
+        try {
+          interactionApplyCallCount += 1;
+          interactionAdapter.apply(input);
+        } catch {
+          recordUnexpectedInteractionError("interaction-apply");
+        }
+      }
+      record.pendingCommandCount = Math.max(
+        0,
+        record.pendingCommandCount - 1,
+      );
+      completeSequence(record, work.command.message.sequence);
+    }
+    movementWork = [];
+
     const due: ScheduledForcedPosition[] = [];
     const future: ScheduledForcedPosition[] = [];
     for (const fixture of forcedPositionFixtures) {
@@ -1120,8 +1267,59 @@ function createEngine(
     }
   }
 
-  function snapshotEntities(): readonly AvatarSnapshotEntity[] {
-    const snapshots: AvatarSnapshotEntity[] = [];
+  function detachedInteractableSnapshots(): readonly InteractableSnapshotEntity[] {
+    const activeAdapter = interactionAdapter;
+    if (activeAdapter === undefined) return Object.freeze([]);
+    try {
+      interactionSnapshotCallCount += 1;
+      const supplied: unknown = activeAdapter.snapshot();
+      if (!Array.isArray(supplied)) throw new TypeError("Invalid snapshot list");
+      const detached: InteractableSnapshotEntity[] = [];
+      const ids = new Set(entities.keys());
+      if (supplied.length > MAX_SNAPSHOT_ENTITIES - entities.size) {
+        throw new RangeError("Too many snapshot entities");
+      }
+      for (const value of supplied) {
+        if (typeof value !== "object" || value === null || Array.isArray(value)) {
+          throw new TypeError("Invalid interactable snapshot");
+        }
+        const keys = Reflect.ownKeys(value);
+        if (
+          keys.length !== 4 ||
+          !keys.includes("entityKind") ||
+          !keys.includes("entityId") ||
+          !keys.includes("position") ||
+          !keys.includes("active")
+        ) throw new TypeError("Invalid interactable snapshot shape");
+        const candidate = value as InteractableSnapshotEntity;
+        if (
+          candidate.entityKind !== "interactable" ||
+          typeof candidate.entityId !== "string" ||
+          candidate.entityId.length < 1 ||
+          candidate.entityId.length > MAX_ID_LENGTH ||
+          !OPAQUE_ID_PATTERN.test(candidate.entityId) ||
+          ids.has(candidate.entityId) ||
+          typeof candidate.active !== "boolean"
+        ) throw new TypeError("Invalid interactable snapshot value");
+        ids.add(candidate.entityId);
+        detached.push(Object.freeze({
+          entityKind: "interactable",
+          entityId: candidate.entityId,
+          position: copyFinitePosition(candidate.position, "Interactable snapshot position"),
+          active: candidate.active,
+        }));
+      }
+      currentInteractableCount = detached.length;
+      return Object.freeze(detached);
+    } catch {
+      currentInteractableCount = 0;
+      recordUnexpectedInteractionError("interaction-snapshot");
+      return Object.freeze([]);
+    }
+  }
+
+  function snapshotEntities(): readonly SnapshotEntity[] {
+    const snapshots: SnapshotEntity[] = [];
     for (const entity of entities.values()) {
       const position = copyFinitePosition(
         entity.position,
@@ -1136,6 +1334,7 @@ function createEngine(
         }),
       );
     }
+    snapshots.push(...detachedInteractableSnapshots());
     return Object.freeze(snapshots);
   }
 
@@ -1400,6 +1599,14 @@ function createEngine(
           pendingCommands,
           scheduledCommands,
         }),
+        interaction: Object.freeze({
+          active: interactionAdapter !== undefined,
+          validationCallCount: interactionValidationCallCount,
+          applyCallCount: interactionApplyCallCount,
+          snapshotCallCount: interactionSnapshotCallCount,
+          currentInteractableCount,
+          liveResourceCount: interactionAdapter === undefined ? 0 : 1,
+        }),
         forcedPositionFixtures: Object.freeze({
           pendingCount: forcedPositionFixtures.length,
           scheduledCount: forcedPositionScheduledCount,
@@ -1441,6 +1648,11 @@ function createEngine(
       validationFixtures.clear();
       lastConsumedForcedPosition = null;
       movementWork = [];
+      interactionAdapter = undefined;
+      interactionValidationCallCount = 0;
+      interactionApplyCallCount = 0;
+      interactionSnapshotCallCount = 0;
+      currentInteractableCount = 0;
       connectionBindings.clear();
       playerBindings.clear();
       entities.clear();

@@ -107,6 +107,9 @@ for (const script of [
   "typecheck:m3-browser",
   "test:m3-browser",
   "verify:m3",
+  "test:m4-catalog",
+  "test:m4-packed-consumer",
+  "verify:m4",
 ]) {
   assert.equal(
     typeof rootManifest.scripts[script],

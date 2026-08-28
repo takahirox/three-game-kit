@@ -9,6 +9,10 @@ import {
 import {
   createAuthoritativeServer,
   type AuthoritativeAvatarInspection,
+  type AuthoritativeInteractionAdapter,
+  type AuthoritativeInteractionInput,
+  type AuthoritativeInteractionInspection,
+  type AuthoritativeInteractionResult,
   type AuthoritativeDecodeIngressRejectionReason,
   type AuthoritativeConnection,
   type AuthoritativeConnectionInspection,
@@ -122,6 +126,65 @@ const authoritativeMessages: Parameters<
 const authoritativeConnectionOptions: AuthoritativeConnectionOptions = {
   emit: (message) => authoritativeMessages.push(message),
 };
+const authoritativeInteractionInput: AuthoritativeInteractionInput = {
+  actorEntityId: "avatar",
+  actorPosition: { x: 0, y: 1, z: 0 },
+  targetEntityId: "target",
+  serverTick: 1,
+};
+const authoritativeInteractionResult: AuthoritativeInteractionResult =
+  "accepted";
+const authoritativeInteractionAdapter: AuthoritativeInteractionAdapter = {
+  validate: (input) => {
+    const actorPositionX: number = input.actorPosition.x;
+    void actorPositionX;
+    return authoritativeInteractionResult;
+  },
+  apply: (input) => {
+    const targetEntityId: string = input.targetEntityId;
+    void targetEntityId;
+  },
+  snapshot: () => [
+    {
+      entityKind: "interactable",
+      entityId: "target",
+      position: { x: 1, y: 1, z: 0 },
+      active: true,
+    },
+  ],
+};
+// @ts-expect-error Interaction results reject phase failure vocabulary.
+const phaseInvalidInteractionResult: AuthoritativeInteractionResult =
+  "phase-invalid";
+// @ts-expect-error Interaction results are a closed vocabulary.
+const otherInteractionResult: AuthoritativeInteractionResult = "other";
+const invalidInteractionResultAdapter: AuthoritativeInteractionAdapter = {
+  // @ts-expect-error Interaction validation cannot return an arbitrary string.
+  validate: () => "arbitrary-result",
+  apply: () => {},
+  snapshot: () => [],
+};
+const invalidInteractionSnapshotAdapter: AuthoritativeInteractionAdapter = {
+  validate: () => "accepted",
+  apply: () => {},
+  snapshot: () => [
+    {
+      // @ts-expect-error Snapshot entries must be interactable snapshot entities.
+      entityKind: "avatar",
+      entityId: "target",
+      position: { x: 1, y: 1, z: 0 },
+      active: true,
+    },
+  ],
+};
+// @ts-expect-error Interaction actor IDs are read-only.
+authoritativeInteractionInput.actorEntityId = "other-avatar";
+// @ts-expect-error Interaction actor positions are read-only.
+authoritativeInteractionInput.actorPosition.x = 2;
+// @ts-expect-error Interaction target IDs are read-only.
+authoritativeInteractionInput.targetEntityId = "other-target";
+// @ts-expect-error Interaction server ticks are read-only.
+authoritativeInteractionInput.serverTick = 2;
 const authoritativeServerOptions: AuthoritativeServerOptions = {
   spawnPosition: { x: 0, y: 1, z: 0 },
   movementSpeedMetersPerSecond: 6,
@@ -137,6 +200,7 @@ const authoritativeServerOptions: AuthoritativeServerOptions = {
       },
     ],
   }),
+  interactionAdapter: authoritativeInteractionAdapter,
 };
 const authoritativeServer: AuthoritativeServer =
   createAuthoritativeServer(authoritativeServerOptions);
@@ -175,6 +239,31 @@ const sharedMovementCallCount: number =
   authoritativeInspection.sharedMovementCallCount;
 const authoritativeCollisionCallCount: number =
   authoritativeInspection.authoritativeCollisionCallCount;
+const authoritativeInteractionInspection: AuthoritativeInteractionInspection =
+  authoritativeInspection.interaction;
+const interactionActive: boolean = authoritativeInteractionInspection.active;
+const interactionValidationCallCount: number =
+  authoritativeInteractionInspection.validationCallCount;
+const interactionApplyCallCount: number =
+  authoritativeInteractionInspection.applyCallCount;
+const interactionSnapshotCallCount: number =
+  authoritativeInteractionInspection.snapshotCallCount;
+const interactionCurrentInteractableCount: number =
+  authoritativeInteractionInspection.currentInteractableCount;
+const interactionLiveResourceCount: number =
+  authoritativeInteractionInspection.liveResourceCount;
+// @ts-expect-error Interaction inspection active state is read-only.
+authoritativeInteractionInspection.active = false;
+// @ts-expect-error Interaction validation call counts are read-only.
+authoritativeInteractionInspection.validationCallCount = 0;
+// @ts-expect-error Interaction apply call counts are read-only.
+authoritativeInteractionInspection.applyCallCount = 0;
+// @ts-expect-error Interaction snapshot call counts are read-only.
+authoritativeInteractionInspection.snapshotCallCount = 0;
+// @ts-expect-error Interaction entity counts are read-only.
+authoritativeInteractionInspection.currentInteractableCount = 0;
+// @ts-expect-error Interaction live resource counts are read-only.
+authoritativeInteractionInspection.liveResourceCount = 0;
 // @ts-expect-error Decode ingress rejection reasons are a closed vocabulary.
 const invalidDecodeIngressReason: AuthoritativeDecodeIngressRejectionReason =
   "other";
@@ -280,6 +369,20 @@ void [
   sharedMovementCallCount,
   authoritativeCollisionCallCount,
   invalidDecodeIngressReason,
+  authoritativeInteractionInput,
+  authoritativeInteractionResult,
+  authoritativeInteractionAdapter,
+  phaseInvalidInteractionResult,
+  otherInteractionResult,
+  invalidInteractionResultAdapter,
+  invalidInteractionSnapshotAdapter,
+  authoritativeInteractionInspection,
+  interactionActive,
+  interactionValidationCallCount,
+  interactionApplyCallCount,
+  interactionSnapshotCallCount,
+  interactionCurrentInteractableCount,
+  interactionLiveResourceCount,
 ];
 
 const positiveOutboundMessage: ServerOutboundMessage = {
