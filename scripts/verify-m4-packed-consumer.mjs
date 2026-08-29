@@ -304,6 +304,7 @@ try {
     "pnpm",
     [
       "install",
+      "--no-frozen-lockfile",
       "--prefer-offline",
       "--ignore-scripts",
       "--ignore-workspace",
