@@ -285,7 +285,7 @@ try {
   const consumerManifest = await readJson(consumerManifestPath);
   assert.deepEqual(Object.keys(consumerManifest.dependencies).sort(), [...packageNames].sort());
   assert.ok(!Object.hasOwn(consumerManifest, "pnpm"), "fixture manifest must not define pnpm");
-  consumerManifest.pnpm = { overrides: {} };
+  const tarballUris = {};
   for (const packageName of packageNames) {
     const artifact = [...tarballs.values()].find((candidate) => {
       const stem = packageName.replace(/^@/u, "").replace("/", "-");
@@ -294,9 +294,32 @@ try {
     assert.ok(artifact, `missing tarball for ${packageName}`);
     const tarballUri = `file:${artifact}`;
     consumerManifest.dependencies[packageName] = tarballUri;
-    consumerManifest.pnpm.overrides[packageName] = tarballUri;
+    tarballUris[packageName] = tarballUri;
   }
   await writeFile(consumerManifestPath, `${JSON.stringify(consumerManifest, null, 2)}\n`, "utf8");
+  await writeFile(
+    path.join(consumer, ".pnpmfile.cjs"),
+    [
+      `const tarballs = Object.freeze(${JSON.stringify(tarballUris, null, 2)});`,
+      "const dependencyFields = [\"dependencies\", \"optionalDependencies\", \"peerDependencies\"];",
+      "module.exports = { hooks: {",
+      "  readPackage(manifest) {",
+      "    for (const field of dependencyFields) {",
+      "      const dependencies = manifest[field];",
+      "      if (dependencies === undefined) continue;",
+      "      for (const [packageName, tarball] of Object.entries(tarballs)) {",
+      "        if (Object.hasOwn(dependencies, packageName)) {",
+      "          dependencies[packageName] = tarball;",
+      "        }",
+      "      }",
+      "    }",
+      "    return manifest;",
+      "  },",
+      "} };",
+      "",
+    ].join("\n"),
+    "utf8",
+  );
 
   const storePath = run("pnpm", ["store", "path"], { cwd: root }).stdout.trim();
   assert.ok(path.isAbsolute(storePath), `pnpm returned a non-absolute store path: ${storePath}`);
@@ -304,12 +327,13 @@ try {
     "pnpm",
     [
       "install",
+      "--ignore-workspace",
       "--no-frozen-lockfile",
       "--prefer-offline",
       "--ignore-scripts",
-      "--ignore-workspace",
       "--config.link-workspace-packages=false",
       "--config.shared-workspace-lockfile=false",
+      "--config.pnpmfile=.pnpmfile.cjs",
       "--store-dir",
       storePath,
     ],
