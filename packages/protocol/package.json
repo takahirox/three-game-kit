@@ -1,9 +1,15 @@
 {
   "name": "@three-game-kit/protocol",
   "version": "0.1.0",
+  "description": "Validated network protocol schemas and message types for Three Game Kit.",
+  "license": "UNLICENSED",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/takahirox/three-game-kit.git"
+  },
   "type": "module",
   "sideEffects": false,
-  "files": ["dist/**/*.js", "dist/**/*.js.map", "dist/**/*.d.ts", "dist/**/*.d.ts.map"],
+  "files": ["dist/**/*.js", "dist/**/*.js.map", "dist/**/*.d.ts", "dist/**/*.d.ts.map", "README.md"],
   "exports": {
     ".": {
       "types": "./dist/index.d.ts",

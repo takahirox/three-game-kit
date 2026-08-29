@@ -1,0 +1,44 @@
+name: CI
+
+on:
+  push:
+  pull_request:
+
+jobs:
+  verify-m5:
+    runs-on: ubuntu-24.04
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+        with:
+          clean: true
+
+      - name: Set up Node.js 24
+        uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+          architecture: x64
+
+      - name: Activate pnpm 11.24.0
+        run: |
+          corepack enable
+          corepack prepare pnpm@11.24.0 --activate
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Install bundled Chromium and OS dependencies
+        run: pnpm exec playwright install --with-deps chromium
+
+      - name: Verify M5
+        run: pnpm verify:m5
+
+      - name: Archive M5 evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: m5-verification-evidence
+          path: test-results
+          if-no-files-found: error
+          retention-days: 90

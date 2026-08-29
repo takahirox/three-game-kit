@@ -90,6 +90,7 @@ function assertNoWorkspaceReferences(value, location = "package.json") {
 
 function matchesDeclaredFile(file, patterns) {
   return patterns.some((pattern) => {
+    if (pattern === "README.md") return file === "README.md";
     assert.match(
       pattern,
       /^dist\/\*\*\/\*\.(?:js|js\.map|d\.ts|d\.ts\.map)$/u,

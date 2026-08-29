@@ -2,16 +2,12 @@
 
 This is the operational package contract selected by
 [ADR 0002](../adr/0002-workspace-package-graph-and-public-exports.md). All five package directories
-and their declared public export boundaries now exist. Milestone 1 implements Core, Shared semantic
-movement, and the headless Server Runtime.
-
-The Client and Protocol packages currently establish their package and export boundaries only. Client and
-Protocol runtime behavior, networking, rendering, and physics remain future work. The dependency, ownership,
-and public import rules below remain the normative package contract.
+and their declared public export boundaries are implemented as the Milestone 5 release candidate.
+The dependency, ownership, and public import rules below remain the normative package contract.
 
 ## Workspace boundary
 
-The initial workspace contains exactly five publishable packages:
+The release candidate contains exactly five publishable packages:
 
 | Workspace location | Package |
 | --- | --- |
@@ -22,8 +18,8 @@ The initial workspace contains exactly five publishable packages:
 | `packages/server` | `@three-game-kit/server` |
 
 The root is private. No deferred capability receives a placeholder package. Interaction remains
-consumer-owned code in an external packed-consumer fixture, outside workspace membership and
-workspace package globs, through Milestone 4.
+consumer-owned code outside workspace membership and workspace package globs, exercised through an
+external packed-consumer fixture.
 
 ## Dependency and ownership map
 
@@ -52,7 +48,7 @@ never depend on one another.
 
 Shared and Server must never depend on Client, Three.js, DOM, WebXR, device input, camera, or audio.
 Core and Protocol remain environment-neutral as well. Exact scheduler, lifecycle, and protocol
-behavior is defined by later Milestone 0 contracts, not by this map.
+behavior is defined by the applicable normative contracts, not by this map.
 
 ## Public import map
 
@@ -63,12 +59,18 @@ These and only these module specifiers are public:
 | `@three-game-kit/core` | `@three-game-kit/core` | None |
 | `@three-game-kit/shared` | `@three-game-kit/shared` | `@three-game-kit/shared/movement` |
 | `@three-game-kit/protocol` | `@three-game-kit/protocol` | None |
-| `@three-game-kit/client` | `@three-game-kit/client` | `@three-game-kit/client/rendering`, `@three-game-kit/client/input`, `@three-game-kit/client/camera`, `@three-game-kit/client/collision`, `@three-game-kit/client/assets`, `@three-game-kit/client/networking` |
-| `@three-game-kit/server` | `@three-game-kit/server` | None |
+| `@three-game-kit/client` | `@three-game-kit/client` | `@three-game-kit/client/rendering`, `@three-game-kit/client/input`, `@three-game-kit/client/camera`, `@three-game-kit/client/collision`, `@three-game-kit/client/assets`, `@three-game-kit/client/networking`, `@three-game-kit/client/replication` |
+| `@three-game-kit/server` | `@three-game-kit/server` | `@three-game-kit/server/collision`, `@three-game-kit/server/authoritative`, `@three-game-kit/server/networking` |
 
 Each specifier resolves through an explicit non-wildcard export to ESM JavaScript and matching
 TypeScript declarations. There are no CommonJS exports. Root exports provide primary composition;
 they do not implicitly expose every public subpath.
+
+All five packages are native ESM packages at version `0.1.0`. Each package includes its own
+`README.md` and declares `UNLICENSED` metadata. The release candidate is evidenced by packing all
+five packages, installing and exercising them from an external consumer outside the workspace, and
+auditing the packed artifacts and release metadata. This evidence does not claim publication to a
+package registry.
 
 ## Import rules
 
@@ -107,7 +109,8 @@ public import map.
 
 ## Version contract
 
-The five packages share one version and release together for the MVP. They use SemVer `0.y.z`:
+The five packages share version `0.1.0` for the M5 release candidate and release together. They use
+SemVer `0.y.z`:
 
 - minor releases may break public APIs when release notes identify the break and migration;
 - patch releases may not break the public surface or documented behavior of that minor line;

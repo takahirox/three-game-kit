@@ -1,0 +1,95 @@
+# Release checklist
+
+This is the normative checklist for a Milestone 5 release candidate. Complete it
+against one commit. Do not substitute an ad hoc local environment for the candidate
+CI run, and do not mark future evidence complete.
+
+## Candidate and environment
+
+- [ ] The candidate is a clean checkout (`actions/checkout@v4`, `clean: true`) with
+  no uncommitted or untracked inputs to verification.
+- [ ] The host is Ubuntu 24.04 x64.
+- [ ] Node.js 24 x64 was selected with `actions/setup-node@v4`.
+- [ ] `corepack enable` and `corepack prepare pnpm@11.24.0 --activate` completed.
+- [ ] `pnpm install --frozen-lockfile` completed without changing the lockfile.
+- [ ] `pnpm exec playwright install --with-deps chromium` completed.
+- [ ] `pnpm verify:m5` passed on the same checkout.
+
+The exact command sequence is defined in
+[`m5-verification.md`](./m5-verification.md) and must match
+[`ci.yml`](../.github/workflows/ci.yml).
+
+## Runtime, acceptance, and boundaries
+
+- [ ] Browser and Server evidence reports zero unexpected uncaught exceptions,
+  unhandled rejections, page errors, console errors, and structured runtime errors.
+- [ ] M2 and M3 cleanup evidence reports zero live resources after shutdown; M4
+  rollback, normal shutdown, and repeated shutdown leak no Feature-owned resources
+  and do not dispose borrowed host objects.
+- [ ] `scripts/verify-workspace.mjs` reports zero source, dependency, public-export,
+  package-root, environment, or emitted-declaration boundary violations.
+- [ ] Protocol rejection counters change only for their exercised documented reason,
+  rejected input does not mutate authority, and no unexpected rejection is present.
+- [ ] Disconnect fencing records the documented `stale-connection` rejection,
+  removes the disconnected binding/avatar/capsule by the bounded tick, prevents stale
+  recreation, and leaves the peer connected and functional.
+- [ ] Both bundled-Chromium acceptances pass, including M2 local browser behavior and
+  the M3 canonical two-context, real-loopback-WebSocket scenario with one worker,
+  zero retries, and clean shutdown.
+- [ ] M4 catalog and packed outside-workspace consumer checks pass, including
+  Interaction acceptance, deterministic rejection boundaries, removal of
+  Interaction, lifecycle rollback, and borrowed-resource ownership.
+
+These items are exercised by `pnpm verify:m5`; the generated M3 `evidence.json` and
+the test output must agree with the successful process result.
+
+## Feature documentation and discovery
+
+- [ ] The catalog contains exactly the five sorted entries `collision`, `interaction`,
+  `movement-input`, `third-person-camera`, and `three-rendering`.
+- [ ] Collision documentation matches its catalog metadata, public factory, ownership,
+  phases, configuration, limitations, examples, and verification command.
+- [ ] Interaction documentation matches its catalog metadata, consumer-owned factories,
+  authority and rejection contract, lifecycle, limitations, examples, and verification
+  command.
+- [ ] Movement Input documentation matches its catalog metadata, public factory,
+  ownership, phase, configuration, limitations, examples, and verification command.
+- [ ] Third-person Camera documentation matches its catalog metadata, public factory,
+  ownership, phase, configuration, limitations, examples, and verification command.
+- [ ] Three Rendering documentation matches its catalog metadata, public factory,
+  ownership, phase, configuration, limitations, examples, and verification command.
+
+The four client-only Feature contracts are in
+[`client-features.md`](./features/client-features.md); the Interaction contract is in
+[`interaction.md`](./features/interaction.md). `pnpm test:m5-catalog` checks the
+machine-readable catalog against the public factories, exports, examples, and M4
+Interaction entry.
+
+## Package archive audit
+
+- [ ] Exactly five archives are produced: `@three-game-kit/client`,
+  `@three-game-kit/core`, `@three-game-kit/protocol`, `@three-game-kit/server`, and
+  `@three-game-kit/shared`.
+- [ ] Every archive has the expected package name, shared version `0.1.0`, exact
+  package description, repository metadata, Node engine `24.x`, and `README.md`.
+- [ ] Every declared public export has its JavaScript, declaration, and source-map
+  files, and the complete set remains exactly 16 public specifiers.
+- [ ] Every archive declares `license: "UNLICENSED"`; no release note or checklist
+  entry represents that field as a license grant.
+- [ ] No archive contains workspace/local dependency specifiers, source or test
+  directories, workspace configuration, or unexpected top-level files.
+- [ ] The archive audit is evidence only. No registry publication was performed or
+  claimed by this checklist.
+
+These criteria are machine-checked by `pnpm test:m5-release` within `pnpm verify:m5`.
+
+## Claims and recorded evidence
+
+- [ ] Review [`known-limitations.md`](./known-limitations.md), each Feature's
+  limitations, milestone exclusions, and deferred roadmap claims. Release wording
+  does not imply support for a deferred capability or expand the narrow environment.
+- [ ] Candidate commit: **to be recorded after the candidate run**
+- [ ] GitHub Actions CI run URL: **to be recorded after the candidate run**
+- [ ] Archived CI artifact/evidence URL: **to be recorded after the candidate run**
+- [ ] The recorded commit equals the checkout verified by the recorded CI run, and
+  the archived artifact belongs to that run.

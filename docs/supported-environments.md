@@ -1,7 +1,7 @@
 # Supported environments
 
 This document defines the bounded MVP support baseline selected by [ADR 0001](./adr/0001-toolchain-and-supported-environments.md).
-It remains the normative support matrix; implemented verification evidence through Milestone 2 is recorded below.
+It remains the normative support matrix; the Milestone 5 release-candidate gate is recorded below.
 
 ## Required baseline
 
@@ -50,9 +50,17 @@ Successful ad hoc execution alone is insufficient.
 
 ## Current verification status
 
-The repository has an implemented, pinned Milestone 2 gate.
-`corepack pnpm verify:m2` has passed 76 Node tests plus one Playwright-bundled Chromium acceptance test.
-The gate builds and type-checks the workspaces and browser sandbox, checks public and emitted-declaration
-boundaries, and verifies the local browser slice. Browser installation and complete evidence are documented in
-[Milestone 2 verification](./m2-verification.md). This evidence covers Milestones 0 through 2 only and does not
-expand the narrow browser, host, or architecture support matrix above.
+The repository has an implemented, pinned Milestone 5 release-candidate gate. The
+[GitHub workflow](../.github/workflows/ci.yml) defines a clean Ubuntu 24.04 x64
+checkout using Node.js 24, exactly `pnpm@11.24.0`, and the Chromium revision bundled
+with the pinned Playwright dependency.
+
+`pnpm verify:m5` includes 172 Node and WebSocket tests; the M2 local-browser and M3
+canonical two-context Chromium acceptances; source, export, dependency, and emitted-
+declaration boundary checks; the M4 five-tarball external-consumer audit; the
+all-five Feature catalog audit; and the five-package release-archive audit. Complete
+commands and scope are documented in [Milestone 5 verification](./m5-verification.md),
+with excluded capabilities summarized in [known limitations](./known-limitations.md).
+This documents the release-candidate gate, not an archived GitHub run, registry
+publication, expanded browser certification, or support for any additional browser,
+host, or architecture.

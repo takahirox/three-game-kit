@@ -20,7 +20,9 @@ and bounded rejection observability, owner prediction and reconciliation, peer i
 injection, disconnect fencing, exact cleanup, and canonical two-context browser evidence. Milestone 4 adds the
 consumer-owned external server-authoritative Interaction proof, range validation and toggle, semantic client
 queue/latest snapshot presentation, five packed kit tarballs installed outside the workspace, catalog/authoring
-docs, and rollback/idempotent cleanup evidence. Milestone 5 is next.
+docs, and rollback/idempotent cleanup evidence. Milestone 5 produces a release candidate backed by a clean
+`pnpm verify:m5`, audits of all five package archives and all five cataloged Features, and complete documentation
+and evidence. It does not include registry publication or hosted deployment.
 
 ## Bounded MVP
 
@@ -50,10 +52,18 @@ Audio, WebXR, post-processing, reconnect, production authentication, alternate t
 - [Milestone 2 verification](./docs/m2-verification.md)
 - [Milestone 3 verification](./docs/m3-verification.md)
 - [Milestone 4 verification](./docs/m4-verification.md)
-- [Feature catalog](./docs/features/catalog.json)
+- [Milestone 5 verification](./docs/m5-verification.md)
+- [Release checklist](./docs/release-checklist.md)
+- [Canonical foundation Feature catalog](./docs/features/foundation-catalog.json)
+- [Milestone 4 catalog evidence](./docs/features/catalog.json)
+- [Client Feature contracts](./docs/features/client-features.md)
 - [Interaction contract](./docs/features/interaction.md)
 - [Client-only Feature authoring](./docs/authoring/client-only-feature.md)
+- [Server-only Feature authoring](./docs/authoring/server-only-feature.md)
 - [Cross-runtime Interaction authoring](./docs/authoring/cross-runtime-interaction.md)
+- [Complete cross-runtime narrative](./docs/architecture/cross-runtime-narrative.md)
+- [Known limitations](./docs/known-limitations.md)
+- [Tool-agnostic AI workflow](./docs/ai-workflow.md)
 - [Foundation MVP milestones](./docs/milestones.md)
 - [Specification review](./docs/specification-review.md)
 - [Supported environments](./docs/supported-environments.md)

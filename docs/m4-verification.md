@@ -92,4 +92,4 @@ node scripts/verify-m4-packed-consumer.mjs
 git diff --check
 ```
 
- ERR_PNPM_NO_IMPORTER_MANIFEST_FOUND  No package.json (or package.yaml, or package.json5) was found in "/Users/takahiro/Documents/my-ai-employee". is the wired aggregate: it runs the complete M3 verification, the M4 catalog/boundary verifier, and the packed-consumer verifier.
+`pnpm verify:m4` is the wired aggregate: it runs the complete M3 verification, the M4 catalog/boundary verifier, and the packed-consumer verifier.

@@ -1,0 +1,481 @@
+{
+  "schemaVersion": 1,
+  "features": [
+    {
+      "catalogId": "collision",
+      "serverFeatureId": "not-applicable",
+      "clientFeatureId": "collision",
+      "purpose": "Compute and publish one collision move per client prediction tick.",
+      "ownership": "The Feature owns the injected ClientCollisionAdapter after successful setup; the caller owns the position, translation, and publish callbacks.",
+      "runtimes": [
+        "client"
+      ],
+      "requires": {
+        "server": [],
+        "client": []
+      },
+      "conflicts": [],
+      "configuration": {
+        "runtime": {
+          "type": "object",
+          "default": {},
+          "bounds": {
+            "additionalProperties": false
+          }
+        },
+        "factoryInputs": {
+          "adapter": {
+            "type": "ClientCollisionAdapter",
+            "default": "not-applicable",
+            "bounds": "Must provide move and dispose functions."
+          },
+          "readStartPosition": {
+            "type": "function returning exactly finite x, y, and z numbers",
+            "default": "not-applicable",
+            "bounds": "All three components must be finite."
+          },
+          "readDesiredTranslation": {
+            "type": "function returning exactly finite x, y, and z numbers",
+            "default": "not-applicable",
+            "bounds": "All three components must be finite."
+          },
+          "publish": {
+            "type": "function accepting CollisionMoveResult",
+            "default": "not-applicable",
+            "bounds": "not-applicable"
+          }
+        }
+      },
+      "phases": {
+        "server": [],
+        "clientSimulation": [
+          "shared-predict: collision-shared-predict (priority 0)"
+        ],
+        "clientPresentation": []
+      },
+      "authority": {
+        "owner": "not-applicable",
+        "intent": "Client prediction is non-authoritative; a server must independently validate authoritative movement.",
+        "validation": [
+          "not-applicable"
+        ],
+        "rejectionReasons": [
+          "not-applicable"
+        ]
+      },
+      "lifecycle": {
+        "setup": "Setup activates collision-shared-predict through the Feature-scoped lifecycle ledger. Failed activation resets the active fence and rethrows; the caller must dispose the retained adapter if this Feature's own activation fails.",
+        "dispose": "After successful setup, disposal disables the system and disposes the owned adapter exactly once. A disposed descriptor cannot be set up or moved again.",
+        "borrowedResources": [
+          "The readStartPosition, readDesiredTranslation, and publish callbacks remain caller-owned."
+        ]
+      },
+      "limitations": [
+        "The bundled adapter is a bounded local predictor with zero gravity, one kinematic capsule-like controller, sliding enabled, autostep and snap-to-ground disabled, and static boxes only.",
+        "It provides no dynamic rigid bodies, broad gameplay physics, reconciliation, or authority.",
+        "A failed adapter outcome becomes a system error.",
+        "Runtime configuration accepts only an empty object."
+      ],
+      "compatibilityRange": "^0.1.0",
+      "publicImports": {
+        "@three-game-kit/client": [
+          "@three-game-kit/client/collision"
+        ]
+      },
+      "examplePaths": [
+        "examples/local-browser/main.ts"
+      ],
+      "verificationCommand": "pnpm verify:m2"
+    },
+    {
+      "catalogId": "interaction",
+      "serverFeatureId": "external.interaction.server",
+      "clientFeatureId": "external.interaction.client",
+      "purpose": "Accept a semantic Interaction intent, validate it on the authoritative server, toggle one configured target, replicate that state, and present it on clients.",
+      "ownership": "consumer-owned",
+      "runtimes": [
+        "server",
+        "client"
+      ],
+      "requires": {
+        "server": [
+          "host.server-authority"
+        ],
+        "client": [
+          "host.client-session"
+        ]
+      },
+      "conflicts": [
+        "external.interaction.alternative"
+      ],
+      "configuration": {
+        "targetEntityId": {
+          "type": "string",
+          "default": "switch_1",
+          "bounds": {
+            "minLength": 1,
+            "maxLength": 64,
+            "pattern": "^[A-Za-z0-9_-]{1,64}$"
+          }
+        },
+        "position": {
+          "type": "object",
+          "default": {
+            "x": 2,
+            "y": 0,
+            "z": 0
+          },
+          "bounds": {
+            "additionalProperties": false,
+            "required": [
+              "x",
+              "y",
+              "z"
+            ],
+            "coordinates": {
+              "type": "number",
+              "finite": true,
+              "minimum": -1000000,
+              "maximum": 1000000
+            }
+          }
+        },
+        "range": {
+          "type": "number",
+          "default": 3,
+          "bounds": {
+            "finite": true,
+            "minimum": 0,
+            "maximum": 1000000
+          }
+        },
+        "initialActive": {
+          "type": "boolean",
+          "default": false,
+          "bounds": null
+        },
+        "forceSetupFailure": {
+          "type": "boolean",
+          "default": false,
+          "bounds": null
+        }
+      },
+      "phases": {
+        "server": [
+          "validate-bind",
+          "gameplay",
+          "snapshot-build"
+        ],
+        "clientSimulation": [
+          "snapshot-ingest",
+          "action-sample",
+          "command-send",
+          "presentation-publish"
+        ],
+        "clientPresentation": [
+          "render"
+        ]
+      },
+      "authority": {
+        "owner": "server",
+        "intent": "The client queues only a targetEntityId; it cannot directly change target state.",
+        "validation": [
+          "The command must pass protocol schema, connection phase, sequence, tick-window, queue, and owned-actor validation.",
+          "The targetEntityId must equal the configured targetEntityId.",
+          "The actor position must be within the configured inclusive Euclidean range of the target position.",
+          "Only a previously accepted Interaction is applied, and each application toggles authoritative active state once.",
+          "The server replicates the resulting interactable snapshot state to clients."
+        ],
+        "rejectionReasons": [
+          "schema-invalid",
+          "ownership-violation",
+          "unknown-target",
+          "interaction-out-of-range",
+          "sequence-invalid"
+        ]
+      },
+      "lifecycle": {
+        "setup": "Each descriptor validates its exact configuration before setup. The server acquires its adapter state before activation; the client acquires its control state before activating its presentation system. A setup failure rolls back acquired state.",
+        "dispose": "Each Feature releases only records it acquired through its lifecycle ledger. Shutdown and rollback release remaining owned records in reverse acquisition order, and repeated shutdown is safe.",
+        "borrowedResources": [
+          "The server borrows host.authoritative-interaction and never disposes, closes, transfers, replaces, or republishes it.",
+          "The client borrows host.client-replication and never disposes, closes, transfers, replaces, or republishes it.",
+          "State or listeners created by the Feature remain Feature-owned and must be released without disposing a borrowed host object."
+        ]
+      },
+      "limitations": [
+        "Exactly one configured target is supported by the example adapter.",
+        "Interaction only toggles a boolean active state; it does not provide inventory, combat, damage, dialogue, navigation, or arbitrary actions.",
+        "Feature composition is immutable for a runtime; hot enable, disable, and replacement are unsupported.",
+        "The consumer must provide the required server authority and client session Features plus the two host services.",
+        "The example uses deterministic finite-distance validation and does not perform line-of-sight or physics-occlusion checks."
+      ],
+      "compatibilityRange": "^0.1.0",
+      "publicImports": {
+        "@three-game-kit/core": [
+          "@three-game-kit/core"
+        ],
+        "@three-game-kit/protocol": [
+          "@three-game-kit/protocol"
+        ],
+        "@three-game-kit/shared": [
+          "@three-game-kit/shared"
+        ],
+        "@three-game-kit/client": [
+          "@three-game-kit/client",
+          "@three-game-kit/client/replication"
+        ],
+        "@three-game-kit/server": [
+          "@three-game-kit/server",
+          "@three-game-kit/server/authoritative"
+        ]
+      },
+      "examplePaths": [
+        "examples/external-interaction-consumer/src/interaction-feature.ts",
+        "examples/external-interaction-consumer/src/client-only-feature.ts",
+        "examples/external-interaction-consumer/test/m4.test.mjs",
+        "examples/external-interaction-consumer/README.md"
+      ],
+      "verificationCommand": "pnpm test:m4-packed-consumer"
+    },
+    {
+      "catalogId": "movement-input",
+      "serverFeatureId": "not-applicable",
+      "clientFeatureId": "movement-input",
+      "purpose": "Sample and publish one validated semantic movement command per simulation tick.",
+      "ownership": "The input source and publish callback remain caller-owned; the Feature owns no injected disposable resource.",
+      "runtimes": [
+        "client"
+      ],
+      "requires": {
+        "server": [],
+        "client": []
+      },
+      "conflicts": [],
+      "configuration": {
+        "runtime": {
+          "type": "object",
+          "default": {},
+          "bounds": {
+            "additionalProperties": false
+          }
+        },
+        "factoryInputs": {
+          "input": {
+            "type": "MovementCommandSource",
+            "default": "not-applicable",
+            "bounds": "Must provide sample(); sampled commands must have kind move and finite x and z axes within the Shared movement-command bounds."
+          },
+          "publish": {
+            "type": "function accepting MovementCommand",
+            "default": "not-applicable",
+            "bounds": "not-applicable"
+          }
+        }
+      },
+      "phases": {
+        "server": [],
+        "clientSimulation": [
+          "action-sample: movement-input-sample (priority 0)"
+        ],
+        "clientPresentation": []
+      },
+      "authority": {
+        "owner": "not-applicable",
+        "intent": "Published semantic movement is non-authoritative local input and does not grant permission to change server state.",
+        "validation": [
+          "not-applicable"
+        ],
+        "rejectionReasons": [
+          "not-applicable"
+        ]
+      },
+      "lifecycle": {
+        "setup": "Setup activates movement-input-sample through the Feature-scoped lifecycle ledger. Failed activation resets the active fence and rethrows.",
+        "dispose": "Disposal disables later sampling and publication; it does not dispose the input source or callback.",
+        "borrowedResources": [
+          "The MovementCommandSource and publish callback remain caller-owned.",
+          "A caller-owned keyboard adapter retains its two listeners until the caller disposes it."
+        ]
+      },
+      "limitations": [
+        "The Feature does not retain command history or apply movement.",
+        "It does not provide trusted server state, network messaging, input buffering, rebinding, pointer or gamepad input, or authoritative movement decisions.",
+        "Runtime configuration accepts only an empty object."
+      ],
+      "compatibilityRange": "^0.1.0",
+      "publicImports": {
+        "@three-game-kit/client": [
+          "@three-game-kit/client/input"
+        ]
+      },
+      "examplePaths": [
+        "examples/local-browser/main.ts"
+      ],
+      "verificationCommand": "pnpm verify:m2"
+    },
+    {
+      "catalogId": "third-person-camera",
+      "serverFeatureId": "not-applicable",
+      "clientFeatureId": "third-person-camera",
+      "purpose": "Publish one third-person camera transform per presentation frame.",
+      "ownership": "The target state, configuration input, and callbacks remain caller-owned; the Feature copies and freezes the camera configuration and owns no external resource.",
+      "runtimes": [
+        "client"
+      ],
+      "requires": {
+        "server": [],
+        "client": []
+      },
+      "conflicts": [],
+      "configuration": {
+        "runtime": {
+          "type": "object",
+          "default": {},
+          "bounds": {
+            "additionalProperties": false
+          }
+        },
+        "factoryInputs": {
+          "readTarget": {
+            "type": "function returning exactly x, y, and z numbers",
+            "default": "not-applicable",
+            "bounds": "All three components must be finite."
+          },
+          "configuration": {
+            "type": "object",
+            "default": "not-applicable",
+            "bounds": {
+              "additionalProperties": false,
+              "required": [
+                "distance",
+                "height",
+                "lookAtHeight",
+                "yawRadians"
+              ],
+              "distance": "positive finite number; no default",
+              "height": "finite number; no default",
+              "lookAtHeight": "finite number; no default",
+              "yawRadians": "finite number in radians; no default or normalized range"
+            }
+          },
+          "publish": {
+            "type": "function accepting ThirdPersonCameraTransform",
+            "default": "not-applicable",
+            "bounds": "not-applicable"
+          }
+        }
+      },
+      "phases": {
+        "server": [],
+        "clientSimulation": [],
+        "clientPresentation": [
+          "camera-view: third-person-camera-view (priority 0)"
+        ]
+      },
+      "authority": {
+        "owner": "not-applicable",
+        "intent": "Camera output is non-authoritative presentation data and has no server-visible state.",
+        "validation": [
+          "not-applicable"
+        ],
+        "rejectionReasons": [
+          "not-applicable"
+        ]
+      },
+      "lifecycle": {
+        "setup": "Setup activates third-person-camera-view through the Feature-scoped lifecycle ledger. Failed activation resets the active fence and rethrows.",
+        "dispose": "Disposal disables later target reads and publication. The Feature owns no camera object or external resource.",
+        "borrowedResources": [
+          "The target state and readTarget and publish callbacks remain caller-owned."
+        ]
+      },
+      "limitations": [
+        "The Feature does not implement orbit controls, collision avoidance, smoothing, interpolation, zoom limits, occlusion, input binding, or server-visible state.",
+        "Presentation frames do not advance simulation.",
+        "Runtime configuration accepts only an empty object."
+      ],
+      "compatibilityRange": "^0.1.0",
+      "publicImports": {
+        "@three-game-kit/client": [
+          "@three-game-kit/client/camera"
+        ]
+      },
+      "examplePaths": [
+        "examples/local-browser/main.ts"
+      ],
+      "verificationCommand": "pnpm verify:m2"
+    },
+    {
+      "catalogId": "three-rendering",
+      "serverFeatureId": "not-applicable",
+      "clientFeatureId": "three-rendering",
+      "purpose": "Render the owned renderer scene once per presentation frame.",
+      "ownership": "The Feature owns the injected ClientRendererAdapter after successful setup; attached glTF assets remain borrowed and caller-owned.",
+      "runtimes": [
+        "client"
+      ],
+      "requires": {
+        "server": [],
+        "client": []
+      },
+      "conflicts": [],
+      "configuration": {
+        "runtime": {
+          "type": "object",
+          "default": {},
+          "bounds": {
+            "additionalProperties": false
+          }
+        },
+        "factoryInputs": {
+          "renderer": {
+            "type": "ClientRendererAdapter",
+            "default": "not-applicable",
+            "bounds": "Must implement avatar asset attachment, avatar and camera updates, resize, render, snapshot, and disposal."
+          }
+        }
+      },
+      "phases": {
+        "server": [],
+        "clientSimulation": [],
+        "clientPresentation": [
+          "render: three-render-frame (priority 0)"
+        ]
+      },
+      "authority": {
+        "owner": "not-applicable",
+        "intent": "Rendering is non-authoritative presentation work and never changes server or simulation state.",
+        "validation": [
+          "not-applicable"
+        ],
+        "rejectionReasons": [
+          "not-applicable"
+        ]
+      },
+      "lifecycle": {
+        "setup": "Setup activates three-render-frame through the Feature-scoped lifecycle ledger. If this Feature's own activation fails, the caller must dispose the retained renderer reference.",
+        "dispose": "After successful setup, disposal disables rendering and disposes the owned renderer exactly once. A disposed descriptor cannot be set up or rendered again.",
+        "borrowedResources": [
+          "Attached glTF assets remain borrowed and must be released by their loader owner."
+        ]
+      },
+      "limitations": [
+        "The renderer covers only the local MVP scene.",
+        "It does not provide post-processing, WebXR, audio, generalized scene management, screenshot-golden guarantees, or server behavior.",
+        "Presentation frames do not advance simulation.",
+        "Runtime configuration accepts only an empty object."
+      ],
+      "compatibilityRange": "^0.1.0",
+      "publicImports": {
+        "@three-game-kit/client": [
+          "@three-game-kit/client/rendering"
+        ]
+      },
+      "examplePaths": [
+        "examples/local-browser/main.ts"
+      ],
+      "verificationCommand": "pnpm verify:m2"
+    }
+  ]
+}
