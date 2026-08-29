@@ -23,7 +23,8 @@ async function settleWithInjectedTime<T>(injector: DeterministicMessageInjector,
     () => { settled = true; },
     () => { settled = true; },
   );
-  for (let turns = 0; !settled && turns < 10_000; turns += 1) {
+  const deadline = performance.now() + 10_000;
+  while (!settled && performance.now() < deadline) {
     const nextDueTimeMs = injector.nextDueTimeMs;
     if (nextDueTimeMs !== null) injector.advanceTo(nextDueTimeMs);
     await yieldImmediate();
