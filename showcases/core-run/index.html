@@ -1,0 +1,82 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Core Run</title>
+    <link rel="stylesheet" href="./styles.css" />
+  </head>
+  <body>
+    <main id="app" class="app">
+      <div id="stage" class="stage">
+        <canvas
+          id="game-canvas"
+          class="game-canvas"
+          width="960"
+          height="540"
+          role="img"
+          tabindex="0"
+          aria-label="Core Run arena: collect cores and deposit them before time runs out"
+        >
+          Your browser does not support the canvas element required to play Core Run.
+        </canvas>
+
+        <header id="hud" class="hud" aria-label="Heads-up display">
+          <div class="hud-group">
+            <span class="hud-label">Time</span>
+            <output id="hud-timer" class="hud-value" aria-label="Time remaining">30.0</output>
+          </div>
+          <div class="hud-group">
+            <span class="hud-label">Score</span>
+            <output id="hud-score" class="hud-value" aria-label="Score">0</output>
+          </div>
+          <div class="hud-group hud-combo">
+            <span id="hud-combo-label" class="hud-value" aria-label="Combo"></span>
+            <progress id="hud-combo-bar" class="hud-bar" value="0" max="1" aria-label="Combo window"></progress>
+          </div>
+          <div class="hud-group">
+            <span class="hud-label">Carrying</span>
+            <span id="hud-carry" class="hud-value" aria-label="Carried core">None</span>
+          </div>
+          <div class="hud-group">
+            <span class="hud-label">Dash</span>
+            <span id="hud-dash" class="hud-value" aria-label="Dash cooldown" data-ready="true">Ready</span>
+          </div>
+        </header>
+
+        <section id="overlay" class="overlay" aria-labelledby="overlay-title">
+          <h1 id="overlay-title" class="overlay-title">CORE RUN</h1>
+          <p id="overlay-premise" class="overlay-premise">
+            Grab glowing cores, chain deposits for combos, and bank the highest score before the clock hits zero.
+          </p>
+          <ul id="overlay-controls" class="controls" aria-label="Controls">
+            <li><kbd>W</kbd><kbd>A</kbd><kbd>S</kbd><kbd>D</kbd> Move</li>
+            <li><kbd>Mouse</kbd> Aim</li>
+            <li><kbd>Space</kbd> Jump</li>
+            <li><kbd>Shift</kbd> Dash</li>
+            <li><kbd>E</kbd> Interact</li>
+          </ul>
+          <button id="start-button" class="overlay-button" type="button">Start</button>
+
+          <h2 id="overlay-countdown" class="overlay-countdown" hidden></h2>
+
+          <div id="results" class="results" hidden>
+            <dl class="results-list">
+              <dt>Final score</dt>
+              <dd id="results-score">0</dd>
+              <dt>Deposits</dt>
+              <dd id="results-deposits">0</dd>
+              <dt>Best combo</dt>
+              <dd id="results-best-combo">x1</dd>
+            </dl>
+            <button id="retry-button" class="overlay-button" type="button">Retry</button>
+          </div>
+        </section>
+      </div>
+
+      <p id="status" class="status" role="status" aria-live="polite"></p>
+    </main>
+
+    <script type="module" src="./src/main.ts"></script>
+  </body>
+</html>

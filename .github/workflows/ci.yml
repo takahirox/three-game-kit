@@ -34,6 +34,9 @@ jobs:
       - name: Verify M5
         run: pnpm verify:m5
 
+      - name: Verify Core Run
+        run: pnpm verify:core-run
+
       - name: Archive M5 evidence
         if: always()
         uses: actions/upload-artifact@v4
