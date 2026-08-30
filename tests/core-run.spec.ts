@@ -79,6 +79,21 @@ interface PageDiagnostics {
 
 type EventOf<K extends TelemetryEvent["kind"]> = Extract<TelemetryEvent, { kind: K }>;
 
+/** Mirrors CoreRunRendererInspection returned by CoreRunTestHandle.inspectRenderer(). */
+interface RendererInspection {
+  readonly backend: "three-webgl";
+  readonly webglRenderer: boolean;
+  readonly scene: boolean;
+  readonly camera: boolean;
+  readonly cameraType: "PerspectiveCamera";
+  readonly sceneObjectCount: number;
+  readonly meshCount: number;
+  readonly lightCount: number;
+  readonly width: number;
+  readonly height: number;
+  readonly disposed: boolean;
+}
+
 function eventsOfKind<K extends TelemetryEvent["kind"]>(
   events: readonly TelemetryEvent[],
   kind: K,
@@ -290,6 +305,39 @@ test.describe("Core Run showcase", () => {
     await expect(page.locator("#hud-score")).toHaveText("0");
 
     await page.screenshot({ path: testInfo.outputPath("core-run-title.png") });
+    await expectNoErrors(page, diagnostics);
+  });
+
+  test("renders through the Three.js WebGL renderer on the game canvas", async ({ page }) => {
+    const diagnostics = await bootCoreRun(page);
+
+    const inspection = await page.evaluate(() => {
+      const handle = Reflect.get(window, "__CORE_RUN__") as CoreRunTestHandle;
+      const canvas = document.getElementById("game-canvas") as HTMLCanvasElement;
+      const renderer: RendererInspection | null = handle.inspectRenderer();
+      return {
+        renderer,
+        hasWebgl: (canvas.getContext("webgl2") ?? canvas.getContext("webgl")) !== null,
+        has2d: canvas.getContext("2d") !== null,
+      };
+    });
+
+    expect(inspection.renderer).not.toBeNull();
+    const renderer = inspection.renderer as RendererInspection;
+    expect(renderer.backend).toBe("three-webgl");
+    expect(renderer.webglRenderer).toBe(true);
+    expect(renderer.scene).toBe(true);
+    expect(renderer.camera).toBe(true);
+    expect(renderer.cameraType).toBe("PerspectiveCamera");
+    expect(renderer.sceneObjectCount).toBeGreaterThan(0);
+    expect(renderer.meshCount).toBeGreaterThan(0);
+    expect(renderer.lightCount).toBeGreaterThanOrEqual(2);
+    expect(renderer.width).toBe(960);
+    expect(renderer.height).toBe(540);
+    expect(renderer.disposed).toBe(false);
+    expect(inspection.hasWebgl).toBe(true);
+    expect(inspection.has2d).toBe(false);
+
     await expectNoErrors(page, diagnostics);
   });
 

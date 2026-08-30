@@ -20,7 +20,8 @@ import {
   createCoreRunRenderer,
   type CoreRunRenderer,
   type RendererCounters,
-} from "./renderer.js";
+} from "./three-renderer.js";
+import type { CoreRunRendererInspection } from "./three-renderer.js";
 import type {
   CoreRunSnapshot,
   OneShotAction,
@@ -73,6 +74,7 @@ export interface CoreRunTestHandle {
   dispose(): void;
   restart(): void;
   inspectLeaks(): CoreRunLeakReport;
+  inspectRenderer(): CoreRunRendererInspection | null;
 }
 
 declare global {
@@ -325,6 +327,10 @@ class CoreRunHost {
       game: this.game.inspectLeaks(),
       renderer: this.renderer.counters(),
     });
+  }
+
+  inspectRenderer(): CoreRunRendererInspection {
+    return this.renderer.inspect();
   }
 
   dispose(): void {
@@ -688,6 +694,7 @@ function boot(): CoreRunTestHandle {
     },
     inspectLeaks: () =>
       slot.host === null ? EMPTY_LEAK_REPORT : slot.host.inspectLeaks(),
+    inspectRenderer: () => slot.host?.inspectRenderer() ?? null,
   };
 
   if (mode === "test" || slot.host === null) window.__CORE_RUN__ = handle;

@@ -6,7 +6,24 @@ and chain deposits for combo multipliers before a 30-second clock hits zero.
 
 Entry point: [`index.html`](./index.html). Host: [`src/main.ts`](./src/main.ts).
 Rules: [`src/game.ts`](./src/game.ts) and [`src/features/`](./src/features/).
-Renderer: [`src/renderer.ts`](./src/renderer.ts) (dependency-free Canvas2D).
+Renderer: [`src/three-renderer.ts`](./src/three-renderer.ts) (Three.js WebGL 3D scene).
+
+## Rendering architecture
+
+Core Run owns a real `THREE.Scene`, `THREE.WebGLRenderer`, and
+`THREE.PerspectiveCamera` in [`src/three-renderer.ts`](./src/three-renderer.ts).
+The camera follows the player in world space from a yaw-controlled
+third-person offset. Reusable Three meshes represent the arena, player, cores,
+Base, jump pad, moving platform, hazard, and elevated routes, with stylized
+lighting and emissive, toon, and standard materials.
+
+- Mesh transforms and animation are derived from `CoreRunSnapshot` and
+  `snapshot.time`; rendering never consults a wall clock or `Math.random`.
+- Particle, popup, and trail effects use deterministic fixed-capacity rings.
+- The showcase imports the public `three` package directly and does not
+  deep-import Three Game Kit internals.
+- `dispose()` releases geometries, materials, scene objects, and the owned
+  WebGL renderer.
 
 ## Premise and the 30-second flow
 
@@ -114,6 +131,7 @@ Open `/showcases/core-run/index.html?test=1`. In test mode:
 | `dispose()` | method | Tears the host down (see below). Idempotent. |
 | `restart()` | method | `dispose()` followed by booting a fresh host on the same DOM. |
 | `inspectLeaks()` | method | `CoreRunLeakReport`: `hostListeners`, `rafActive`, `rafHandle`, `pointerDragging`, `hostDisposed`, `game` (`activeListeners`, `activeSubscriptions`, `activeTimers`), `renderer` (`frames`, `drawCalls`, `activeParticles`, `activePopups`, `eventsConsumed`). |
+| `inspectRenderer()` | method | Read-only Three/WebGL proof: backend, live renderer/scene/camera flags, camera type, scene object/mesh/light counts, render size, and disposed state; returns `null` if the host did not boot. |
 
 Determinism guarantees: the simulation uses `SIMULATION_DT_SECONDS = 1/60`;
 the platform position is `platformPosition(time)`; the renderer seeds all
@@ -159,6 +177,7 @@ The Playwright spec [`tests/core-run.spec.ts`](../../tests/core-run.spec.ts)
 drives the showcase exclusively through `?test=1` and `window.__CORE_RUN__`:
 
 - boots cleanly with 12 fixed cores and the expected values, and captures `core-run-title.png`;
+- proves the primary renderer owns a live WebGL context, a PerspectiveCamera, and non-empty Three scene/mesh/light counts, so a Canvas2D regression fails;
 - runs a deterministic round slice (countdown events `3, 2, 1, "go"`, acceleration to `MAX_SPEED`, jump, dash + cooldown gating, pickup and deposit of core 0) and captures `core-run-running.png`;
 - verifies the combo multiplier inside the window, `comboExpired` exactly when the window lapses, and the reset to x1 afterwards;
 - runs to `timeUp` and `results`, checks the results DOM, clicks **Retry**, and verifies the clean second round (captures `core-run-results.png`);
@@ -207,7 +226,6 @@ owns no timers of its own (`activeTimers` is always 0).
 ## Non-goals
 
 - No networking, server, or authoritative simulation - this is a local, single-player showcase.
-- No three.js or WebGL: rendering is Canvas2D only.
 - No audio, no persistence (scores are not saved), no external assets, fonts, or images.
 - No procedural or randomised level layout; core placements and platform motion are fixed.
 - No gamepad or touch controls beyond the pointer-drag camera.

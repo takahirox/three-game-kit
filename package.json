@@ -35,6 +35,8 @@
     "@playwright/test": "1.62.1",
     "@three-game-kit/protocol": "workspace:^",
     "@three-game-kit/server": "workspace:^",
+    "@types/three": "0.185.4",
+    "three": "0.185.1",
     "typescript": "6.0.3",
     "vite": "8.2.2"
   }

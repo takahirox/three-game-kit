@@ -17,6 +17,12 @@ importers:
       '@three-game-kit/server':
         specifier: workspace:^
         version: link:packages/server
+      '@types/three':
+        specifier: 0.185.4
+        version: 0.185.4
+      three:
+        specifier: 0.185.1
+        version: 0.185.1
       typescript:
         specifier: 6.0.3
         version: 6.0.3
