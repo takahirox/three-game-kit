@@ -1,3 +1,8 @@
+import {
+  applyMovementCommand,
+  createMovementCommand,
+  createMovementState,
+} from "@three-game-kit/shared/movement";
 import { ticksFromSeconds, type CoreRunFeature } from "../feature.js";
 import { createPlayerState, vec3, type Vec3 } from "../state.js";
 
@@ -9,7 +14,6 @@ export const JUMP_SPEED = 10;
 export const DASH_SPEED = 20;
 export const DASH_SECONDS = 0.15;
 export const DASH_COOLDOWN_SECONDS = 1;
-export const GROUND_HEIGHT = 0;
 
 function clampAxis(value: number): number {
   return Number.isFinite(value) ? Math.max(-1, Math.min(1, value)) : 0;
@@ -89,20 +93,31 @@ export function createMovementFeature(): CoreRunFeature {
         context.emit({ kind: "jump", tick: context.tick });
       }
       vy -= GRAVITY * dt;
-      let y = player.position.y + vy * dt;
-      let grounded = false;
-      if (y <= GROUND_HEIGHT) {
-        y = GROUND_HEIGHT;
-        vy = 0;
-        grounded = true;
-      }
-      player.position = vec3(
-        player.position.x + vx * dt,
-        y,
-        player.position.z + vz * dt,
+      const y = player.position.y + vy * dt;
+      const start = player.position;
+      const horizontalSpeed = Math.hypot(vx, vz);
+      const commandScale =
+        horizontalSpeed === 0 ? 0 : (1 - 1e-12) / horizontalSpeed;
+      const translated = applyMovementCommand(
+        createMovementState(start),
+        createMovementCommand(
+          vx * commandScale,
+          vz * commandScale,
+        ),
+        {
+          speedMetersPerSecond: horizontalSpeed === 0 ? 1 : horizontalSpeed,
+          dtSeconds: dt,
+        },
+      ).position;
+      state.movementStart = start;
+      state.desiredTranslation = vec3(
+        translated.x - start.x,
+        y - start.y,
+        translated.z - start.z,
       );
+      state.movementTranslationCount += 1;
       player.velocity = vec3(vx, vy, vz);
-      player.grounded = grounded;
+      player.grounded = false;
     },
   };
 }

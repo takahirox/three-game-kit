@@ -1,11 +1,37 @@
 import {
+  createCollisionFeature,
+  createRapierCollisionAdapter,
+  type ClientCollisionAdapter,
+} from "@three-game-kit/client/collision";
+import {
+  createInputFeature,
+  createMovementInput,
+  createSemanticActionInput,
+  type MovementInput,
+  type SemanticActionInput,
+} from "@three-game-kit/client/input";
+import { createCameraFeature } from "@three-game-kit/client/camera";
+import { createRenderingFeature } from "@three-game-kit/client/rendering";
+import { Runtime as ClientRuntime } from "@three-game-kit/client";
+import {
   SIMULATION_DT_SECONDS,
+  createDeterministicPresentationFrameSource,
   createTelemetryStore,
+  type ClientFeatureDescriptor,
+  type DeterministicPresentationFrameSource,
+  type FeatureLifecycleState,
   type RuntimeErrorCategory,
   type RuntimeErrorRecord,
   type TelemetryStore,
 } from "@three-game-kit/core";
-import type { CoreRunFeature, StepContext } from "./feature.js";
+import type { CoreRunRenderer } from "./three-renderer.js";
+import {
+  CORE_RUN_STANDARD_FEATURE_ID,
+  createClientFeatureDescriptor,
+  createStandardTickFeature,
+  type CoreRunFeature,
+  type StepContext,
+} from "./feature.js";
 import { createCoresFeature } from "./features/cores.js";
 import { createDepositFeature } from "./features/deposit.js";
 import { createHazardFeature } from "./features/hazard.js";
@@ -29,6 +55,17 @@ import {
 
 export const MAX_STEPS_PER_ADVANCE = 600;
 export const TELEMETRY_EVENT_CAPACITY = 1024;
+const COLLISION_CAPSULE_RADIUS = 0.5;
+const COLLISION_CAPSULE_HALF_HEIGHT = 0.5;
+const COLLISION_CONTROLLER_OFFSET = 0.01;
+const COLLISION_CENTER_FROM_FEET =
+  COLLISION_CAPSULE_RADIUS +
+  COLLISION_CAPSULE_HALF_HEIGHT +
+  COLLISION_CONTROLLER_OFFSET;
+const ARENA_HALF_EXTENT = 18;
+const CAMERA_DISTANCE = 13;
+const CAMERA_HEIGHT = 9.2;
+const CAMERA_LOOK_AT_HEIGHT = 1.2;
 const ONE_SHOT_ACTIONS: readonly OneShotAction[] = Object.freeze([
   "jump",
   "dash",
@@ -44,9 +81,28 @@ export interface CoreRunLeakCounters {
   readonly activeTimers: number;
 }
 
+export interface CoreRunRuntimeInspection {
+  readonly lifecycleState: FeatureLifecycleState;
+  readonly installedFeatureIds: readonly string[];
+  readonly scheduleSystemIds: readonly string[];
+  readonly schedulerTick: number;
+  readonly gameTick: number;
+  /** One-shot semantic actions published by movement-input. */
+  readonly semanticActionsPublished: number;
+  /** Shared movement translations prepared since the most recent reset. */
+  readonly movementTranslationCount: number;
+  /** Standard collision moves published since the most recent reset. */
+  readonly collisionMoveCount: number;
+  readonly collisionContactCount: number;
+  readonly collisionAdapterDisposed: boolean;
+  readonly presentationFrameCount: number;
+  readonly rendererDisposed: boolean | null;
+}
+
 export interface CoreRunGameOptions {
   readonly features?: readonly CoreRunFeature[];
   readonly telemetryStore?: TelemetryStore<"client">;
+  readonly renderer?: CoreRunRenderer;
 }
 
 export interface CoreRunGame {
@@ -55,6 +111,8 @@ export interface CoreRunGame {
   readonly telemetryStore: TelemetryStore<"client">;
   /** Accumulates elapsed seconds into fixed steps; returns steps executed. */
   advance(seconds: number): number;
+  /** Delivers one presentation frame through the public Runtime scheduler. */
+  present(timestampMs: number): boolean;
   setInput(input: Partial<SemanticInput>): void;
   press(action: OneShotAction): void;
   start(): void;
@@ -65,14 +123,15 @@ export interface CoreRunGame {
   events(): readonly TelemetryEvent[];
   errors(): readonly RuntimeErrorRecord[];
   inspectLeaks(): CoreRunLeakCounters;
+  inspectRuntime(): CoreRunRuntimeInspection;
 }
 
 /** Default Feature order; earlier Features observe a tick before later ones. */
 export function createDefaultFeatures(): readonly CoreRunFeature[] {
   return Object.freeze([
     createRoundTimerFeature(),
-    createHazardFeature(),
     createMovementFeature(),
+    createHazardFeature(),
     createJumpPadFeature(),
     createMovingPlatformFeature(),
     createDepositFeature(),
@@ -84,26 +143,170 @@ function finiteOr(value: number | undefined, fallback: number): number {
   return typeof value === "number" && Number.isFinite(value) ? value : fallback;
 }
 
+function normalizedMovementAxes(x: number, z: number): readonly [number, number] {
+  const squaredMagnitude = x * x + z * z;
+  if (squaredMagnitude <= 1) return [x, z];
+  const scale = (1 - 1e-12) / Math.sqrt(squaredMagnitude);
+  return Object.freeze([x * scale, z * scale]);
+}
+
 class CoreRunGameImplementation implements CoreRunGame {
   readonly dt = SIMULATION_DT_SECONDS;
   readonly telemetryStore: TelemetryStore<"client">;
-  private features: readonly CoreRunFeature[];
+  private readonly rules: readonly CoreRunFeature[];
+  private readonly descriptors: readonly ClientFeatureDescriptor<unknown>[];
+  private readonly runtime: ClientRuntime;
+  private readonly renderer: CoreRunRenderer | null;
+  private readonly presentationFrames: DeterministicPresentationFrameSource =
+    createDeterministicPresentationFrameSource();
+  private presentationStarted = false;
+  private lastPresentationTimestampMs = -1;
+  private readonly collisionAdapter: ClientCollisionAdapter =
+    createRapierCollisionAdapter({
+      capsuleRadius: COLLISION_CAPSULE_RADIUS,
+      capsuleHalfHeight: COLLISION_CAPSULE_HALF_HEIGHT,
+      controllerOffset: COLLISION_CONTROLLER_OFFSET,
+      boxes: [
+        {
+          id: "arena-floor",
+          center: { x: 0, y: -0.5, z: 0 },
+          halfExtents: { x: ARENA_HALF_EXTENT, y: 0.5, z: ARENA_HALF_EXTENT },
+        },
+      ],
+    });
+  private collisionMoveCount = 0;
+  private collisionContactCount = 0;
+  private readonly movementInput: MovementInput = createMovementInput();
+  private readonly actionInput: SemanticActionInput<OneShotAction> =
+    createSemanticActionInput(ONE_SHOT_ACTIONS);
+  private semanticActionsPublished = 0;
   private state: CoreRunState = createCoreRunState();
   private accumulator = 0;
   private isDisposed = false;
-  private readonly pending = new Set<OneShotAction>();
   private readonly listeners = new Set<(event: TelemetryEvent) => void>();
   private readonly collected: TelemetryEvent[] = [];
   private readonly errorRecords: RuntimeErrorRecord[] = [];
 
   constructor(options: CoreRunGameOptions) {
-    this.features = Object.freeze([
+    this.renderer = options.renderer ?? null;
+    this.rules = Object.freeze([
       ...(options.features ?? createDefaultFeatures()),
     ]);
     this.telemetryStore =
       options.telemetryStore ?? createTelemetryStore({ runtime: "client" });
     this.resetState();
+    const gameDescriptors = this.rules.map((feature, index) =>
+      createClientFeatureDescriptor(
+        feature,
+        Object.freeze([
+          index === 0
+            ? CORE_RUN_STANDARD_FEATURE_ID
+            : (this.rules[index - 1]?.id ?? CORE_RUN_STANDARD_FEATURE_ID),
+        ]),
+        index - 2,
+        {
+          state: () => this.state,
+          context: () => this.context(this.currentPressed),
+          capture: (featureId, operation, cause) =>
+            this.capture(featureId, operation, cause),
+        },
+      ),
+    );
+    const movementIndex = this.rules.findIndex(
+      (feature) => feature.id === "core-run.movement",
+    );
+    const collisionDescriptor = createCollisionFeature({
+      adapter: this.collisionAdapter,
+      readStartPosition: () => ({
+        ...this.state.movementStart,
+        y: this.state.movementStart.y + COLLISION_CENTER_FROM_FEET,
+      }),
+      readDesiredTranslation: () => this.state.desiredTranslation,
+      publish: (result) => {
+        const player = this.state.player;
+        player.position = Object.freeze({
+          ...result.position,
+          y: result.grounded
+            ? 0
+            : result.position.y - COLLISION_CENTER_FROM_FEET,
+        });
+        player.grounded = result.grounded;
+        if (result.grounded && player.velocity.y < 0) {
+          player.velocity = Object.freeze({ ...player.velocity, y: 0 });
+        }
+        this.collisionMoveCount += 1;
+        this.collisionContactCount += result.collisionCount;
+      },
+    });
+    const scheduledGameDescriptors =
+      movementIndex < 0
+        ? gameDescriptors
+        : [
+            ...gameDescriptors.slice(0, movementIndex + 1),
+            collisionDescriptor,
+            ...gameDescriptors.slice(movementIndex + 1),
+          ];
+    const inputDescriptor = createInputFeature({
+      input: this.movementInput,
+      publish: (command) => {
+        this.state.input = Object.freeze({
+          moveX: command.x,
+          moveY: -command.z,
+          cameraYaw: this.state.input.cameraYaw,
+        });
+      },
+      actions: this.actionInput,
+      publishAction: (action) => {
+        this.currentPressed.add(action as OneShotAction);
+        this.semanticActionsPublished += 1;
+      },
+    });
+    const presentationDescriptors: readonly ClientFeatureDescriptor<unknown>[] =
+      this.renderer === null
+        ? Object.freeze([])
+        : Object.freeze([
+            createCameraFeature({
+              readTarget: () => this.state.player.position,
+              readConfiguration: () => ({
+                distance: CAMERA_DISTANCE,
+                height: CAMERA_HEIGHT,
+                lookAtHeight: CAMERA_LOOK_AT_HEIGHT,
+                yawRadians: -this.state.input.cameraYaw,
+              }),
+              publish: (transform) => this.renderer?.setCameraTransform(transform),
+            }),
+            createRenderingFeature({ renderer: this.renderer }),
+          ]);
+    this.descriptors = Object.freeze([
+      createStandardTickFeature(() => {
+        this.state.tick += 1;
+      }),
+      inputDescriptor,
+      ...scheduledGameDescriptors,
+      ...presentationDescriptors,
+    ]);
+    this.runtime = new ClientRuntime({
+      features: this.descriptors,
+      driver: "exact",
+      telemetryStore: this.telemetryStore,
+      frameSource: this.presentationFrames,
+    });
+    void this.runtime.start().then((started) => {
+      if (
+        started.state !== "running" ||
+        this.isDisposed ||
+        this.renderer === null
+      ) {
+        return;
+      }
+      const presentation = this.runtime.startPresentation();
+      if (!presentation.ok) return;
+      this.presentationStarted = presentation.value;
+      if (this.presentationStarted) this.present(0);
+    });
   }
+
+  private readonly currentPressed = new Set<OneShotAction>();
 
   get disposed(): boolean {
     return this.isDisposed;
@@ -128,26 +331,54 @@ class CoreRunGameImplementation implements CoreRunGame {
       steps < MAX_STEPS_PER_ADVANCE
     ) {
       this.accumulator -= this.dt;
-      this.step();
+      this.currentPressed.clear();
+      const result = this.runtime.stepExact(1);
+      this.currentPressed.clear();
+      if (!result.ok) break;
       steps += 1;
     }
     if (steps === MAX_STEPS_PER_ADVANCE) this.accumulator = 0;
     return steps;
   }
 
+  present(timestampMs: number): boolean {
+    if (
+      this.isDisposed ||
+      !this.presentationStarted ||
+      !Number.isFinite(timestampMs) ||
+      timestampMs < 0
+    ) {
+      return false;
+    }
+    const nextTimestampMs = Math.max(
+      this.lastPresentationTimestampMs + 1,
+      timestampMs,
+    );
+    this.lastPresentationTimestampMs = nextTimestampMs;
+    return this.presentationFrames.deliver(nextTimestampMs);
+  }
+
   setInput(input: Partial<SemanticInput>): void {
     if (this.isDisposed) return;
-    const current = this.state.input;
+    const currentMovement = this.movementInput.sample();
+    const movement = normalizedMovementAxes(
+      finiteOr(input.moveX, currentMovement.x),
+      -finiteOr(input.moveY, -currentMovement.z),
+    );
+    this.movementInput.setMovement(movement[0], movement[1]);
     this.state.input = Object.freeze({
-      moveX: finiteOr(input.moveX, current.moveX),
-      moveY: finiteOr(input.moveY, current.moveY),
-      cameraYaw: finiteOr(input.cameraYaw, current.cameraYaw),
+      ...this.state.input,
+      cameraYaw: finiteOr(input.cameraYaw, this.state.input.cameraYaw),
     });
   }
 
   press(action: OneShotAction): void {
-    if (this.isDisposed || !ONE_SHOT_ACTIONS.includes(action)) return;
-    this.pending.add(action);
+    if (this.isDisposed) return;
+    try {
+      this.actionInput.press(action);
+    } catch (error) {
+      if (!(error instanceof TypeError)) throw error;
+    }
   }
 
   start(): void {
@@ -164,8 +395,9 @@ class CoreRunGameImplementation implements CoreRunGame {
   dispose(): void {
     if (this.isDisposed) return;
     this.isDisposed = true;
-    this.features = Object.freeze([]);
-    this.pending.clear();
+    void this.runtime.shutdown();
+    this.movementInput.dispose();
+    this.actionInput.dispose();
     this.listeners.clear();
   }
 
@@ -208,18 +440,47 @@ class CoreRunGameImplementation implements CoreRunGame {
   }
 
   inspectLeaks(): CoreRunLeakCounters {
+    const lifecycle = this.runtime.inspectLifecycle();
     return Object.freeze({
       activeListeners: this.listeners.size,
-      activeSubscriptions: this.features.length,
+      activeSubscriptions: this.isDisposed
+        ? 0
+        : lifecycle.installedFeatureIds.length,
       activeTimers: 0,
+    });
+  }
+
+  inspectRuntime(): CoreRunRuntimeInspection {
+    const lifecycle = this.runtime.inspectLifecycle();
+    return Object.freeze({
+      lifecycleState: lifecycle.state,
+      installedFeatureIds: Object.freeze(lifecycle.installedFeatureIds.slice(0, 32)),
+      scheduleSystemIds: Object.freeze(
+        lifecycle.scheduleReport.slice(0, 32).map((entry) => entry.systemId),
+      ),
+      schedulerTick: this.runtime.tick,
+      gameTick: this.state.tick,
+      semanticActionsPublished: this.semanticActionsPublished,
+      movementTranslationCount: this.state.movementTranslationCount,
+      collisionMoveCount: this.collisionMoveCount,
+      collisionContactCount: this.collisionContactCount,
+      collisionAdapterDisposed: this.collisionAdapter.disposed,
+      presentationFrameCount:
+        this.runtime.snapshotTelemetry().presentationFrameCount,
+      rendererDisposed: this.renderer?.disposed ?? null,
     });
   }
 
   private resetState(): void {
     this.state = createCoreRunState();
+    this.movementInput.reset();
+    this.collisionMoveCount = 0;
+    this.collisionContactCount = 0;
+    this.semanticActionsPublished = 0;
     this.accumulator = 0;
-    this.pending.clear();
-    for (const feature of this.features) {
+    this.actionInput.reset();
+    this.currentPressed.clear();
+    for (const feature of this.rules) {
       try {
         feature.reset(this.state, this.dt);
       } catch (cause) {
@@ -236,20 +497,6 @@ class CoreRunGameImplementation implements CoreRunGame {
       pressed,
       emit: (event: TelemetryEvent) => this.emit(event),
     });
-  }
-
-  private step(): void {
-    this.state.tick += 1;
-    const pressed = new Set(this.pending);
-    this.pending.clear();
-    const context = this.context(pressed);
-    for (const feature of this.features) {
-      try {
-        feature.step(this.state, context);
-      } catch (cause) {
-        this.capture(feature.id, "core-run-step", cause);
-      }
-    }
   }
 
   private capture(featureId: string, operation: string, cause: unknown): void {

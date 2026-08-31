@@ -1,5 +1,9 @@
 /// <reference lib="dom" />
 import * as THREE from "three";
+import type {
+  RenderingFeatureAdapter,
+  RendererCameraTransform,
+} from "@three-game-kit/client/rendering";
 import { CORE_PLACEMENTS } from "./features/cores.js";
 import { BASE_POSITION, BASE_RADIUS } from "./features/deposit.js";
 import { HAZARD_MAX, HAZARD_MIN } from "./features/hazard.js";
@@ -56,17 +60,17 @@ export interface CoreRunRendererInspection {
   readonly width: number;
   readonly height: number;
   readonly disposed: boolean;
+  readonly cameraTransform: RendererCameraTransform;
 }
 
-export interface CoreRunRenderer {
-  render(
+export interface CoreRunRenderer extends RenderingFeatureAdapter {
+  prepareFrame(
     snapshot: CoreRunSnapshot,
     events: readonly TelemetryEvent[],
-    cameraYaw: number,
     debugCamera: boolean,
   ): void;
+  setCameraTransform(transform: RendererCameraTransform): void;
   resize(width?: number, height?: number): void;
-  dispose(): void;
   readonly disposed: boolean;
   /** True once at least one full frame has been drawn. */
   readonly screenshotReady: boolean;
@@ -119,8 +123,6 @@ const COLOR_MAGENTA = 0xff3df5;
 const COLOR_PLAYER = 0x9dff57;
 const COLOR_NIGHT = 0x05020f;
 
-const FOLLOW_DISTANCE = 13;
-const FOLLOW_HEIGHT = 8;
 const DEBUG_DISTANCE = 34;
 const DEBUG_HEIGHT = 30;
 const PYLON_HEIGHT = 6;
@@ -172,6 +174,13 @@ class ThreeCoreRunRenderer implements CoreRunRenderer {
   private readonly renderer: THREE.WebGLRenderer;
   private readonly scene: THREE.Scene;
   private readonly camera: THREE.PerspectiveCamera;
+  private snapshot: CoreRunSnapshot | null = null;
+  private events: readonly TelemetryEvent[] = Object.freeze([]);
+  private debugCamera = false;
+  private cameraTransform: RendererCameraTransform = Object.freeze({
+    position: Object.freeze({ x: 0, y: 9.2, z: 13 }),
+    lookAt: Object.freeze({ x: 0, y: 1.2, z: 0 }),
+  });
   private readonly geometries: THREE.BufferGeometry[] = [];
   private readonly materials: THREE.Material[] = [];
   private readonly coreMeshes: THREE.Mesh[] = [];
@@ -690,6 +699,18 @@ class ThreeCoreRunRenderer implements CoreRunRenderer {
       width: this.width,
       height: this.height,
       disposed: this.isDisposed,
+      cameraTransform: Object.freeze({
+        position: Object.freeze({ ...this.cameraTransform.position }),
+        lookAt: Object.freeze({ ...this.cameraTransform.lookAt }),
+      }),
+    });
+  }
+
+  setCameraTransform(transform: RendererCameraTransform): void {
+    if (this.isDisposed) return;
+    this.cameraTransform = Object.freeze({
+      position: Object.freeze({ ...transform.position }),
+      lookAt: Object.freeze({ ...transform.lookAt }),
     });
   }
 
@@ -722,17 +743,26 @@ class ThreeCoreRunRenderer implements CoreRunRenderer {
     this.renderer.dispose();
   }
 
-  render(
+  prepareFrame(
     snapshot: CoreRunSnapshot,
     events: readonly TelemetryEvent[],
-    cameraYaw: number,
     debugCamera: boolean,
   ): void {
     if (this.isDisposed) return;
+    this.snapshot = snapshot;
+    this.events = events;
+    this.debugCamera = debugCamera;
+  }
+
+  render(): void {
+    if (this.isDisposed) return;
+    const snapshot = this.snapshot;
+    if (snapshot === null) return;
     const time = finite(snapshot.time, 0);
-    this.consumeEvents(snapshot, events, time);
+    this.consumeEvents(snapshot, this.events, time);
+    this.events = Object.freeze([]);
     this.recordTrail(snapshot, time);
-    this.syncCamera(snapshot, finite(cameraYaw, 0), debugCamera);
+    this.syncCamera(this.cameraTransform, this.debugCamera);
     this.syncWorld(snapshot, time);
     this.syncEffects(time);
     this.renderer.render(this.scene, this.camera);
@@ -854,24 +884,18 @@ class ThreeCoreRunRenderer implements CoreRunRenderer {
   /* ----------------------------- scene sync ------------------------------ */
 
   private syncCamera(
-    snapshot: CoreRunSnapshot,
-    yaw: number,
+    transform: RendererCameraTransform,
     debug: boolean,
   ): void {
-    const p = snapshot.player.position;
     if (debug) {
       this.focus.set(0, 0, 0);
-      this.camera.position.set(
-        Math.sin(yaw) * DEBUG_DISTANCE,
-        DEBUG_HEIGHT,
-        Math.cos(yaw) * DEBUG_DISTANCE,
-      );
+      this.camera.position.set(0, DEBUG_HEIGHT, DEBUG_DISTANCE);
     } else {
-      this.focus.set(p.x, p.y + 1.2, p.z);
+      this.focus.set(transform.lookAt.x, transform.lookAt.y, transform.lookAt.z);
       this.camera.position.set(
-        this.focus.x + Math.sin(yaw) * FOLLOW_DISTANCE,
-        this.focus.y + FOLLOW_HEIGHT,
-        this.focus.z + Math.cos(yaw) * FOLLOW_DISTANCE,
+        transform.position.x,
+        transform.position.y,
+        transform.position.z,
       );
     }
     this.camera.lookAt(this.focus);

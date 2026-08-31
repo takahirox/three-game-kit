@@ -1,29 +1,65 @@
 # Core Run
 
-A single-player, browser-only showcase built on `@three-game-kit/core`'s fixed
-60 Hz simulation step. You grab glowing Energy Cores, run them back to the Base,
-and chain deposits for combo multipliers before a 30-second clock hits zero.
+A single-player, browser-only showcase composed on the public
+`@three-game-kit/client` Runtime and Standard Features at a fixed 60 Hz. You
+grab glowing Energy Cores, run them back to the Base, and chain deposits for
+combo multipliers before a 30-second clock hits zero.
 
 Entry point: [`index.html`](./index.html). Host: [`src/main.ts`](./src/main.ts).
 Rules: [`src/game.ts`](./src/game.ts) and [`src/features/`](./src/features/).
 Renderer: [`src/three-renderer.ts`](./src/three-renderer.ts) (Three.js WebGL 3D scene).
 
+## Architecture: framework and game responsibilities
+
+Core Run uses one public Client Runtime for simulation and presentation. Every
+standard and game-specific system appears in the same installed Feature list,
+lifecycle, and schedule inspected by the browser tests.
+
+### three-game-kit-provided
+
+| Capability | Public entrypoint and responsibility |
+| --- | --- |
+| Runtime and lifecycle | `@three-game-kit/client` boots the immutable Feature composition, owns the scheduler/World/telemetry, and performs reverse-order shutdown. |
+| Fixed-tick scheduling | `@three-game-kit/core` runs semantic input, Core Run rule descriptors, Shared prediction/collision, camera view, and render systems in documented phases. Exact stepping powers deterministic test mode. |
+| Semantic input | `@three-game-kit/client/input` validates movement commands and drains the bounded `jump` / `dash` / `interact` queue. Keyboard input and the AI handle use this same boundary. |
+| Movement and collision | `@three-game-kit/shared/movement` applies authority-neutral horizontal translation. `@three-game-kit/client/collision` owns the Rapier World, static arena floor, capsule controller, collision result, and grounding. |
+| Third-person camera | `@three-game-kit/client/camera` reads the player target and current semantic yaw each presentation frame and publishes the camera transform. |
+| Three.js rendering lifecycle | `@three-game-kit/client/rendering` schedules `render()` and owns disposal of the Core Run scene adapter and its WebGL resources. |
+| Telemetry and errors | The Runtime telemetry store reports installed Features, schedules, frame/tick state, live resources, and structured runtime failures. |
+
+### Core Run-provided
+
+| Capability | Game-specific responsibility |
+| --- | --- |
+| Game rules | Round/countdown, acceleration and gravity tuning, Dash, Energy Core pickup/carry, deposit/score/combo, Jump Pad, Moving Platform route/carry, and Hazard slow-zone behavior. |
+| Level and presentation content | Arena layout, meshes, lights, materials, deterministic VFX pools, HUD, overlays, results, and art direction. |
+| Host bindings | WASD/arrows, pointer yaw, buttons, focus/pointer-lock behavior, the normal-mode RAF pump, and semantic AI/QA controls. |
+| Deterministic acceptance scenario | Fixed core placement, exact-step controls, debug camera, snapshots, inspections, and screenshots used by Playwright. |
+
+The seven Core Run rule modules are adapted to public
+`ClientFeatureDescriptor`s. They therefore use the same dependency ordering,
+fixed-tick scheduler, setup fence, error capture, and cleanup lifecycle as the
+Standard Features. Retry resets game state without rebuilding the Runtime;
+shutdown remains a framework lifecycle operation.
+
 ## Rendering architecture
 
-Core Run owns a real `THREE.Scene`, `THREE.WebGLRenderer`, and
-`THREE.PerspectiveCamera` in [`src/three-renderer.ts`](./src/three-renderer.ts).
-The camera follows the player in world space from a yaw-controlled
-third-person offset. Reusable Three meshes represent the arena, player, cores,
-Base, jump pad, moving platform, hazard, and elevated routes, with stylized
-lighting and emissive, toon, and standard materials.
+The Core Run scene adapter creates a real `THREE.Scene`, `THREE.WebGLRenderer`,
+and `THREE.PerspectiveCamera` in
+[`src/three-renderer.ts`](./src/three-renderer.ts), then transfers adapter
+ownership to the public rendering Feature. The public camera Feature supplies
+the normal yaw-controlled third-person transform. Reusable Three meshes
+represent the arena, player, cores, Base, jump pad, moving platform, hazard,
+and elevated routes, with stylized lighting and emissive, toon, and standard
+materials.
 
 - Mesh transforms and animation are derived from `CoreRunSnapshot` and
   `snapshot.time`; rendering never consults a wall clock or `Math.random`.
 - Particle, popup, and trail effects use deterministic fixed-capacity rings.
 - The showcase imports the public `three` package directly and does not
   deep-import Three Game Kit internals.
-- `dispose()` releases geometries, materials, scene objects, and the owned
-  WebGL renderer.
+- Runtime shutdown invokes the rendering adapter's idempotent `dispose()`,
+  releasing geometries, materials, scene objects, and the WebGL renderer.
 
 ## Premise and the 30-second flow
 
@@ -98,9 +134,9 @@ pnpm exec vite --host 127.0.0.1 --port 4174
 
 Then open <http://127.0.0.1:4174/showcases/core-run/index.html>.
 
-In normal mode the host drives the simulation from `requestAnimationFrame`; each
-frame's elapsed time is clamped to 0.1 s (`MAX_FRAME_SECONDS`) before being fed
-to the fixed-step accumulator.
+In normal mode the host reads elapsed time from `requestAnimationFrame`; each
+frame is clamped to 0.1 s (`MAX_FRAME_SECONDS`) before exact simulation steps
+and a presentation frame are delivered through the public Runtime schedulers.
 
 ## Deterministic test mode (`?test=1`)
 
@@ -123,7 +159,7 @@ Open `/showcases/core-run/index.html?test=1`. In test mode:
 | `events()` | method | Frozen copy of collected telemetry events (most recent 1024). Empty array if the host is not booted. |
 | `errors()` | method | Frozen array of `HostErrorRecord` (`source`, `message`, `tick`): host-level errors followed by game-level errors. |
 | `setInput(input)` | method | Merges a partial `SemanticInput` (`moveX`, `moveY`, `cameraYaw`). Non-finite values are ignored; axes are clamped to `[-1, 1]` by the movement feature. |
-| `press(action)` | method | Queues a one-shot action (`"jump"`, `"dash"`, `"interact"`) for the next simulation step. Unknown actions are ignored. |
+| `press(action)` | method | Queues a one-shot action (`"jump"`, `"dash"`, `"interact"`) through the public bounded semantic action input for the next simulation step. Unknown actions are ignored. |
 | `advance(seconds)` | method | Accumulates seconds into fixed 1/60 s steps and returns the number of steps executed (max 600 per call; hitting the cap discards the remainder). Non-finite or negative input records an `invalid-advance` error and returns 0. Returns 0 after dispose. |
 | `start()` | method | Begins the countdown; no-op unless the phase is `title`. |
 | `retry()` | method | Resets all state and begins a new countdown from any phase. |
@@ -177,13 +213,16 @@ The Playwright spec [`tests/core-run.spec.ts`](../../tests/core-run.spec.ts)
 drives the showcase exclusively through `?test=1` and `window.__CORE_RUN__`:
 
 - boots cleanly with 12 fixed cores and the expected values, and captures `core-run-title.png`;
+- verifies the public Runtime installs semantic input, collision, third-person camera, rendering, and every Core Run rule descriptor in one schedule;
 - proves the primary renderer owns a live WebGL context, a PerspectiveCamera, and non-empty Three scene/mesh/light counts, so a Canvas2D regression fails;
+- changes semantic yaw and proves `third-person-camera-view` runs before `three-render-frame` and updates the renderer transform;
 - runs a deterministic round slice (countdown events `3, 2, 1, "go"`, acceleration to `MAX_SPEED`, jump, dash + cooldown gating, pickup and deposit of core 0) and captures `core-run-running.png`;
 - verifies the combo multiplier inside the window, `comboExpired` exactly when the window lapses, and the reset to x1 afterwards;
 - runs to `timeUp` and `results`, checks the results DOM, clicks **Retry**, and verifies the clean second round (captures `core-run-results.png`);
 - checks the hazard slow-down, the jump pad launch, and that the platform position matches `platformPosition(tick * dt)` and reproduces exactly after `restart()`;
 - unit-tests the moving-platform Feature carrying a standing player;
 - verifies `dispose()` releases all listeners and handles, is idempotent, and that `restart()` yields a clean state.
+- rejects undocumented or deep three-game-kit imports with `test:core-run-boundaries`.
 
 Every browser test also asserts no page errors, no console errors, and an empty
 `errors()` array. Screenshots are written to the Playwright test output
@@ -193,6 +232,7 @@ Expected commands (repo root):
 
 ```sh
 pnpm typecheck:core-run
+pnpm test:core-run-boundaries
 pnpm test:core-run
 pnpm verify:core-run
 ```
@@ -204,7 +244,9 @@ CI runs `pnpm verify:core-run`.
 `pnpm run build && pnpm exec vite --host 127.0.0.1 --port 4174` and does not
 reuse an existing one, so stop any dev server on port 4174 before running the
 tests. Type-checking uses [`tsconfig.json`](./tsconfig.json), which maps
-`@three-game-kit/core` to the package source.
+public package specifiers to workspace sources for the local monorepo build;
+`test:core-run-boundaries` independently enforces the documented entrypoint
+allowlist used by an external consumer.
 
 ## Disposal and restart guarantees
 
@@ -214,12 +256,12 @@ tests. Type-checking uses [`tsconfig.json`](./tsconfig.json), which maps
 - cancels the pending `requestAnimationFrame` (normal mode);
 - ends any pointer drag, releases pointer capture, and exits pointer lock if the canvas holds it;
 - removes every DOM listener the host registered (`hostListeners` becomes 0);
-- clears held keys and pending telemetry, unsubscribes from the game, and disposes the renderer (all particles, popups, and trail points deactivated) and the game (Feature list emptied, pending actions and listeners cleared);
+- clears held keys and pending telemetry, unsubscribes from the game, disposes the caller-owned semantic input sources, and shuts down the public Runtime, which disposes the renderer, collision adapter, Feature registrations, and framework resources;
 - sets the status to `Core Run host disposed`; afterwards `ready` and `screenshotReady` are `false`, `advance()` returns 0, and every other method is a no-op.
 
 `restart()` disposes the current host and boots a new one on the same DOM. The
 new host starts at `tick 0` in the `title` phase with empty `events()`, one
-telemetry listener, seven Feature registrations, zero timers, and a single
+telemetry listener, twelve Feature registrations, zero timers, and a single
 rendered frame - the spec asserts exactly this via `inspectLeaks()`. The game
 owns no timers of its own (`activeTimers` is always 0).
 

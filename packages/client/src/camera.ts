@@ -23,11 +23,16 @@ export interface ThirdPersonCameraTransform {
   readonly lookAt: CameraVector3;
 }
 
-export interface CameraFeatureOptions {
+interface CameraFeatureCommonOptions {
   readonly readTarget: () => CameraVector3;
-  readonly configuration: ThirdPersonCameraConfiguration;
   readonly publish: (transform: ThirdPersonCameraTransform) => void;
 }
+
+export type CameraFeatureOptions = CameraFeatureCommonOptions &
+  (
+    | { readonly configuration: ThirdPersonCameraConfiguration }
+    | { readonly readConfiguration: () => ThirdPersonCameraConfiguration }
+  );
 
 function hasExactlyKeys(value: object, expected: readonly string[]): boolean {
   const keys = Reflect.ownKeys(value);
@@ -170,16 +175,28 @@ export function createCameraFeature(
     typeof options !== "object" ||
     options === null ||
     Array.isArray(options) ||
-    !hasExactlyKeys(options, ["readTarget", "configuration", "publish"]) ||
+    (!hasExactlyKeys(options, ["readTarget", "configuration", "publish"]) &&
+      !hasExactlyKeys(options, [
+        "readTarget",
+        "readConfiguration",
+        "publish",
+      ])) ||
     typeof options.readTarget !== "function" ||
-    typeof options.publish !== "function"
+    typeof options.publish !== "function" ||
+    ("readConfiguration" in options &&
+      typeof options.readConfiguration !== "function")
   ) {
     throw new TypeError("Camera feature options are invalid");
   }
 
   const readTarget = options.readTarget;
   const publish = options.publish;
-  const configuration = copyConfiguration(options.configuration);
+  const readConfiguration =
+    "readConfiguration" in options ? options.readConfiguration : undefined;
+  const staticConfiguration =
+    "configuration" in options
+      ? copyConfiguration(options.configuration)
+      : undefined;
   let active = false;
 
   const contribution = Object.freeze({
@@ -192,10 +209,10 @@ export function createCameraFeature(
       if (!active) return;
       const target = readTarget();
       if (!active) return;
-      const transform = createThirdPersonCameraTransform(
-        target,
-        configuration,
-      );
+      const configuration =
+        staticConfiguration ?? copyConfiguration(readConfiguration!());
+      if (!active) return;
+      const transform = createThirdPersonCameraTransform(target, configuration);
       if (!active) return;
       publish(transform);
     },

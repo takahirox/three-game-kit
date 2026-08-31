@@ -29,14 +29,17 @@ export interface RenderingSnapshot {
   readonly renderCount: number;
 }
 
-export interface ClientRendererAdapter {
+export interface RenderingFeatureAdapter {
+  render(): void;
+  dispose(): void;
+}
+
+export interface ClientRendererAdapter extends RenderingFeatureAdapter {
   attachAvatarAsset(asset: GltfAvatarAsset): void;
   setAvatarPosition(position: RendererVector3): void;
   setCameraTransform(transform: RendererCameraTransform): void;
   resize(width: number, height: number, pixelRatio: number): void;
-  render(): void;
   snapshot(): RenderingSnapshot;
-  dispose(): void;
 }
 
 export class RendererDisposedError extends Error {
@@ -363,7 +366,7 @@ const RENDERING_FEATURE_CONFIGURATION =
   });
 
 export function createRenderingFeature(options: {
-  readonly renderer: ClientRendererAdapter;
+  readonly renderer: RenderingFeatureAdapter;
 }): ClientFeatureDescriptor<RenderingFeatureConfiguration> {
   if (
     typeof options !== "object" ||
@@ -372,12 +375,7 @@ export function createRenderingFeature(options: {
     !hasExactlyKeys(options, ["renderer"]) ||
     typeof options.renderer !== "object" ||
     options.renderer === null ||
-    typeof options.renderer.attachAvatarAsset !== "function" ||
-    typeof options.renderer.setAvatarPosition !== "function" ||
-    typeof options.renderer.setCameraTransform !== "function" ||
-    typeof options.renderer.resize !== "function" ||
     typeof options.renderer.render !== "function" ||
-    typeof options.renderer.snapshot !== "function" ||
     typeof options.renderer.dispose !== "function"
   ) {
     throw new TypeError("Rendering feature options are invalid");

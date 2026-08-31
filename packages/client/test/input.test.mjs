@@ -4,9 +4,11 @@ import { createDeterministicPresentationFrameSource } from "@three-game-kit/core
 import { createClientRuntime } from "@three-game-kit/client";
 import {
   MovementInputDisposedError,
+  SemanticActionInputDisposedError,
   createInputFeature,
   createKeyboardMovementAdapter,
   createMovementInput,
+  createSemanticActionInput,
 } from "@three-game-kit/client/input";
 
 const IDLE = Object.freeze({ kind: "move", x: 0, z: 0 });
@@ -98,6 +100,42 @@ test("movement input validates, copies, freezes, resets, and disposes", () => {
   assertDisposed(() => input.reset());
   assertDisposed(() => input.setMovement(1, 0));
   assertDisposed(() => input.setMovement({ kind: "move", x: 1, z: 0 }));
+});
+
+test("semantic action input validates, bounds, drains, resets, and disposes", () => {
+  for (const names of [[], [""], ["jump", "jump"], ["jump", 1]]) {
+    assert.throws(() => createSemanticActionInput(names), /action names/);
+  }
+  assert.throws(
+    () => createSemanticActionInput(["jump"], { capacity: 0 }),
+    /positive integer/,
+  );
+
+  const input = createSemanticActionInput(["jump", "dash"], { capacity: 2 });
+  assert.equal(input.press("jump"), true);
+  assert.equal(input.press("dash"), true);
+  assert.equal(input.press("jump"), false);
+  assert.deepEqual(input.drain(), ["jump", "dash"]);
+  assert.equal(Object.isFrozen(input.drain()), true);
+  assert.throws(() => input.press("interact"), /not allowed/);
+
+  input.press("jump");
+  input.reset();
+  input.reset();
+  assert.deepEqual(input.drain(), []);
+
+  input.press("dash");
+  input.dispose();
+  input.dispose();
+  input.reset();
+  for (const operation of [() => input.press("jump"), () => input.drain()]) {
+    assert.throws(
+      operation,
+      (error) =>
+        error instanceof SemanticActionInputDisposedError &&
+        error.code === "semantic-action-input-disposed",
+    );
+  }
 });
 
 test("keyboard adapter maps movement keys and combines axes", () => {
@@ -250,4 +288,46 @@ test("input feature contributes one action sampler and publishes once per exact 
   assert.equal(runtime.stepExact(1).ok, false);
   assert.equal(samples, 120);
   assert.equal(published.length, 120);
+});
+
+test("input feature optionally drains actions once per tick", async () => {
+  const actions = createSemanticActionInput(["jump", "dash"]);
+  const publishedActions = [];
+  const feature = createInputFeature({
+    input: createMovementInput(),
+    publish() {},
+    actions,
+    publishAction(action) {
+      publishedActions.push(action);
+    },
+  });
+  const runtime = createClientRuntime({
+    features: [feature],
+    frameSource: createDeterministicPresentationFrameSource(),
+  });
+  assert.equal((await runtime.boot()).state, "running");
+  actions.press("jump");
+  actions.press("dash");
+  assert.deepEqual(runtime.stepExact(1), { ok: true, value: 1 });
+  assert.deepEqual(publishedActions, ["jump", "dash"]);
+  assert.deepEqual(runtime.stepExact(1), { ok: true, value: 2 });
+  assert.deepEqual(publishedActions, ["jump", "dash"]);
+
+  await runtime.shutdown();
+  actions.dispose();
+});
+
+test("input feature requires both semantic action options", () => {
+  const input = createMovementInput();
+  const actions = createSemanticActionInput(["jump"]);
+  assert.throws(
+    () => createInputFeature({ input, publish() {}, actions }),
+    /action options/,
+  );
+  assert.throws(
+    () => createInputFeature({ input, publish() {}, publishAction() {} }),
+    /action options/,
+  );
+  input.dispose();
+  actions.dispose();
 });

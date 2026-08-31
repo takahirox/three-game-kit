@@ -5,8 +5,15 @@
     "declaration": false,
     "declarationMap": false,
     "sourceMap": false,
+    "lib": ["ES2023", "ESNext.Disposable", "DOM"],
     "paths": {
-      "@three-game-kit/core": ["../../packages/core/src/index.ts"]
+      "@three-game-kit/core": ["../../packages/core/src/index.ts"],
+      "@three-game-kit/client": ["../../packages/client/src/index.ts"],
+      "@three-game-kit/client/input": ["../../packages/client/src/input.ts"],
+      "@three-game-kit/client/collision": ["../../packages/client/src/collision.ts"],
+      "@three-game-kit/client/camera": ["../../packages/client/src/camera.ts"],
+      "@three-game-kit/client/rendering": ["../../packages/client/src/rendering.ts"],
+      "@three-game-kit/shared/movement": ["../../packages/shared/src/movement.ts"]
     }
   },
   "include": ["src/**/*.ts"]

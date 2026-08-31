@@ -13,6 +13,7 @@ import {
   createClientRuntime,
   createRuntime,
 } from "@three-game-kit/client";
+import { createRenderingFeature } from "@three-game-kit/client/rendering";
 
 const configuration = defineFeatureConfiguration({
   defaultValue: () => Object.freeze({ enabled: true }),
@@ -262,6 +263,38 @@ test("Runtime preserves rollback and identical idempotent shutdown", async () =>
   assert.equal(await runtime.shutdown(), stopped);
   assert.equal(disposals, 1);
   assertNoLiveResources(runtime);
+});
+
+test("rendering feature accepts and owns a minimal render/dispose adapter", async () => {
+  const frameSource = createDeterministicPresentationFrameSource();
+  let renders = 0;
+  let disposals = 0;
+  const feature = createRenderingFeature({
+    renderer: {
+      render() {
+        renders += 1;
+      },
+      dispose() {
+        disposals += 1;
+      },
+    },
+  });
+  const runtime = createClientRuntime({ features: [feature], frameSource });
+  assert.equal((await runtime.boot()).state, "running");
+  assert.deepEqual(runtime.startPresentation(), { ok: true, value: true });
+  assert.equal(frameSource.deliver(8), true);
+  assert.equal(renders, 1);
+  await runtime.shutdown();
+  assert.equal(disposals, 1);
+
+  assert.throws(
+    () => createRenderingFeature({ renderer: { render() {} } }),
+    /options are invalid/,
+  );
+  assert.throws(
+    () => createRenderingFeature({ renderer: { dispose() {} } }),
+    /options are invalid/,
+  );
 });
 
 test("browser presentation adapter maps one request, timestamp, and cancel", () => {

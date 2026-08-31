@@ -41,7 +41,7 @@ Import from `@three-game-kit/client/input`.
 | Contract | Implemented value |
 | --- | --- |
 | Descriptor ID | `movement-input` |
-| Purpose | Sample and publish one validated semantic movement command per simulation tick. |
+| Purpose | Sample movement and optionally drain caller-defined one-shot semantic actions per simulation tick. |
 | System | `movement-input-sample`, `client-simulation`, phase `action-sample`, priority `0` |
 | Requirements / conflicts | None / none |
 | Runtime configuration | Empty object only; default `{}`; no fields or bounds |
@@ -49,17 +49,23 @@ Import from `@three-game-kit/client/input`.
 
 Factory options are `input`, a borrowed `MovementCommandSource` with `sample()`, and `publish`, a
 caller-owned callback. On each active tick the Feature calls `sample()`, validates and copies the
-result as a finite bounded Shared `move` command, then calls `publish`. The Feature does not retain a
-command history or apply movement.
+result as a finite bounded Shared `move` command, then calls `publish`. This existing movement-only
+call shape and behavior are unchanged.
 
-The caller owns and disposes the input source. In particular, a `MovementInput` remains caller-owned,
-and a keyboard adapter owns its two keyboard listeners until the caller disposes it. Feature
-disposal only disables later sampling/publication; it does not dispose the source or callback.
-There are no setup acquisitions beyond the activated-system ledger record.
+Callers may additionally supply both `actions`, a borrowed `SemanticActionSource`, and
+`publishAction`. `createSemanticActionInput(allowedActions, { capacity })` creates a caller-owned
+FIFO source whose allowed names are validated when it is created and whose `press()` rejects unknown
+names. Its capacity defaults to 32; `press()` returns `false` instead of growing beyond that bound.
+The action queue is drained once in the same `action-sample` system after movement publication.
+
+The caller owns and disposes movement and action sources. `SemanticActionInput.reset()` clears its
+queue, while reset and dispose are idempotent. A keyboard adapter owns its two keyboard listeners
+until the caller disposes it. Feature disposal only disables later sampling/publication; it does not
+dispose either source or callback. There are no setup acquisitions beyond the activated-system
+ledger record.
 
 This is semantic local input, not authorization. Published commands are not trusted server state,
-network messages, input buffering, rebinding, pointer/gamepad input, or an authoritative movement
-decision.
+network messages, rebinding, pointer/gamepad input, or an authoritative gameplay decision.
 
 ## `createCollisionFeature`
 
@@ -103,8 +109,9 @@ Import from `@three-game-kit/client/camera`.
 | Runtime configuration | Empty object only; default `{}`; no fields or bounds |
 | Server phase / authority | Not applicable; presentation-only client Feature |
 
-Factory options contain exactly `readTarget`, `configuration`, and `publish`. `readTarget` must
-return exactly finite `x`, `y`, and `z` components. The captured camera configuration has exactly:
+Factory options contain exactly `readTarget`, `publish`, and either a static `configuration` or a
+`readConfiguration` callback. `readTarget` must return exactly finite `x`, `y`, and `z` components.
+Each camera configuration has exactly:
 
 | Field | Constraint and default |
 | --- | --- |
@@ -113,9 +120,11 @@ return exactly finite `x`, `y`, and `z` components. The captured camera configur
 | `lookAtHeight` | Finite number; no default |
 | `yawRadians` | Finite number in radians; no default or normalized range |
 
-The configuration is copied and frozen when the factory is called. Each active frame reads the
-latest target, computes position from distance and yaw, offsets vertical position by `height`,
-offsets the look-at point by `lookAtHeight`, and publishes copied finite vectors.
+A static configuration is validated, copied, and frozen when the factory is called. With
+`readConfiguration`, each active presentation frame reads and validates a fresh configuration;
+this supports dynamic yaw and debug camera settings. Each frame reads the latest target, computes
+position from distance and yaw, offsets vertical position by `height`, offsets the look-at point by
+`lookAtHeight`, and publishes copied finite vectors.
 
 The caller owns the target state and callbacks. The Feature owns no camera object or external
 resource; setup only activates its system and disposal disables reads and publication. It does not
@@ -135,9 +144,11 @@ Import from `@three-game-kit/client/rendering`.
 | Runtime configuration | Empty object only; default `{}`; no fields or bounds |
 | Server phase / authority | Not applicable; presentation-only client Feature |
 
-The sole factory option is an owned `ClientRendererAdapter`. The adapter must implement avatar asset
-attachment, avatar and camera updates, resize, render, snapshot, and disposal. The Feature's system
-only calls `render()`; callers and other client callbacks drive the other adapter methods.
+The sole factory option is an owned `RenderingFeatureAdapter`, whose complete contract is `render()`
+and `dispose()`. This permits callers to supply their own Three.js scene adapter. The bundled
+`ClientRendererAdapter` remains compatible and additionally implements avatar asset attachment,
+avatar and camera updates, resize, and snapshot operations; callers and other client callbacks
+drive those additional methods.
 
 After successful setup, the Feature owns and disposes the renderer exactly once. The public Three.js
 adapter releases its WebGL renderer, owned scene objects, geometries, and materials. Attached glTF

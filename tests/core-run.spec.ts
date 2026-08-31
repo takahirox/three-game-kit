@@ -1,5 +1,8 @@
 import { expect, test, type Page } from "@playwright/test";
-import { ticksFromSeconds } from "../showcases/core-run/src/feature.js";
+import {
+  CORE_RUN_STANDARD_FEATURE_ID,
+  ticksFromSeconds,
+} from "../showcases/core-run/src/feature.js";
 import { CORE_PLACEMENTS, CORE_VALUES } from "../showcases/core-run/src/features/cores.js";
 import {
   BASE_POSITION,
@@ -92,6 +95,10 @@ interface RendererInspection {
   readonly width: number;
   readonly height: number;
   readonly disposed: boolean;
+  readonly cameraTransform: {
+    readonly position: Vec3;
+    readonly lookAt: Vec3;
+  };
 }
 
 function eventsOfKind<K extends TelemetryEvent["kind"]>(
@@ -298,6 +305,50 @@ test.describe("Core Run showcase", () => {
     expect(snapshot.score).toEqual({ score: 0, deposits: 0 });
     expect(await readEvents(page)).toEqual([]);
 
+    const runtime = await page.evaluate(() =>
+      (Reflect.get(window, "__CORE_RUN__") as CoreRunTestHandle).inspectRuntime(),
+    );
+    expect(runtime).toEqual({
+      lifecycleState: "running",
+      installedFeatureIds: [
+        CORE_RUN_STANDARD_FEATURE_ID,
+        "movement-input",
+        "core-run.round-timer",
+        "core-run.movement",
+        "collision",
+        "core-run.hazard",
+        "core-run.jump-pad",
+        "core-run.moving-platform",
+        "core-run.deposit",
+        "core-run.cores",
+        "third-person-camera",
+        "three-rendering",
+      ],
+      scheduleSystemIds: [
+        "movement-input-sample",
+        `${CORE_RUN_STANDARD_FEATURE_ID}.step`,
+        "core-run.round-timer.step",
+        "core-run.movement.step",
+        "collision-shared-predict",
+        "core-run.hazard.step",
+        "core-run.jump-pad.step",
+        "core-run.moving-platform.step",
+        "core-run.deposit.step",
+        "core-run.cores.step",
+        "third-person-camera-view",
+        "three-render-frame",
+      ],
+      schedulerTick: 0,
+      gameTick: 0,
+      semanticActionsPublished: 0,
+      movementTranslationCount: 0,
+      collisionMoveCount: 0,
+      collisionContactCount: 0,
+      collisionAdapterDisposed: false,
+      presentationFrameCount: 1,
+      rendererDisposed: false,
+    });
+
     await expect(page.locator("#overlay-title")).toHaveText("CORE RUN");
     await expect(page.locator("#start-button")).toBeVisible();
     await expect(page.locator("#results")).toBeHidden();
@@ -338,6 +389,50 @@ test.describe("Core Run showcase", () => {
     expect(inspection.hasWebgl).toBe(true);
     expect(inspection.has2d).toBe(false);
 
+    await expectNoErrors(page, diagnostics);
+  });
+
+  test("runs public camera-view before rendering with dynamic semantic yaw", async ({ page }) => {
+    const diagnostics = await bootCoreRun(page);
+    const before = await page.evaluate(() => {
+      const handle = Reflect.get(window, "__CORE_RUN__") as CoreRunTestHandle;
+      return {
+        renderer: handle.inspectRenderer(),
+        runtime: handle.inspectRuntime(),
+      };
+    });
+
+    await setInput(page, { cameraYaw: Math.PI / 2 });
+    const after = await page.evaluate(() => {
+      const handle = Reflect.get(window, "__CORE_RUN__") as CoreRunTestHandle;
+      return {
+        renderer: handle.inspectRenderer(),
+        runtime: handle.inspectRuntime(),
+      };
+    });
+
+    expect(before.runtime?.installedFeatureIds).toContain("third-person-camera");
+    expect(before.runtime?.installedFeatureIds).toContain("three-rendering");
+    expect(before.runtime?.scheduleSystemIds.slice(-2)).toEqual([
+      "third-person-camera-view",
+      "three-render-frame",
+    ]);
+    expect(before.renderer?.cameraTransform.position).toEqual({
+      x: 0,
+      y: 9.2,
+      z: 19,
+    });
+    expect(after.renderer?.cameraTransform.position.x).toBeCloseTo(13, 9);
+    expect(after.renderer?.cameraTransform.position.y).toBeCloseTo(9.2, 9);
+    expect(after.renderer?.cameraTransform.position.z).toBeCloseTo(6, 9);
+    expect(after.renderer?.cameraTransform.lookAt).toEqual({
+      x: 0,
+      y: 1.2,
+      z: 6,
+    });
+    expect(after.runtime?.presentationFrameCount).toBeGreaterThan(
+      before.runtime?.presentationFrameCount ?? 0,
+    );
     await expectNoErrors(page, diagnostics);
   });
 
@@ -384,6 +479,12 @@ test.describe("Core Run showcase", () => {
     // Dash: burst along facing, cooldown gates a second dash until it expires.
     await press(page, "dash");
     await stepTicks(page, 1);
+    expect(
+      (await page.evaluate(() =>
+        (Reflect.get(window, "__CORE_RUN__") as CoreRunTestHandle)
+          .inspectRuntime(),
+      ))?.semanticActionsPublished,
+    ).toBeGreaterThanOrEqual(2);
     const dashing = await readSnapshot(page);
     expect(eventsOfKind(await readEvents(page), "dash")).toHaveLength(1);
     expect(dashing.player.dashTicks).toBe(DASH_TICKS - 1);
@@ -434,6 +535,33 @@ test.describe("Core Run showcase", () => {
     await expect(page.locator("#hud-combo-label")).toHaveText("x1");
 
     await page.screenshot({ path: testInfo.outputPath("core-run-running.png") });
+    await expectNoErrors(page, diagnostics);
+  });
+
+  test("routes browser keyboard movement through the installed input Feature", async ({ page }) => {
+    const diagnostics = await bootCoreRun(page);
+    await startRound(page);
+
+    await page.locator("#game-canvas").focus();
+    await page.keyboard.down("KeyW");
+    await stepTicks(page, 15);
+    const moving = await readSnapshot(page);
+    expect(moving.player.velocity.z).toBeCloseTo(-MAX_SPEED, 6);
+    expect(moving.player.position.z).toBeLessThan(PLAYER_SPAWN.z);
+
+    await page.keyboard.up("KeyW");
+    await stepTicks(page, SETTLE_TICKS);
+    expect(horizontalSpeed(await readSnapshot(page))).toBe(0);
+    const runtime = await page.evaluate(() =>
+        (Reflect.get(window, "__CORE_RUN__") as CoreRunTestHandle).inspectRuntime(),
+    );
+    expect(runtime?.installedFeatureIds).toContain("movement-input");
+    expect(runtime?.installedFeatureIds).toContain("collision");
+    expect(runtime?.scheduleSystemIds).toContain("collision-shared-predict");
+    expect(runtime?.movementTranslationCount).toBeGreaterThan(0);
+    expect(runtime?.collisionMoveCount).toBe(runtime?.movementTranslationCount);
+    expect(runtime?.collisionContactCount).toBeGreaterThan(0);
+    expect(runtime?.collisionAdapterDisposed).toBe(false);
     await expectNoErrors(page, diagnostics);
   });
 
@@ -700,7 +828,7 @@ test.describe("Core Run showcase", () => {
       rafHandle: null,
       pointerDragging: false,
       hostDisposed: false,
-      game: { activeListeners: 1, activeSubscriptions: 7, activeTimers: 0 },
+      game: { activeListeners: 1, activeSubscriptions: 12, activeTimers: 0 },
     });
     expect(before.renderer?.frames).toBeGreaterThan(0);
 
@@ -719,6 +847,7 @@ test.describe("Core Run showcase", () => {
       handle.dispose();
       return {
         leaks: handle.inspectLeaks(),
+        runtime: handle.inspectRuntime(),
         ready: handle.ready,
         screenshotReady: handle.screenshotReady,
         status: handle.status,
@@ -735,26 +864,61 @@ test.describe("Core Run showcase", () => {
       renderer: {
         frames: expect.any(Number),
         drawCalls: expect.any(Number),
-        activeParticles: 0,
-        activePopups: 0,
+        activeParticles: expect.any(Number),
+        activePopups: expect.any(Number),
         eventsConsumed: expect.any(Number),
       },
     });
+    expect(disposed.runtime?.lifecycleState).toBe("shutting-down");
+    expect(disposed.runtime?.installedFeatureIds).toHaveLength(0);
     expect(disposed.ready).toBe(false);
     expect(disposed.screenshotReady).toBe(false);
     expect(disposed.status).toBe("Core Run host disposed");
     expect(disposed.stepsAfterDispose).toBe(0);
     await expect(page.locator("#status")).toHaveText("Core Run host disposed");
+    await expect
+      .poll(() =>
+        page.evaluate(() => {
+          const handle = Reflect.get(window, "__CORE_RUN__") as CoreRunTestHandle;
+          return {
+            lifecycle: handle.inspectRuntime()?.lifecycleState,
+            collisionDisposed:
+              handle.inspectRuntime()?.collisionAdapterDisposed,
+            rendererDisposed: handle.inspectRenderer()?.disposed,
+            activeParticles: handle.inspectLeaks().renderer?.activeParticles,
+            activePopups: handle.inspectLeaks().renderer?.activePopups,
+          };
+        }),
+      )
+      .toEqual({
+        lifecycle: "stopped",
+        collisionDisposed: true,
+        rendererDisposed: true,
+        activeParticles: 0,
+        activePopups: 0,
+      });
 
-    const restarted = await page.evaluate(() => {
+    await page.evaluate(() => {
       const handle = Reflect.get(window, "__CORE_RUN__") as CoreRunTestHandle;
       handle.restart();
+    });
+    await expect
+      .poll(() =>
+        page.evaluate(
+          () =>
+            (Reflect.get(window, "__CORE_RUN__") as CoreRunTestHandle).ready,
+        ),
+      )
+      .toBe(true);
+    const restarted = await page.evaluate(() => {
+      const handle = Reflect.get(window, "__CORE_RUN__") as CoreRunTestHandle;
       return {
         ready: handle.ready,
         screenshotReady: handle.screenshotReady,
         status: handle.status,
         leaks: handle.inspectLeaks(),
         events: handle.events(),
+        runtime: handle.inspectRuntime(),
       };
     });
     expect(restarted.ready).toBe(true);
@@ -767,9 +931,18 @@ test.describe("Core Run showcase", () => {
       rafHandle: null,
       pointerDragging: false,
       hostDisposed: false,
-      game: { activeListeners: 1, activeSubscriptions: 7, activeTimers: 0 },
+      game: { activeListeners: 1, activeSubscriptions: 12, activeTimers: 0 },
       renderer: { frames: 1, activeParticles: 0, activePopups: 0, eventsConsumed: 0 },
     });
+    expect(restarted.runtime?.lifecycleState).toBe("running");
+    expect(restarted.runtime?.installedFeatureIds[0]).toBe(CORE_RUN_STANDARD_FEATURE_ID);
+    expect(restarted.runtime?.schedulerTick).toBe(0);
+    expect(restarted.runtime?.gameTick).toBe(0);
+    expect(restarted.runtime?.semanticActionsPublished).toBe(0);
+    expect(restarted.runtime?.movementTranslationCount).toBe(0);
+    expect(restarted.runtime?.collisionMoveCount).toBe(0);
+    expect(restarted.runtime?.collisionContactCount).toBe(0);
+    expect(restarted.runtime?.collisionAdapterDisposed).toBe(false);
     const clean = await readSnapshot(page);
     expect(clean.phase).toBe("title");
     expect(clean.tick).toBe(0);

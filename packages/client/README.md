@@ -14,12 +14,22 @@ Client provides the browser runtime plus rendering, semantic input, third-person
 - `@three-game-kit/client/replication`
 
 ```js
-import { createMovementInput } from "@three-game-kit/client/input";
+import {
+  createMovementInput,
+  createSemanticActionInput,
+} from "@three-game-kit/client/input";
 
 const input = createMovementInput();
+const actions = createSemanticActionInput(["jump", "dash", "interact"]);
 input.setMovement(0, 1);
+actions.press("jump");
 input.dispose();
+actions.dispose();
 ```
+
+Semantic action inputs are caller-owned bounded FIFO queues. `drain()` returns
+each queued one-shot action once; `reset()` clears queued actions, and
+`dispose()` is idempotent.
 
 ## Ownership and disposal
 
@@ -29,7 +39,7 @@ The Client Runtime owns presentation scheduling, its Core World, installed clien
 
 - Presentation uses an injected frame source with independent simulation and presentation clocks.
 - Rendering covers a Three.js scene, static obstacles, and one glTF avatar with at most one animation clip.
-- Input covers semantic movement from keyboard or programmable sources; collision covers a capsule against a static scene.
+- Input covers semantic movement plus bounded caller-defined one-shot actions from programmable sources; collision covers a capsule against a static scene.
 - Networking uses the version 1 WebSocket protocol with owner prediction/reconciliation and peer interpolation.
 
 See the [Three Game Kit repository documentation](https://github.com/takahirox/three-game-kit#documentation) for client runtime, lifecycle, and environment contracts.

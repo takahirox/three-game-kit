@@ -16,9 +16,12 @@ import {
 import {
   createInputFeature,
   createMovementInput,
+  createSemanticActionInput,
   type InputFeatureOptions,
   type MovementCommandSource,
   type MovementInput,
+  type SemanticActionInput,
+  type SemanticActionSource,
 } from "@three-game-kit/client/input";
 import {
   createCameraFeature,
@@ -40,6 +43,7 @@ import {
   createRenderingFeature,
   createThreeRenderer,
   type ClientRendererAdapter,
+  type RenderingFeatureAdapter,
   type RendererCameraTransform,
   type RendererVector3,
   type RenderingSnapshot,
@@ -150,7 +154,18 @@ function exerciseM2ClientSubpaths(canvas: unknown): void {
       movementInput.setMovement(command);
     },
   };
-  const inputFeature = createInputFeature(inputOptions);
+  const actions: SemanticActionInput<"jump" | "dash"> =
+    createSemanticActionInput(["jump", "dash"]);
+  const actionSource: SemanticActionSource<"jump" | "dash"> = actions;
+  const actionInputOptions: InputFeatureOptions = {
+    ...inputOptions,
+    actions: actionSource,
+    publishAction(action) {
+      const semanticAction: string = action;
+      void semanticAction;
+    },
+  };
+  const inputFeature = createInputFeature(actionInputOptions);
 
   const cameraTarget: CameraVector3 = { x: 0, y: 1, z: 0 };
   const cameraConfiguration: ThirdPersonCameraConfiguration = {
@@ -170,6 +185,14 @@ function exerciseM2ClientSubpaths(canvas: unknown): void {
     },
   };
   const cameraFeature = createCameraFeature(cameraOptions);
+  const dynamicCameraOptions: CameraFeatureOptions = {
+    readTarget: () => cameraTarget,
+    readConfiguration: () => cameraConfiguration,
+    publish(transform) {
+      void transform;
+    },
+  };
+  const dynamicCameraFeature = createCameraFeature(dynamicCameraOptions);
 
   const collisionAdapter: ClientCollisionAdapter =
     createRapierCollisionAdapter({
@@ -206,6 +229,13 @@ function exerciseM2ClientSubpaths(canvas: unknown): void {
   renderer.setCameraTransform(rendererCameraTransform);
   const renderingSnapshot: RenderingSnapshot = renderer.snapshot();
   const renderingFeature = createRenderingFeature({ renderer });
+  const renderingAdapter: RenderingFeatureAdapter = {
+    render() {},
+    dispose() {},
+  };
+  const customRenderingFeature = createRenderingFeature({
+    renderer: renderingAdapter,
+  });
 
   const assetCause: AssetCause = {
     name: "Error",
@@ -237,11 +267,13 @@ function exerciseM2ClientSubpaths(canvas: unknown): void {
   void inputFeature;
   void cameraTransform;
   void cameraFeature;
+  void dynamicCameraFeature;
   void collisionOutcome;
   void collisionFailure;
   void collisionFeature;
   void renderingSnapshot;
   void renderingFeature;
+  void customRenderingFeature;
   void loadOutcome;
   void pendingLoad;
 }

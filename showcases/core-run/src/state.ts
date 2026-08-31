@@ -76,6 +76,9 @@ export interface CoreRunState {
   score: ScoreState;
   combo: ComboState;
   platform: PlatformState;
+  movementStart: Vec3;
+  desiredTranslation: Vec3;
+  movementTranslationCount: number;
 }
 
 export type TelemetryEvent = Readonly<
@@ -160,5 +163,8 @@ export function createCoreRunState(): CoreRunState {
     score: { score: 0, deposits: 0 },
     combo: { count: 0, windowTicks: 0 },
     platform: { position: ZERO },
+    movementStart: PLAYER_SPAWN,
+    desiredTranslation: ZERO,
+    movementTranslationCount: 0,
   };
 }

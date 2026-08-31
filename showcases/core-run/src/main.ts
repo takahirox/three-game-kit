@@ -15,6 +15,7 @@ import {
   createCoreRunGame,
   type CoreRunGame,
   type CoreRunLeakCounters,
+  type CoreRunRuntimeInspection,
 } from "./game.js";
 import {
   createCoreRunRenderer,
@@ -75,6 +76,7 @@ export interface CoreRunTestHandle {
   restart(): void;
   inspectLeaks(): CoreRunLeakReport;
   inspectRenderer(): CoreRunRendererInspection | null;
+  inspectRuntime(): CoreRunRuntimeInspection | null;
 }
 
 declare global {
@@ -219,18 +221,17 @@ class CoreRunHost {
   private debugCamera = false;
   private deposits = 0;
   private bestCombo = 0;
-  private hasRendered = false;
   private isDisposed = false;
   private statusText = "";
 
   constructor(elements: HostElements, mode: HostMode) {
     this.mode = mode;
     this.el = elements;
-    this.game = createCoreRunGame();
     this.renderer = createCoreRunRenderer(
       elements.canvas,
       mode === "test" ? { devicePixelRatio: 1 } : {},
     );
+    this.game = createCoreRunGame({ renderer: this.renderer });
     this.comboWindowTicks = ticksFromSeconds(COMBO_WINDOW_SECONDS, this.game.dt);
     this.unsubscribe = this.game.subscribe((event) => this.onTelemetry(event));
     this.attachListeners();
@@ -244,7 +245,11 @@ class CoreRunHost {
   }
 
   get ready(): boolean {
-    return this.hasRendered && !this.isDisposed;
+    return (
+      this.renderer.screenshotReady &&
+      !this.isDisposed &&
+      this.game.inspectRuntime().lifecycleState === "running"
+    );
   }
 
   get disposed(): boolean {
@@ -333,6 +338,10 @@ class CoreRunHost {
     return this.renderer.inspect();
   }
 
+  inspectRuntime(): CoreRunRuntimeInspection {
+    return this.game.inspectRuntime();
+  }
+
   dispose(): void {
     if (this.isDisposed) return;
     this.isDisposed = true;
@@ -355,7 +364,6 @@ class CoreRunHost {
     this.keys.clear();
     this.pendingEvents.length = 0;
     this.unsubscribe();
-    this.renderer.dispose();
     this.game.dispose();
     this.setStatus("Core Run host disposed");
   }
@@ -373,7 +381,7 @@ class CoreRunHost {
         : 0;
       this.lastFrameMs = timestampMs;
       this.game.advance(elapsed);
-      this.render();
+      this.render(timestampMs);
     } catch (cause) {
       recordRuntimeError("host", messageOf(cause), this.game.snapshot().tick);
       this.setStatus(`Runtime error stopped the frame loop: ${messageOf(cause)}`);
@@ -382,13 +390,13 @@ class CoreRunHost {
     this.rafHandle = requestAnimationFrame(this.frame);
   };
 
-  private render(): void {
+  private render(timestampMs?: number): void {
     if (this.isDisposed) return;
     const snapshot = this.game.snapshot();
     const unseen = this.pendingEvents.splice(0, this.pendingEvents.length);
-    this.renderer.render(snapshot, unseen, this.cameraYaw, this.debugCamera);
+    this.renderer.prepareFrame(snapshot, unseen, this.debugCamera);
     this.updateDom(snapshot);
-    this.hasRendered = true;
+    this.game.present(timestampMs ?? snapshot.time * 1000);
   }
 
   private onTelemetry(event: TelemetryEvent): void {
@@ -695,6 +703,7 @@ function boot(): CoreRunTestHandle {
     inspectLeaks: () =>
       slot.host === null ? EMPTY_LEAK_REPORT : slot.host.inspectLeaks(),
     inspectRenderer: () => slot.host?.inspectRenderer() ?? null,
+    inspectRuntime: () => slot.host?.inspectRuntime() ?? null,
   };
 
   if (mode === "test" || slot.host === null) window.__CORE_RUN__ = handle;

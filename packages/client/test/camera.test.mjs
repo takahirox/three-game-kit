@@ -214,6 +214,45 @@ test("camera feature publishes once for each of 75 presentation-only frames", as
   assert.equal(runtime.tick, 0);
 });
 
+test("camera feature reads and validates fresh configuration each frame", async () => {
+  const frameSource = createDeterministicPresentationFrameSource();
+  let yawRadians = 0;
+  let configurationReads = 0;
+  const published = [];
+  const feature = createCameraFeature({
+    readTarget: () => ({ x: 0, y: 0, z: 0 }),
+    readConfiguration() {
+      configurationReads += 1;
+      return { ...CONFIGURATION, yawRadians };
+    },
+    publish(transform) {
+      published.push(transform);
+    },
+  });
+  const runtime = createClientRuntime({ features: [feature], frameSource });
+  assert.equal((await runtime.boot()).state, "running");
+  assert.deepEqual(runtime.startPresentation(), { ok: true, value: true });
+
+  assert.equal(frameSource.deliver(8), true);
+  yawRadians = Math.PI / 2;
+  assert.equal(frameSource.deliver(16), true);
+
+  assert.equal(configurationReads, 2);
+  assertVectorNear(published[0].position, { x: 0, y: 2, z: 4 });
+  assertVectorNear(published[1].position, { x: -4, y: 2, z: 0 });
+
+  yawRadians = Infinity;
+  assert.equal(frameSource.deliver(24), true);
+  const telemetry = runtime.snapshotTelemetry();
+  assert.equal(telemetry.structuredRuntimeErrorCount, 1);
+  assert.equal(telemetry.structuredRuntimeErrors[0].code, "system-threw");
+  assert.match(
+    telemetry.structuredRuntimeErrors[0].cause.message,
+    /Camera height, lookAtHeight, and yawRadians must be finite numbers/,
+  );
+  await runtime.shutdown();
+});
+
 test("camera feature validates its injected callbacks", () => {
   assert.throws(
     () => createCameraFeature({ configuration: CONFIGURATION, publish() {} }),
@@ -227,6 +266,15 @@ test("camera feature validates its injected callbacks", () => {
         },
         configuration: CONFIGURATION,
         publish: null,
+      }),
+    /options are invalid/,
+  );
+  assert.throws(
+    () =>
+      createCameraFeature({
+        readTarget: () => ({ x: 0, y: 0, z: 0 }),
+        readConfiguration: null,
+        publish() {},
       }),
     /options are invalid/,
   );

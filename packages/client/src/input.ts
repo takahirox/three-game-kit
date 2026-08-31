@@ -9,12 +9,23 @@ import {
   type MovementCommand,
 } from "@three-game-kit/shared";
 
+export const DEFAULT_SEMANTIC_ACTION_CAPACITY = 32;
+
 export class MovementInputDisposedError extends Error {
   readonly code = "movement-input-disposed";
 
   constructor() {
     super("Movement input has been disposed");
     this.name = "MovementInputDisposedError";
+  }
+}
+
+export class SemanticActionInputDisposedError extends Error {
+  readonly code = "semantic-action-input-disposed";
+
+  constructor() {
+    super("Semantic action input has been disposed");
+    this.name = "SemanticActionInputDisposedError";
   }
 }
 
@@ -80,6 +91,86 @@ export function createMovementInput(
     dispose(): void {
       if (disposed) return;
       current = IDLE_MOVEMENT_COMMAND;
+      disposed = true;
+    },
+  });
+}
+
+export interface SemanticActionSource<Action extends string = string> {
+  drain(): readonly Action[];
+}
+
+export interface SemanticActionInput<Action extends string = string>
+  extends SemanticActionSource<Action> {
+  press(action: Action): boolean;
+  reset(): void;
+  dispose(): void;
+}
+
+export interface SemanticActionInputOptions {
+  readonly capacity?: number;
+}
+
+export function createSemanticActionInput<const Action extends string>(
+  allowedActions: readonly Action[],
+  options: SemanticActionInputOptions = {},
+): SemanticActionInput<Action> {
+  if (!Array.isArray(allowedActions) || allowedActions.length === 0) {
+    throw new TypeError("Semantic action names must be a non-empty array");
+  }
+  const allowed = new Set<string>();
+  for (const action of allowedActions) {
+    if (
+      typeof action !== "string" ||
+      action.length === 0 ||
+      allowed.has(action)
+    ) {
+      throw new TypeError(
+        "Semantic action names must be unique non-empty strings",
+      );
+    }
+    allowed.add(action);
+  }
+  if (
+    typeof options !== "object" ||
+    options === null ||
+    (options.capacity !== undefined &&
+      (!Number.isInteger(options.capacity) || options.capacity <= 0))
+  ) {
+    throw new TypeError(
+      "Semantic action input capacity must be a positive integer",
+    );
+  }
+
+  const capacity = options.capacity ?? DEFAULT_SEMANTIC_ACTION_CAPACITY;
+  const queued: Action[] = [];
+  let disposed = false;
+
+  function requireActive(): void {
+    if (disposed) throw new SemanticActionInputDisposedError();
+  }
+
+  return Object.freeze({
+    press(action: Action): boolean {
+      requireActive();
+      if (typeof action !== "string" || !allowed.has(action)) {
+        throw new TypeError("Semantic action is not allowed");
+      }
+      if (queued.length === capacity) return false;
+      queued.push(action);
+      return true;
+    },
+    drain(): readonly Action[] {
+      requireActive();
+      return Object.freeze(queued.splice(0, queued.length));
+    },
+    reset(): void {
+      if (disposed) return;
+      queued.length = 0;
+    },
+    dispose(): void {
+      if (disposed) return;
+      queued.length = 0;
       disposed = true;
     },
   });
@@ -214,6 +305,8 @@ export function createKeyboardMovementAdapter(
 export interface InputFeatureOptions {
   readonly input: MovementCommandSource;
   readonly publish: (command: MovementCommand) => void;
+  readonly actions?: SemanticActionSource;
+  readonly publishAction?: (action: string) => void;
 }
 
 type InputFeatureConfiguration = Readonly<Record<string, never>>;
@@ -253,10 +346,25 @@ export function createInputFeature(
   ) {
     throw new TypeError("Input feature options are invalid");
   }
+  const hasActions = options.actions !== undefined;
+  const hasActionPublisher = options.publishAction !== undefined;
+  if (
+    hasActions !== hasActionPublisher ||
+    (hasActions &&
+      (typeof options.actions !== "object" ||
+        options.actions === null ||
+        typeof options.actions.drain !== "function" ||
+        typeof options.publishAction !== "function"))
+  ) {
+    throw new TypeError("Input feature action options are invalid");
+  }
 
   const input = options.input;
   const sample = input.sample;
   const publish = options.publish;
+  const actions = options.actions;
+  const drain = actions?.drain;
+  const publishAction = options.publishAction;
   let active = false;
 
   const contribution = Object.freeze({
@@ -270,12 +378,30 @@ export function createInputFeature(
       const command = immutableMovementCommand(sample.call(input));
       if (!active) return;
       publish(command);
+      if (
+        actions === undefined ||
+        drain === undefined ||
+        publishAction === undefined
+      ) {
+        return;
+      }
+      const drained = drain.call(actions);
+      if (!Array.isArray(drained)) {
+        throw new TypeError("Semantic action source must drain an array");
+      }
+      for (const action of drained) {
+        if (typeof action !== "string") {
+          throw new TypeError("Semantic actions must be strings");
+        }
+        if (!active) return;
+        publishAction(action);
+      }
     },
   });
 
   return Object.freeze({
     id: "movement-input",
-    description: "Samples and publishes one semantic movement command per tick",
+    description: "Samples movement and optionally drains semantic actions per tick",
     runtimeContributions: Object.freeze([contribution]),
     requires: Object.freeze([]),
     conflicts: Object.freeze([]),
