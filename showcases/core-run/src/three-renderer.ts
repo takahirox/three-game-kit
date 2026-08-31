@@ -4,6 +4,10 @@ import type {
   RenderingFeatureAdapter,
   RendererCameraTransform,
 } from "@three-game-kit/client/rendering";
+import {
+  createVfxRuntime,
+  type VfxRuntime,
+} from "@three-game-kit/client/vfx";
 import { CORE_PLACEMENTS } from "./features/cores.js";
 import { BASE_POSITION, BASE_RADIUS } from "./features/deposit.js";
 import { HAZARD_MAX, HAZARD_MIN } from "./features/hazard.js";
@@ -23,11 +27,10 @@ import type {
 /*
  * Core Run Three.js renderer: a real WebGL third-person neon arena view.
  *
- * - Meshes, lights, and effect pools are built once; render() only syncs
- *   transforms, visibility, and materials from the snapshot.
+ * - Meshes and lights are built once; render() only syncs transforms,
+ *   visibility, and materials from the snapshot.
  * - All motion derives from `snapshot.time`; no wall clocks are consulted.
- * - Particles/popups/trail are fixed-capacity rings seeded from telemetry
- *   events with a deterministic LCG; `Math.random` is never used.
+ * - Core Run telemetry is mapped to the public deterministic VFX runtime.
  * - The renderer owns no DOM listeners; the host calls `resize()`.
  */
 
@@ -64,6 +67,8 @@ export interface CoreRunRendererInspection {
 }
 
 export interface CoreRunRenderer extends RenderingFeatureAdapter {
+  /** Public VFX runtime attached to this renderer's scene. */
+  readonly vfx: VfxRuntime;
   prepareFrame(
     snapshot: CoreRunSnapshot,
     events: readonly TelemetryEvent[],
@@ -102,15 +107,6 @@ export function hashSeed(...values: readonly number[]): number {
   return h >>> 0;
 }
 
-/** Minimal LCG returning floats in [0, 1). */
-export function createLcg(seed: number): () => number {
-  let state = seed >>> 0 || 1;
-  return () => {
-    state = (Math.imul(state, 1664525) + 1013904223) >>> 0;
-    return state / 4294967296;
-  };
-}
-
 /* --------------------------------- palette --------------------------------- */
 
 const CORE_COLORS: Readonly<Record<CoreKind, number>> = Object.freeze({
@@ -126,39 +122,9 @@ const COLOR_NIGHT = 0x05020f;
 const DEBUG_DISTANCE = 34;
 const DEBUG_HEIGHT = 30;
 const PYLON_HEIGHT = 6;
-const PARTICLE_LIFE = 0.8;
-const POPUP_LIFE = 1.1;
-const TRAIL_LIFE = 0.35;
-
-interface Particle {
-  active: boolean;
-  born: number;
-  life: number;
-  x: number;
-  y: number;
-  z: number;
-  vx: number;
-  vy: number;
-  vz: number;
-  color: number;
-}
-
-interface Popup {
-  active: boolean;
-  born: number;
-  x: number;
-  y: number;
-  z: number;
-  color: number;
-}
-
-interface TrailPoint {
-  active: boolean;
-  born: number;
-  x: number;
-  y: number;
-  z: number;
-}
+const PARTICLE_LIFE_MS = 800;
+const POPUP_LIFE_MS = 1_100;
+const TRAIL_LIFE_MS = 350;
 
 function finite(value: number, fallback: number): number {
   return Number.isFinite(value) ? value : fallback;
@@ -171,11 +137,11 @@ function clampRatio(value: number): number {
 /* ---------------------------------- renderer --------------------------------- */
 
 class ThreeCoreRunRenderer implements CoreRunRenderer {
+  readonly vfx: VfxRuntime;
   private readonly renderer: THREE.WebGLRenderer;
   private readonly scene: THREE.Scene;
   private readonly camera: THREE.PerspectiveCamera;
   private snapshot: CoreRunSnapshot | null = null;
-  private events: readonly TelemetryEvent[] = Object.freeze([]);
   private debugCamera = false;
   private cameraTransform: RendererCameraTransform = Object.freeze({
     position: Object.freeze({ x: 0, y: 9.2, z: 13 }),
@@ -198,23 +164,10 @@ class ThreeCoreRunRenderer implements CoreRunRenderer {
   private readonly platformMaterial: THREE.MeshStandardMaterial;
   private readonly hazardMaterial: THREE.MeshStandardMaterial;
   private readonly sweepLine: THREE.LineSegments;
-  private readonly particlePoints: THREE.Points;
-  private readonly particlePosition: THREE.BufferAttribute;
-  private readonly particleColor: THREE.BufferAttribute;
-  private readonly trailPoints: THREE.Points;
-  private readonly trailPosition: THREE.BufferAttribute;
-  private readonly popupMeshes: THREE.Mesh[] = [];
-  private readonly popupMaterials: THREE.MeshBasicMaterial[] = [];
-  private readonly particles: Particle[] = [];
-  private readonly popups: Popup[] = [];
-  private readonly trail: TrailPoint[] = [];
-  private readonly scratchColor = new THREE.Color();
   private readonly focus = new THREE.Vector3();
   private readonly pixelRatioOverride: number | null;
-  private particleCursor = 0;
-  private popupCursor = 0;
-  private trailCursor = 0;
   private lastTrailTime = -1;
+  private lastTrailPosition: Vec3 | null = null;
   private frames = 0;
   private drawCalls = 0;
   private eventsConsumed = 0;
@@ -249,6 +202,13 @@ class ThreeCoreRunRenderer implements CoreRunRenderer {
       0.1,
       260,
     );
+    this.vfx = createVfxRuntime(this.scene, {
+      commandCapacity: 64,
+      burstEffectCapacity: 8,
+      trailEffectCapacity: TRAIL_CAPACITY,
+      popupEffectCapacity: POPUP_CAPACITY,
+      maxBurstParticles: 64,
+    });
 
     this.scene.add(new THREE.AmbientLight(0x3b2f6b, 1.1));
     const hemisphere = new THREE.HemisphereLight(
@@ -564,98 +524,6 @@ class ThreeCoreRunRenderer implements CoreRunRenderer {
     this.playerGroup.add(body, head, this.carriedMesh);
     this.scene.add(this.playerGroup);
 
-    for (let i = 0; i < PARTICLE_CAPACITY; i += 1) {
-      this.particles.push({
-        active: false,
-        born: 0,
-        life: PARTICLE_LIFE,
-        x: 0,
-        y: 0,
-        z: 0,
-        vx: 0,
-        vy: 0,
-        vz: 0,
-        color: 0xffffff,
-      });
-    }
-    this.particlePosition = new THREE.Float32BufferAttribute(
-      new Float32Array(PARTICLE_CAPACITY * 3),
-      3,
-    );
-    this.particleColor = new THREE.Float32BufferAttribute(
-      new Float32Array(PARTICLE_CAPACITY * 3),
-      3,
-    );
-    const particleGeometry = geo(new THREE.BufferGeometry());
-    particleGeometry.setAttribute("position", this.particlePosition);
-    particleGeometry.setAttribute("color", this.particleColor);
-    particleGeometry.setDrawRange(0, 0);
-    this.particlePoints = new THREE.Points(
-      particleGeometry,
-      mat(
-        new THREE.PointsMaterial({
-          size: 0.34,
-          vertexColors: true,
-          transparent: true,
-          depthWrite: false,
-          blending: THREE.AdditiveBlending,
-          fog: false,
-        }),
-      ),
-    );
-    this.particlePoints.frustumCulled = false;
-    this.scene.add(this.particlePoints);
-
-    for (let i = 0; i < TRAIL_CAPACITY; i += 1) {
-      this.trail.push({ active: false, born: 0, x: 0, y: 0, z: 0 });
-    }
-    this.trailPosition = new THREE.Float32BufferAttribute(new Float32Array(TRAIL_CAPACITY * 3), 3);
-    const trailGeometry = geo(new THREE.BufferGeometry());
-    trailGeometry.setAttribute("position", this.trailPosition);
-    trailGeometry.setDrawRange(0, 0);
-    this.trailPoints = new THREE.Points(
-      trailGeometry,
-      mat(
-        new THREE.PointsMaterial({
-          color: COLOR_PLAYER,
-          size: 0.26,
-          transparent: true,
-          opacity: 0.7,
-          depthWrite: false,
-          blending: THREE.AdditiveBlending,
-          fog: false,
-        }),
-      ),
-    );
-    this.trailPoints.frustumCulled = false;
-    this.scene.add(this.trailPoints);
-
-    const popupGeometry = geo(new THREE.PlaneGeometry(1.1, 0.26));
-    for (let i = 0; i < POPUP_CAPACITY; i += 1) {
-      this.popups.push({
-        active: false,
-        born: 0,
-        x: 0,
-        y: 0,
-        z: 0,
-        color: 0xffffff,
-      });
-      const material = mat(
-        new THREE.MeshBasicMaterial({
-          color: 0xffffff,
-          transparent: true,
-          opacity: 0,
-          depthWrite: false,
-          fog: false,
-        }),
-      );
-      const mesh = new THREE.Mesh(popupGeometry, material);
-      mesh.visible = false;
-      this.popupMaterials.push(material);
-      this.popupMeshes.push(mesh);
-      this.scene.add(mesh);
-    }
-
     this.resize();
   }
 
@@ -668,11 +536,12 @@ class ThreeCoreRunRenderer implements CoreRunRenderer {
   }
 
   counters(): RendererCounters {
+    const vfx = this.vfx.inspect();
     return Object.freeze({
       frames: this.frames,
       drawCalls: this.drawCalls,
-      activeParticles: this.particles.filter((p) => p.active).length,
-      activePopups: this.popups.filter((p) => p.active).length,
+      activeParticles: vfx.activeBurstCount,
+      activePopups: vfx.activePopupCount,
       eventsConsumed: this.eventsConsumed,
     });
   }
@@ -732,9 +601,6 @@ class ThreeCoreRunRenderer implements CoreRunRenderer {
   dispose(): void {
     if (this.isDisposed) return;
     this.isDisposed = true;
-    for (const particle of this.particles) particle.active = false;
-    for (const popup of this.popups) popup.active = false;
-    for (const point of this.trail) point.active = false;
     this.scene.clear();
     for (const geometry of this.geometries) geometry.dispose();
     this.geometries.length = 0;
@@ -750,8 +616,9 @@ class ThreeCoreRunRenderer implements CoreRunRenderer {
   ): void {
     if (this.isDisposed) return;
     this.snapshot = snapshot;
-    this.events = events;
     this.debugCamera = debugCamera;
+    this.enqueueEvents(snapshot, events);
+    this.enqueueTrail(snapshot);
   }
 
   render(): void {
@@ -759,12 +626,8 @@ class ThreeCoreRunRenderer implements CoreRunRenderer {
     const snapshot = this.snapshot;
     if (snapshot === null) return;
     const time = finite(snapshot.time, 0);
-    this.consumeEvents(snapshot, this.events, time);
-    this.events = Object.freeze([]);
-    this.recordTrail(snapshot, time);
     this.syncCamera(this.cameraTransform, this.debugCamera);
     this.syncWorld(snapshot, time);
-    this.syncEffects(time);
     this.renderer.render(this.scene, this.camera);
     this.drawCalls = this.renderer.info.render.calls;
     this.frames += 1;
@@ -773,10 +636,9 @@ class ThreeCoreRunRenderer implements CoreRunRenderer {
 
   /* -------------------------------- events -------------------------------- */
 
-  private consumeEvents(
+  private enqueueEvents(
     snapshot: CoreRunSnapshot,
     events: readonly TelemetryEvent[],
-    time: number,
   ): void {
     const p = snapshot.player.position;
     for (const event of events) {
@@ -785,38 +647,37 @@ class ThreeCoreRunRenderer implements CoreRunRenderer {
         case "corePickedUp": {
           const at = snapshot.cores[event.coreId]?.position ?? p;
           const color = CORE_COLORS[event.coreKind];
-          this.burst(hashSeed(event.tick, 1, event.coreId), at, 18, color, 3, time);
-          this.popup(at, color, time);
+          this.enqueueBurst(hashSeed(event.tick, 1, event.coreId), at, 18, color, 3);
+          this.enqueuePopup(hashSeed(event.tick, 11, event.coreId), at, color);
           break;
         }
-        case "coreDeposited":
-          this.burst(
+        case "coreDeposited": {
+          this.enqueueBurst(
             hashSeed(event.tick, 2, event.coreId),
             BASE_POSITION,
             36,
             COLOR_CYAN,
             4.5,
-            time,
           );
-          this.popup(BASE_POSITION, 0xffffff, time);
+          this.enqueuePopup(hashSeed(event.tick, 12, event.coreId), BASE_POSITION, 0xffffff);
           break;
+        }
         case "dash":
-          this.burst(hashSeed(event.tick, 3), p, 12, COLOR_PLAYER, 2.5, time);
+          this.enqueueBurst(hashSeed(event.tick, 3), p, 12, COLOR_PLAYER, 2.5);
           break;
         case "jumpPad":
-          this.burst(
+          this.enqueueBurst(
             hashSeed(event.tick, 4),
             JUMP_PAD_POSITION,
             24,
             COLOR_CYAN,
             8,
-            time,
           );
-          this.popup(JUMP_PAD_POSITION, COLOR_CYAN, time);
+          this.enqueuePopup(hashSeed(event.tick, 14), JUMP_PAD_POSITION, COLOR_CYAN);
           break;
         case "hazardEntered":
-          this.burst(hashSeed(event.tick, 5), p, 10, COLOR_MAGENTA, 1.5, time);
-          this.popup(p, COLOR_MAGENTA, time);
+          this.enqueueBurst(hashSeed(event.tick, 5), p, 10, COLOR_MAGENTA, 1.5);
+          this.enqueuePopup(hashSeed(event.tick, 15), p, COLOR_MAGENTA);
           break;
         default:
           break;
@@ -824,61 +685,56 @@ class ThreeCoreRunRenderer implements CoreRunRenderer {
     }
   }
 
-  private burst(
+  private enqueueBurst(
     seed: number,
     at: Vec3,
     count: number,
     color: number,
     speed: number,
-    time: number,
   ): void {
-    const rand = createLcg(seed);
-    const n = Math.min(count, PARTICLE_CAPACITY);
-    for (let i = 0; i < n; i += 1) {
-      const part = this.particles[this.particleCursor];
-      this.particleCursor = (this.particleCursor + 1) % PARTICLE_CAPACITY;
-      if (part === undefined) continue;
-      const theta = rand() * Math.PI * 2;
-      const up = rand();
-      const mag = speed * (0.4 + rand() * 0.6);
-      part.active = true;
-      part.born = time;
-      part.life = PARTICLE_LIFE * (0.6 + rand() * 0.6);
-      part.x = at.x;
-      part.y = at.y + 0.4;
-      part.z = at.z;
-      part.vx = Math.cos(theta) * mag;
-      part.vz = Math.sin(theta) * mag;
-      part.vy = mag * (0.5 + up);
-      part.color = color;
-    }
+    this.vfx.enqueue({
+      kind: "burst",
+      position: { x: at.x, y: at.y + 0.4, z: at.z },
+      count: Math.min(count, PARTICLE_CAPACITY),
+      color,
+      speed,
+      lifetimeMs: PARTICLE_LIFE_MS,
+      seed,
+    });
   }
 
-  private popup(at: Vec3, color: number, time: number): void {
-    const slot = this.popups[this.popupCursor];
-    this.popupCursor = (this.popupCursor + 1) % POPUP_CAPACITY;
-    if (slot === undefined) return;
-    slot.active = true;
-    slot.born = time;
-    slot.x = at.x;
-    slot.y = at.y + 1.2;
-    slot.z = at.z;
-    slot.color = color;
+  private enqueuePopup(seed: number, at: Vec3, color: number): void {
+    this.vfx.enqueue({
+      kind: "popup",
+      position: { x: at.x, y: at.y + 1.2, z: at.z },
+      color,
+      size: 1.1,
+      lifetimeMs: POPUP_LIFE_MS,
+      seed,
+    });
   }
 
-  private recordTrail(snapshot: CoreRunSnapshot, time: number): void {
+  private enqueueTrail(snapshot: CoreRunSnapshot): void {
+    const time = finite(snapshot.time, 0);
     const player = snapshot.player;
     const moving = Math.hypot(player.velocity.x, player.velocity.z) > 0.5;
-    if (!moving || time === this.lastTrailTime) return;
+    const current = Object.freeze({ ...player.position });
+    if (!moving || time === this.lastTrailTime) {
+      this.lastTrailPosition = current;
+      return;
+    }
+    const previous = this.lastTrailPosition ?? current;
     this.lastTrailTime = time;
-    const slot = this.trail[this.trailCursor];
-    this.trailCursor = (this.trailCursor + 1) % TRAIL_CAPACITY;
-    if (slot === undefined) return;
-    slot.active = true;
-    slot.born = time;
-    slot.x = player.position.x;
-    slot.y = player.position.y;
-    slot.z = player.position.z;
+    this.lastTrailPosition = current;
+    this.vfx.enqueue({
+      kind: "trail",
+      start: { x: previous.x, y: previous.y + 0.6, z: previous.z },
+      end: { x: current.x, y: current.y + 0.6, z: current.z },
+      color: COLOR_PLAYER,
+      width: 1,
+      lifetimeMs: TRAIL_LIFE_MS,
+      seed: hashSeed(snapshot.tick, 6),
+    });
   }
 
   /* ----------------------------- scene sync ------------------------------ */
@@ -955,62 +811,6 @@ class ThreeCoreRunRenderer implements CoreRunRenderer {
     }
   }
 
-  private syncEffects(time: number): void {
-    let particleCount = 0;
-    for (const part of this.particles) {
-      if (!part.active) continue;
-      const age = time - part.born;
-      if (age > part.life || age < 0) {
-        part.active = false;
-        continue;
-      }
-      this.particlePosition.setXYZ(
-        particleCount,
-        part.x + part.vx * age,
-        Math.max(0, part.y + part.vy * age - 12 * age * age),
-        part.z + part.vz * age,
-      );
-      this.scratchColor.setHex(part.color).multiplyScalar(1 - age / part.life);
-      this.particleColor.setXYZ(
-        particleCount,
-        this.scratchColor.r,
-        this.scratchColor.g,
-        this.scratchColor.b,
-      );
-      particleCount += 1;
-    }
-    this.particlePoints.geometry.setDrawRange(0, particleCount);
-    this.particlePosition.needsUpdate = true;
-    this.particleColor.needsUpdate = true;
-
-    let trailCount = 0;
-    for (const point of this.trail) {
-      if (!point.active) continue;
-      const age = time - point.born;
-      if (age > TRAIL_LIFE || age < 0) {
-        point.active = false;
-        continue;
-      }
-      this.trailPosition.setXYZ(trailCount, point.x, point.y + 0.6, point.z);
-      trailCount += 1;
-    }
-    this.trailPoints.geometry.setDrawRange(0, trailCount);
-    this.trailPosition.needsUpdate = true;
-
-    for (const [index, pop] of this.popups.entries()) {
-      const mesh = this.popupMeshes[index];
-      const material = this.popupMaterials[index];
-      if (mesh === undefined || material === undefined) continue;
-      const age = time - pop.born;
-      if (pop.active && (age > POPUP_LIFE || age < 0)) pop.active = false;
-      mesh.visible = pop.active;
-      if (!pop.active) continue;
-      mesh.position.set(pop.x, pop.y + age * 1.5, pop.z);
-      mesh.quaternion.copy(this.camera.quaternion);
-      material.color.setHex(pop.color);
-      material.opacity = 1 - age / POPUP_LIFE;
-    }
-  }
 }
 
 /** Creates a Three.js WebGL renderer bound to the Core Run canvas. */

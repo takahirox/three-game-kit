@@ -33,6 +33,10 @@
       "types": "./dist/camera.d.ts",
       "import": "./dist/camera.js"
     },
+    "./vfx": {
+      "types": "./dist/vfx.d.ts",
+      "import": "./dist/vfx.js"
+    },
     "./collision": {
       "types": "./dist/collision.d.ts",
       "import": "./dist/collision.js"

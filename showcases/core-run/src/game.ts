@@ -12,6 +12,7 @@ import {
 } from "@three-game-kit/client/input";
 import { createCameraFeature } from "@three-game-kit/client/camera";
 import { createRenderingFeature } from "@three-game-kit/client/rendering";
+import { createVfxFeature } from "@three-game-kit/client/vfx";
 import { Runtime as ClientRuntime } from "@three-game-kit/client";
 import {
   SIMULATION_DT_SECONDS,
@@ -275,6 +276,7 @@ class CoreRunGameImplementation implements CoreRunGame {
               }),
               publish: (transform) => this.renderer?.setCameraTransform(transform),
             }),
+            createVfxFeature({ runtime: this.renderer.vfx }),
             createRenderingFeature({ renderer: this.renderer }),
           ]);
     this.descriptors = Object.freeze([

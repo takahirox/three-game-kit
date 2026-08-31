@@ -78,11 +78,11 @@ are intentionally removed and are not release artifacts.
 
 ## M5 catalog and archive audits
 
-`test:m5-catalog` requires exactly five sorted Feature catalog entries: `collision`,
-`interaction`, `movement-input`, `third-person-camera`, and `three-rendering`. It
-checks their complete discovery metadata, all six public Feature IDs, all 16 public
+`test:m5-catalog` requires exactly six sorted Feature catalog entries: `collision`,
+`interaction`, `movement-input`, `third-person-camera`, `three-rendering`, and `vfx`. It
+checks their complete discovery metadata, all seven public Feature IDs, all 17 public
 package specifiers, example paths, first-party factories, and the consumer ownership
-of Interaction. The normative prose for the four client-only Features is
+of Interaction. The normative prose for the five client-only Features is
 [`client-features.md`](./features/client-features.md); Interaction is documented in
 [`interaction.md`](./features/interaction.md).
 

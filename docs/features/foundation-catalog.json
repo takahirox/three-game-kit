@@ -476,6 +476,78 @@
         "examples/local-browser/main.ts"
       ],
       "verificationCommand": "pnpm verify:m2"
+    },
+    {
+      "catalogId": "vfx",
+      "serverFeatureId": "not-applicable",
+      "clientFeatureId": "vfx",
+      "purpose": "Present deterministic bounded burst, trail, and floating popup effects before Three.js rendering.",
+      "ownership": "After successful setup the Feature owns the injected VfxRuntime, its Three.js group, pooled objects, geometries, and materials; the parent scene and submitted command values remain caller-owned.",
+      "runtimes": [
+        "client"
+      ],
+      "requires": {
+        "server": [],
+        "client": []
+      },
+      "conflicts": [],
+      "configuration": {
+        "runtime": {
+          "type": "object",
+          "default": {},
+          "bounds": {
+            "additionalProperties": false
+          }
+        },
+        "factoryInputs": {
+          "runtime": {
+            "type": "VfxRuntime",
+            "default": "not-applicable",
+            "bounds": "Must implement enqueue, present, inspect, and idempotent dispose. createVfxRuntime validates fixed positive capacities and copies every command."
+          }
+        }
+      },
+      "phases": {
+        "server": [],
+        "clientSimulation": [],
+        "clientPresentation": [
+          "render: vfx-present (priority -100)"
+        ]
+      },
+      "authority": {
+        "owner": "not-applicable",
+        "intent": "VFX is non-authoritative presentation data and never changes simulation or server state.",
+        "validation": [
+          "not-applicable"
+        ],
+        "rejectionReasons": [
+          "not-applicable"
+        ]
+      },
+      "lifecycle": {
+        "setup": "Setup acquires vfx-runtime as a renderResources ledger record and activates vfx-present. Failed setup rolls back the owned runtime.",
+        "dispose": "Disposal is idempotent, removes the owned group, disposes every owned geometry and material, clears queued commands, and releases retained references.",
+        "borrowedResources": [
+          "The parent Three.js Object3D remains caller-owned. Command objects are copied at enqueue and are not retained by reference."
+        ]
+      },
+      "limitations": [
+        "The runtime provides burst points, line trails, and billboard popup sprites only.",
+        "It does not provide audio, post-processing, camera shake, multiplayer replication, dynamic plugin discovery, or text layout.",
+        "Presentation requires explicit finite monotonic timestamps and deterministic unsigned 32-bit seeds.",
+        "Runtime configuration accepts only an empty object."
+      ],
+      "compatibilityRange": "^0.1.0",
+      "publicImports": {
+        "@three-game-kit/client": [
+          "@three-game-kit/client/vfx"
+        ]
+      },
+      "examplePaths": [
+        "showcases/core-run/src/game.ts",
+        "showcases/core-run/src/three-renderer.ts"
+      ],
+      "verificationCommand": "pnpm verify:m2"
     }
   ]
 }

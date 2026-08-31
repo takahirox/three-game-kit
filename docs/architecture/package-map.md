@@ -59,7 +59,7 @@ These and only these module specifiers are public:
 | `@three-game-kit/core` | `@three-game-kit/core` | None |
 | `@three-game-kit/shared` | `@three-game-kit/shared` | `@three-game-kit/shared/movement` |
 | `@three-game-kit/protocol` | `@three-game-kit/protocol` | None |
-| `@three-game-kit/client` | `@three-game-kit/client` | `@three-game-kit/client/rendering`, `@three-game-kit/client/input`, `@three-game-kit/client/camera`, `@three-game-kit/client/collision`, `@three-game-kit/client/assets`, `@three-game-kit/client/networking`, `@three-game-kit/client/replication` |
+| `@three-game-kit/client` | `@three-game-kit/client` | `@three-game-kit/client/rendering`, `@three-game-kit/client/input`, `@three-game-kit/client/camera`, `@three-game-kit/client/vfx`, `@three-game-kit/client/collision`, `@three-game-kit/client/assets`, `@three-game-kit/client/networking`, `@three-game-kit/client/replication` |
 | `@three-game-kit/server` | `@three-game-kit/server` | `@three-game-kit/server/collision`, `@three-game-kit/server/authoritative`, `@three-game-kit/server/networking` |
 
 Each specifier resolves through an explicit non-wildcard export to ESM JavaScript and matching

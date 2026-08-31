@@ -29,6 +29,7 @@ const packageContract = {
       "./rendering",
       "./input",
       "./camera",
+      "./vfx",
       "./collision",
       "./assets",
       "./networking",

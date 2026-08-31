@@ -47,12 +47,14 @@ const expectedCatalogIds = [
   "movement-input",
   "third-person-camera",
   "three-rendering",
+  "vfx",
 ];
 const clientFeatures = new Map([
   ["collision", { factory: "createCollisionFeature", subpath: "collision", source: "packages/client/src/collision.ts" }],
   ["movement-input", { factory: "createInputFeature", subpath: "input", source: "packages/client/src/input.ts" }],
   ["third-person-camera", { factory: "createCameraFeature", subpath: "camera", source: "packages/client/src/camera.ts" }],
   ["three-rendering", { factory: "createRenderingFeature", subpath: "rendering", source: "packages/client/src/rendering.ts" }],
+  ["vfx", { factory: "createVfxFeature", subpath: "vfx", source: "packages/client/src/vfx.ts", example: "showcases/core-run/src/game.ts" }],
 ]);
 const entryKeys = [
   "catalogId",
@@ -78,9 +80,9 @@ const catalog = await readJson("docs/features/foundation-catalog.json");
 assert.deepEqual(Object.keys(catalog), ["schemaVersion", "features"], "foundation catalog keys changed");
 assert.equal(catalog.schemaVersion, 1, "foundation catalog schemaVersion must be 1");
 assert.ok(Array.isArray(catalog.features), "foundation catalog features must be an array");
-assert.equal(catalog.features.length, 5, "foundation catalog must contain exactly five entries");
+assert.equal(catalog.features.length, 6, "foundation catalog must contain exactly six entries");
 assert.deepEqual(catalog.features.map(({ catalogId }) => catalogId), expectedCatalogIds, "catalog IDs must be sorted and exact");
-assert.equal(new Set(catalog.features.map(({ catalogId }) => catalogId)).size, 5, "catalog IDs must be unique");
+assert.equal(new Set(catalog.features.map(({ catalogId }) => catalogId)).size, 6, "catalog IDs must be unique");
 for (const feature of catalog.features) {
   assert.deepEqual(Object.keys(feature), entryKeys, `${feature.catalogId} top-level keys changed`);
 }
@@ -107,8 +109,8 @@ for (const directory of packageDirectories) {
   }
 }
 publicSpecifiers.sort();
-assert.equal(publicSpecifiers.length, 16, "package manifests must expose exactly 16 public specifiers");
-assert.equal(new Set(publicSpecifiers).size, 16, "public package specifiers must be unique");
+assert.equal(publicSpecifiers.length, 17, "package manifests must expose exactly 17 public specifiers");
+assert.equal(new Set(publicSpecifiers).size, 17, "public package specifiers must be unique");
 const publicSpecifierSet = new Set(publicSpecifiers);
 
 const clientManifest = manifests.get("@three-game-kit/client");
@@ -126,8 +128,11 @@ for (const [featureId, mapping] of clientFeatures) {
   const feature = catalog.features.find(({ catalogId }) => catalogId === featureId);
   assert.equal(feature.clientFeatureId, featureId, `${featureId} clientFeatureId changed`);
   assert.deepEqual(feature.publicImports, { "@three-game-kit/client": [`@three-game-kit/client/${mapping.subpath}`] });
-  assert.match(localBrowserSource, new RegExp(`from ["']@three-game-kit/client/${mapping.subpath}["']`, "u"), `local-browser must import ${mapping.subpath}`);
-  assert.match(localBrowserSource, new RegExp(`\\b${mapping.factory}\\s*\\(`, "u"), `local-browser must use ${mapping.factory}`);
+  const exampleSource = mapping.example === undefined
+    ? localBrowserSource
+    : await readFile(path.join(root, mapping.example), "utf8");
+  assert.match(exampleSource, new RegExp(`from ["']@three-game-kit/client/${mapping.subpath}["']`, "u"), `${featureId} example must import ${mapping.subpath}`);
+  assert.match(exampleSource, new RegExp(`\\b${mapping.factory}\\s*\\(`, "u"), `${featureId} example must use ${mapping.factory}`);
 }
 
 for (const feature of catalog.features) {
@@ -204,7 +209,7 @@ const listedFeatureIds = catalog.features.flatMap((feature) =>
 );
 assert.deepEqual(
   [...listedFeatureIds].sort(),
-  ["collision", "external.interaction.client", "external.interaction.server", "movement-input", "third-person-camera", "three-rendering"],
+  ["collision", "external.interaction.client", "external.interaction.server", "movement-input", "third-person-camera", "three-rendering", "vfx"],
   "all public Feature IDs must be covered exactly once",
 );
 assert.equal(new Set(listedFeatureIds).size, listedFeatureIds.length, "public Feature IDs must not be duplicated");

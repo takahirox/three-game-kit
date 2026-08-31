@@ -322,6 +322,7 @@ test.describe("Core Run showcase", () => {
         "core-run.deposit",
         "core-run.cores",
         "third-person-camera",
+        "vfx",
         "three-rendering",
       ],
       scheduleSystemIds: [
@@ -336,6 +337,7 @@ test.describe("Core Run showcase", () => {
         "core-run.deposit.step",
         "core-run.cores.step",
         "third-person-camera-view",
+        "vfx-present",
         "three-render-frame",
       ],
       schedulerTick: 0,
@@ -412,9 +414,11 @@ test.describe("Core Run showcase", () => {
     });
 
     expect(before.runtime?.installedFeatureIds).toContain("third-person-camera");
+    expect(before.runtime?.installedFeatureIds).toContain("vfx");
     expect(before.runtime?.installedFeatureIds).toContain("three-rendering");
-    expect(before.runtime?.scheduleSystemIds.slice(-2)).toEqual([
+    expect(before.runtime?.scheduleSystemIds.slice(-3)).toEqual([
       "third-person-camera-view",
+      "vfx-present",
       "three-render-frame",
     ]);
     expect(before.renderer?.cameraTransform.position).toEqual({
@@ -828,7 +832,7 @@ test.describe("Core Run showcase", () => {
       rafHandle: null,
       pointerDragging: false,
       hostDisposed: false,
-      game: { activeListeners: 1, activeSubscriptions: 12, activeTimers: 0 },
+      game: { activeListeners: 1, activeSubscriptions: 13, activeTimers: 0 },
     });
     expect(before.renderer?.frames).toBeGreaterThan(0);
 
@@ -931,7 +935,7 @@ test.describe("Core Run showcase", () => {
       rafHandle: null,
       pointerDragging: false,
       hostDisposed: false,
-      game: { activeListeners: 1, activeSubscriptions: 12, activeTimers: 0 },
+      game: { activeListeners: 1, activeSubscriptions: 13, activeTimers: 0 },
       renderer: { frames: 1, activeParticles: 0, activePopups: 0, eventsConsumed: 0 },
     });
     expect(restarted.runtime?.lifecycleState).toBe("running");

@@ -11,6 +11,7 @@ const allowedPackageImports = new Set([
   "@three-game-kit/client/collision",
   "@three-game-kit/client/input",
   "@three-game-kit/client/rendering",
+  "@three-game-kit/client/vfx",
   "@three-game-kit/core",
   "@three-game-kit/shared/movement",
 ]);

@@ -1,6 +1,6 @@
 # `@three-game-kit/client`
 
-Client provides the browser runtime plus rendering, semantic input, third-person camera, local collision, assets, networking, prediction, reconciliation, and peer interpolation.
+Client provides the browser runtime plus rendering, deterministic VFX, semantic input, third-person camera, local collision, assets, networking, prediction, reconciliation, and peer interpolation.
 
 ## Public imports
 
@@ -8,6 +8,7 @@ Client provides the browser runtime plus rendering, semantic input, third-person
 - `@three-game-kit/client/rendering`
 - `@three-game-kit/client/input`
 - `@three-game-kit/client/camera`
+- `@three-game-kit/client/vfx`
 - `@three-game-kit/client/collision`
 - `@three-game-kit/client/assets`
 - `@three-game-kit/client/networking`
@@ -30,6 +31,11 @@ actions.dispose();
 Semantic action inputs are caller-owned bounded FIFO queues. `drain()` returns
 each queued one-shot action once; `reset()` clears queued actions, and
 `dispose()` is idempotent.
+
+`@three-game-kit/client/vfx` provides fixed-capacity burst, trail, and floating
+popup pools. Callers submit copied commands with explicit unsigned seeds; the
+presentation scheduler supplies monotonic timestamps through `createVfxFeature`.
+Inspection reports queue/effect overflow, active effects, and live resources.
 
 ## Ownership and disposal
 

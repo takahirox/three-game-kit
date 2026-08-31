@@ -45,8 +45,8 @@ the test output must agree with the successful process result.
 
 ## Feature documentation and discovery
 
-- [x] The catalog contains exactly the five sorted entries `collision`, `interaction`,
-  `movement-input`, `third-person-camera`, and `three-rendering`.
+- [x] The catalog contains exactly the six sorted entries `collision`, `interaction`,
+  `movement-input`, `third-person-camera`, `three-rendering`, and `vfx`.
 - [x] Collision documentation matches its catalog metadata, public factory, ownership,
   phases, configuration, limitations, examples, and verification command.
 - [x] Interaction documentation matches its catalog metadata, consumer-owned factories,
@@ -58,8 +58,10 @@ the test output must agree with the successful process result.
   ownership, phase, configuration, limitations, examples, and verification command.
 - [x] Three Rendering documentation matches its catalog metadata, public factory,
   ownership, phase, configuration, limitations, examples, and verification command.
+- [x] VFX documentation matches its catalog metadata, public factory, deterministic
+  command/time contract, bounds, ownership, examples, and verification command.
 
-The four client-only Feature contracts are in
+The five client-only Feature contracts are in
 [`client-features.md`](./features/client-features.md); the Interaction contract is in
 [`interaction.md`](./features/interaction.md). `pnpm test:m5-catalog` checks the
 machine-readable catalog against the public factories, exports, examples, and M4
@@ -73,7 +75,7 @@ Interaction entry.
 - [x] Every archive has the expected package name, shared version `0.1.0`, exact
   package description, repository metadata, Node engine `24.x`, and `README.md`.
 - [x] Every declared public export has its JavaScript, declaration, and source-map
-  files, and the complete set remains exactly 16 public specifiers.
+  files, and the complete set remains exactly 17 public specifiers.
 - [x] Every archive declares `license: "UNLICENSED"`; no release note or checklist
   entry represents that field as a license grant.
 - [x] No archive contains workspace/local dependency specifiers, source or test

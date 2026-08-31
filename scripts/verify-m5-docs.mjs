@@ -198,6 +198,7 @@ const publicSpecifiers = [
   "@three-game-kit/client/rendering",
   "@three-game-kit/client/input",
   "@three-game-kit/client/camera",
+  "@three-game-kit/client/vfx",
   "@three-game-kit/client/collision",
   "@three-game-kit/client/assets",
   "@three-game-kit/client/networking",
@@ -213,7 +214,7 @@ for (const packageName of ["client", "core", "protocol", "server", "shared"]) {
 }
 
 const featureDocs = `${documents.get("docs/features/client-features.md") ?? ""}\n${documents.get("docs/features/interaction.md") ?? ""}`;
-requireAll(featureDocs, ["createInputFeature", "createCameraFeature", "createRenderingFeature", "createCollisionFeature", "Interaction"], "missing documented Feature");
+requireAll(featureDocs, ["createInputFeature", "createCameraFeature", "createRenderingFeature", "createVfxFeature", "createCollisionFeature", "Interaction"], "missing documented Feature");
 
 const narrative = documents.get("docs/architecture/cross-runtime-narrative.md") ?? "";
 const narrativeTerms = [
@@ -276,7 +277,7 @@ if (failures.length) {
     links: checkedLinks.length,
     requiredDocuments: requiredFiles.length,
     publicSpecifiers: publicSpecifiers.length,
-    features: 5,
+    features: 6,
     failures: 0
   }));
 }

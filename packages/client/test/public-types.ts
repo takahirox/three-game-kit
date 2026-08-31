@@ -49,6 +49,16 @@ import {
   type RenderingSnapshot,
 } from "@three-game-kit/client/rendering";
 import {
+  createVfxFeature,
+  createVfxRuntime,
+  type VfxBurstCommand,
+  type VfxCommand,
+  type VfxInspection,
+  type VfxRuntime,
+  type VfxRuntimeOptions,
+  type VfxSceneParent,
+} from "@three-game-kit/client/vfx";
+import {
   createGltfAvatarLoader,
   type AssetCause,
   type GltfAvatarAsset,
@@ -278,6 +288,39 @@ function exerciseM2ClientSubpaths(canvas: unknown): void {
   void pendingLoad;
 }
 void exerciseM2ClientSubpaths;
+
+function exerciseVfx(parent: VfxSceneParent): void {
+  const options: VfxRuntimeOptions = {
+    commandCapacity: 32,
+    burstEffectCapacity: 4,
+    trailEffectCapacity: 8,
+    popupEffectCapacity: 4,
+    maxBurstParticles: 64,
+  };
+  const runtime: VfxRuntime = createVfxRuntime(parent, options);
+  const burst: VfxBurstCommand = {
+    kind: "burst",
+    position: { x: 0, y: 1, z: 0 },
+    count: 12,
+    color: 0x38f0ff,
+    speed: 3,
+    lifetimeMs: 800,
+    seed: 42,
+  };
+  const command: VfxCommand = burst;
+  runtime.enqueue(command);
+  runtime.present(0);
+  const inspection: VfxInspection = runtime.inspect();
+  const feature: ClientFeatureDescriptor<unknown> = createVfxFeature({ runtime });
+
+  // @ts-expect-error VFX commands are readonly.
+  burst.seed = 7;
+  // @ts-expect-error VFX inspection counters are readonly.
+  inspection.counters.submittedCommandCount = 0;
+
+  void feature;
+}
+void exerciseVfx;
 
 function exerciseM3ClientSubpaths(): void {
   const networkingOptions: NativeClientTransportOptions = {

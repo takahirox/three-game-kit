@@ -24,6 +24,7 @@ lifecycle, and schedule inspected by the browser tests.
 | Semantic input | `@three-game-kit/client/input` validates movement commands and drains the bounded `jump` / `dash` / `interact` queue. Keyboard input and the AI handle use this same boundary. |
 | Movement and collision | `@three-game-kit/shared/movement` applies authority-neutral horizontal translation. `@three-game-kit/client/collision` owns the Rapier World, static arena floor, capsule controller, collision result, and grounding. |
 | Third-person camera | `@three-game-kit/client/camera` reads the player target and current semantic yaw each presentation frame and publishes the camera transform. |
+| Deterministic VFX | `@three-game-kit/client/vfx` owns bounded burst, trail, and popup pools, presents explicit-time seeded commands, exposes counters, and releases its Three.js resources. |
 | Three.js rendering lifecycle | `@three-game-kit/client/rendering` schedules `render()` and owns disposal of the Core Run scene adapter and its WebGL resources. |
 | Telemetry and errors | The Runtime telemetry store reports installed Features, schedules, frame/tick state, live resources, and structured runtime failures. |
 
@@ -32,7 +33,7 @@ lifecycle, and schedule inspected by the browser tests.
 | Capability | Game-specific responsibility |
 | --- | --- |
 | Game rules | Round/countdown, acceleration and gravity tuning, Dash, Energy Core pickup/carry, deposit/score/combo, Jump Pad, Moving Platform route/carry, and Hazard slow-zone behavior. |
-| Level and presentation content | Arena layout, meshes, lights, materials, deterministic VFX pools, HUD, overlays, results, and art direction. |
+| Level and presentation content | Arena layout, meshes, lights, materials, mapping game telemetry to generic VFX commands, HUD, overlays, results, and art direction. |
 | Host bindings | WASD/arrows, pointer yaw, buttons, focus/pointer-lock behavior, the normal-mode RAF pump, and semantic AI/QA controls. |
 | Deterministic acceptance scenario | Fixed core placement, exact-step controls, debug camera, snapshots, inspections, and screenshots used by Playwright. |
 
@@ -55,11 +56,11 @@ materials.
 
 - Mesh transforms and animation are derived from `CoreRunSnapshot` and
   `snapshot.time`; rendering never consults a wall clock or `Math.random`.
-- Particle, popup, and trail effects use deterministic fixed-capacity rings.
+- The public VFX Feature owns deterministic fixed-capacity burst, popup, and trail pools. Core Run only maps pickup, deposit, dash, jump-pad, hazard, and movement events to generic commands.
 - The showcase imports the public `three` package directly and does not
   deep-import Three Game Kit internals.
-- Runtime shutdown invokes the rendering adapter's idempotent `dispose()`,
-  releasing geometries, materials, scene objects, and the WebGL renderer.
+- Runtime shutdown invokes both VFX and rendering idempotent disposal, releasing
+  pooled and scene geometries, materials, objects, and the WebGL renderer.
 
 ## Premise and the 30-second flow
 
@@ -170,9 +171,10 @@ Open `/showcases/core-run/index.html?test=1`. In test mode:
 | `inspectRenderer()` | method | Read-only Three/WebGL proof: backend, live renderer/scene/camera flags, camera type, scene object/mesh/light counts, render size, and disposed state; returns `null` if the host did not boot. |
 
 Determinism guarantees: the simulation uses `SIMULATION_DT_SECONDS = 1/60`;
-the platform position is `platformPosition(time)`; the renderer seeds all
-particles from telemetry events with a hash + LCG and never calls
-`Math.random`; all motion derives from `snapshot.time`.
+the platform position is `platformPosition(time)`; Core Run hashes telemetry
+fields into explicit unsigned seeds and the public VFX runtime uses only those
+seeds and presentation timestamps. Neither layer calls `Math.random`; all
+motion derives from explicit simulation or presentation time.
 
 ## Telemetry events
 
@@ -195,8 +197,7 @@ carries `tick`. Kinds and extra fields:
 
 The game keeps the most recent 1024 events (`TELEMETRY_EVENT_CAPACITY`). The
 host forwards only events not yet seen by the renderer, buffered up to 1024
-(`PENDING_EVENT_CAPACITY`), which turns them into bounded particle bursts and
-score popups.
+(`PENDING_EVENT_CAPACITY`), which maps them to generic bounded VFX commands.
 
 ## Runtime error behaviour
 
@@ -213,9 +214,9 @@ The Playwright spec [`tests/core-run.spec.ts`](../../tests/core-run.spec.ts)
 drives the showcase exclusively through `?test=1` and `window.__CORE_RUN__`:
 
 - boots cleanly with 12 fixed cores and the expected values, and captures `core-run-title.png`;
-- verifies the public Runtime installs semantic input, collision, third-person camera, rendering, and every Core Run rule descriptor in one schedule;
+- verifies the public Runtime installs semantic input, collision, third-person camera, VFX, rendering, and every Core Run rule descriptor in one schedule;
 - proves the primary renderer owns a live WebGL context, a PerspectiveCamera, and non-empty Three scene/mesh/light counts, so a Canvas2D regression fails;
-- changes semantic yaw and proves `third-person-camera-view` runs before `three-render-frame` and updates the renderer transform;
+- changes semantic yaw and proves `third-person-camera-view`, `vfx-present`, then `three-render-frame` run in order while updating the renderer transform;
 - runs a deterministic round slice (countdown events `3, 2, 1, "go"`, acceleration to `MAX_SPEED`, jump, dash + cooldown gating, pickup and deposit of core 0) and captures `core-run-running.png`;
 - verifies the combo multiplier inside the window, `comboExpired` exactly when the window lapses, and the reset to x1 afterwards;
 - runs to `timeUp` and `results`, checks the results DOM, clicks **Retry**, and verifies the clean second round (captures `core-run-results.png`);

@@ -160,6 +160,36 @@ The renderer covers the local MVP scene. It does not provide post-processing, We
 generalized scene management, screenshot-golden guarantees, or server behavior. Rendering is never
 authoritative and presentation frames do not advance simulation.
 
+## `createVfxFeature`
+
+Import `createVfxRuntime` and `createVfxFeature` from `@three-game-kit/client/vfx`.
+
+| Contract | Implemented value |
+| --- | --- |
+| Descriptor ID | `vfx` |
+| Purpose | Present deterministic bounded burst, trail, and floating popup effects before scene rendering. |
+| System | `vfx-present`, `client-presentation`, phase `render`, priority `-100` |
+| Requirements / conflicts | None / none |
+| Runtime configuration | Empty object only; default `{}`; no fields or bounds |
+| Server phase / authority | Not applicable; presentation-only client Feature |
+
+`createVfxRuntime(parent, options)` accepts a caller-owned Three.js `Object3D` parent and creates
+one owned group containing fixed burst, trail, and popup pools. Capacities are positive bounded
+integers. Queue overflow drops the oldest pending command; effect overflow deterministically
+reuses the next ring slot. `inspect()` exposes submitted/presented/overflow/expiry counters, active
+effect counts, and live resource counts.
+
+Commands contain only copied finite vectors, bounded dimensions or particle counts, an unsigned
+24-bit color, a positive lifetime, and an explicit unsigned 32-bit seed. `present(timestampMs)`
+requires a finite, non-negative, monotonic presentation time. The implementation does not read a
+wall clock or call `Math.random`.
+
+After successful setup, `createVfxFeature` owns the runtime through the Feature ledger and presents
+it before `three-render-frame`. Shutdown is idempotent: queued commands and retained references are
+cleared, the group is detached, and every owned geometry and material is disposed. The parent scene
+remains borrowed. The bounded MVP excludes audio, post-processing, camera shake, multiplayer
+replication, text layout, and dynamic plugin discovery.
+
 ## Public-import composition
 
 This shortened composition mirrors the wiring in the
