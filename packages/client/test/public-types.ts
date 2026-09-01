@@ -123,6 +123,43 @@ import {
   type ClientReplicationOutcome,
   type ClientReplicationState,
 } from "@three-game-kit/client/replication";
+import {
+  createGameFlowClientFeature,
+  createHealthClientFeature,
+  createHudFeature,
+  createSpawnPrefabClientFeature,
+  createTriggerAreaClientFeature,
+  type HudAdapter,
+} from "@three-game-kit/client/gameplay";
+import {
+  createGameFlowRuntime,
+  createHealthRuntime,
+  createHudStateStore,
+  createSpawnPrefabRuntime,
+  createTriggerAreaRuntime,
+} from "@three-game-kit/shared/gameplay";
+
+const gameplayTrigger = createTriggerAreaRuntime([]);
+const gameplayHealth = createHealthRuntime();
+const gameplaySpawn = createSpawnPrefabRuntime([{ id: "entity" }], {
+  create: () => ({}), reuse() {}, release() {},
+});
+const gameplayFlow = createGameFlowRuntime({ states: [{ id: "boot", allowedTo: [] }], initialState: "boot" });
+const gameplayHud = createHudStateStore();
+const gameplayHudAdapter: HudAdapter = {
+  disposed: false,
+  render() {},
+  inspect: () => ({ disposed: false, renderCount: 0, lastRevision: null, listenerActive: false }),
+  dispose() {},
+};
+const gameplayFeatures: readonly ClientFeatureDescriptor<unknown>[] = [
+  createTriggerAreaClientFeature({ runtime: gameplayTrigger, readActors: () => [], publish() {} }),
+  createHealthClientFeature({ runtime: gameplayHealth, publish() {} }),
+  createSpawnPrefabClientFeature(gameplaySpawn),
+  createGameFlowClientFeature(gameplayFlow),
+  createHudFeature({ store: gameplayHud, adapter: gameplayHudAdapter }),
+];
+void gameplayFeatures;
 
 const configuration = defineFeatureConfiguration({
   defaultValue: () => ({ enabled: true }),

@@ -23,6 +23,10 @@
       "types": "./dist/authoritative.d.ts",
       "import": "./dist/authoritative.js"
     },
+    "./gameplay": {
+      "types": "./dist/gameplay.d.ts",
+      "import": "./dist/gameplay.js"
+    },
     "./networking": {
       "types": "./dist/networking.d.ts",
       "import": "./dist/networking.js"

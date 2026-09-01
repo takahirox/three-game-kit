@@ -18,6 +18,10 @@
     "./movement": {
       "types": "./dist/movement.d.ts",
       "import": "./dist/movement.js"
+    },
+    "./gameplay": {
+      "types": "./dist/gameplay.d.ts",
+      "import": "./dist/gameplay.js"
     }
   },
   "dependencies": {

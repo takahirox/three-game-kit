@@ -78,15 +78,15 @@ are intentionally removed and are not release artifacts.
 
 ## M5 catalog and archive audits
 
-`test:m5-catalog` requires exactly ten sorted Feature catalog entries: `animation`,
-`asset-manager`, `audio`, `character-controller`, `collision`, `interaction`,
-`movement-input`, `third-person-camera`, `three-rendering`, and `vfx`. It
-checks their complete discovery metadata, all eleven public Feature IDs, all 21 public
+`test:m5-catalog` requires exactly fifteen sorted Feature catalog entries, including
+the five Priority A common-gameplay entries. It checks their complete discovery metadata,
+all twenty public Feature IDs, all 24 public
 package specifiers, example paths, first-party factories, and the consumer ownership
 of Interaction. The normative prose for the original client-only Features is
 [`client-features.md`](./features/client-features.md), Priority S is documented in
 [`standard-features.md`](./features/standard-features.md), and Interaction is documented
 in [`interaction.md`](./features/interaction.md).
+Priority A is documented in [`common-gameplay.md`](./features/common-gameplay.md).
 
 `test:m5-release` builds five temporary package archives for Client, Core, Protocol,
 Server, and Shared. It requires exactly five tarballs and audits each archive's

@@ -15,12 +15,15 @@ Client provides the browser runtime plus rendering, deterministic VFX, semantic 
 - `@three-game-kit/client/audio`
 - `@three-game-kit/client/animation`
 - `@three-game-kit/client/character-controller`
+- `@three-game-kit/client/gameplay`
 - `@three-game-kit/client/networking`
 - `@three-game-kit/client/replication`
 
 The Standard Feature ownership, authority, configuration, limitations, examples,
 and verification contract is documented in
 [`docs/features/standard-features.md`](../../docs/features/standard-features.md).
+Priority A gameplay wrappers and the DOM HUD adapter are documented in
+[`docs/features/common-gameplay.md`](../../docs/features/common-gameplay.md).
 
 ```js
 import {

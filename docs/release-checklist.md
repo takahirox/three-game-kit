@@ -75,7 +75,7 @@ Interaction entry.
 - [x] Every archive has the expected package name, shared version `0.1.0`, exact
   package description, repository metadata, Node engine `24.x`, and `README.md`.
 - [x] Every declared public export has its JavaScript, declaration, and source-map
-  files, and the complete set remains exactly 21 public specifiers.
+  files, and the complete set remains exactly 24 public specifiers.
 - [x] Every archive declares `license: "UNLICENSED"`; no release note or checklist
   entry represents that field as a license grant.
 - [x] No archive contains workspace/local dependency specifiers, source or test
