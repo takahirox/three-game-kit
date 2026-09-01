@@ -104,7 +104,11 @@ support for omitted capabilities. Normative details remain in the linked contrac
 
 ## Explicitly deferred presentation capabilities
 
-XR, audio, and postprocessing are explicitly deferred. The MVP provides no WebXR
-device/session behavior, spatial or non-spatial audio system, or render
-postprocessing pipeline, and successful experimentation with those capabilities
-does not create a support commitment.
+XR and postprocessing are explicitly deferred. The kit provides no WebXR
+device/session behavior or render postprocessing pipeline, and successful
+experimentation with those capabilities does not create a support commitment.
+
+The optional Audio Standard Feature provides bounded Web Audio playback, buses,
+unlock handling, positional source hooks, and a silent fallback. It does not own
+listener orientation policy, arbitrary audio graphs, streaming, codecs, or the
+caller's AudioContext lifecycle.

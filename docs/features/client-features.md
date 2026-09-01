@@ -1,5 +1,9 @@
 # Client Features
 
+The newer Audio, Character Controller, Animation, and Asset Manager contracts are documented in
+[Priority S standard Features](./standard-features.md). This page retains the original M2 client
+slice contracts.
+
 The Client package implements four first-party public client-only Feature factories. They are
 composed in the [`local-browser` example](../../examples/local-browser/main.ts) and follow the
 static boot, rollback, and shutdown rules in the

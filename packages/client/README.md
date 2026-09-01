@@ -1,6 +1,6 @@
 # `@three-game-kit/client`
 
-Client provides the browser runtime plus rendering, deterministic VFX, semantic input, third-person camera, local collision, assets, networking, prediction, reconciliation, and peer interpolation.
+Client provides the browser runtime plus rendering, deterministic VFX, semantic input, third-person camera, local collision, assets, networking, prediction, reconciliation, and peer interpolation. Optional Standard Features cover Audio, Character Controller, Animation, and manifest-based Asset Manager use.
 
 ## Public imports
 
@@ -11,8 +11,16 @@ Client provides the browser runtime plus rendering, deterministic VFX, semantic 
 - `@three-game-kit/client/vfx`
 - `@three-game-kit/client/collision`
 - `@three-game-kit/client/assets`
+- `@three-game-kit/client/asset-manager`
+- `@three-game-kit/client/audio`
+- `@three-game-kit/client/animation`
+- `@three-game-kit/client/character-controller`
 - `@three-game-kit/client/networking`
 - `@three-game-kit/client/replication`
+
+The Standard Feature ownership, authority, configuration, limitations, examples,
+and verification contract is documented in
+[`docs/features/standard-features.md`](../../docs/features/standard-features.md).
 
 ```js
 import {

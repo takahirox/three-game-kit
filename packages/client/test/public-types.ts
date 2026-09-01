@@ -67,6 +67,37 @@ import {
   type GltfAvatarLoader,
 } from "@three-game-kit/client/assets";
 import {
+  createAudioFeature,
+  createAudioRuntime,
+  createSilentAudioDriver,
+  type AudioInspection,
+  type AudioPlayOutcome,
+  type AudioRuntime,
+} from "@three-game-kit/client/audio";
+import {
+  createAssetManager,
+  createAssetManagerFeature,
+  createThreeAssetBackend,
+  type AssetBackend,
+  type AssetManager,
+  type AssetManagerOutcome,
+  type AssetManifestEntry,
+} from "@three-game-kit/client/asset-manager";
+import {
+  createAnimationFeature,
+  createThreeAnimationRuntime,
+  type AnimationClipRegistration,
+  type AnimationInspection,
+  type AnimationRuntime,
+} from "@three-game-kit/client/animation";
+import {
+  createCharacterController,
+  createCharacterControllerFeature,
+  type CharacterController,
+  type CharacterControllerInput,
+  type CharacterControllerState,
+} from "@three-game-kit/client/character-controller";
+import {
   createNativeClientTransport,
   type Binding as NativeClientTransportBinding,
   type ErrorCounts as NativeClientTransportErrorCounts,
@@ -321,6 +352,60 @@ function exerciseVfx(parent: VfxSceneParent): void {
   void feature;
 }
 void exerciseVfx;
+
+function exercisePrioritySFeatures(collision: ClientCollisionAdapter): void {
+  const audio: AudioRuntime = createAudioRuntime(createSilentAudioDriver());
+  audio.registerClip("click", {});
+  const audioOutcome: AudioPlayOutcome = audio.playEffect("click");
+  const audioInspection: AudioInspection = audio.inspect();
+  const audioFeature: ClientFeatureDescriptor<unknown> = createAudioFeature(audio);
+
+  const manifest: readonly AssetManifestEntry[] = [{
+    id: "hero",
+    kind: "gltf",
+    source: "/hero.gltf",
+    groups: ["boot"],
+  }];
+  const backend: AssetBackend = createThreeAssetBackend();
+  const assets: AssetManager = createAssetManager(manifest, backend);
+  const assetOutcome: Promise<AssetManagerOutcome> = assets.load("hero");
+  const assetFeature: ClientFeatureDescriptor<unknown> = createAssetManagerFeature(assets);
+
+  const input: CharacterControllerInput = { x: 0, z: 0, run: false, jump: false };
+  const controller: CharacterController = createCharacterController({
+    collision,
+    initialPosition: { x: 0, y: 1, z: 0 },
+    configuration: { walkSpeed: 3, runSpeed: 6, gravity: 9.8, jumpSpeed: 5, maximumFallSpeed: 30 },
+  });
+  const state: CharacterControllerState = controller.inspect();
+  const controllerFeature: ClientFeatureDescriptor<unknown> = createCharacterControllerFeature({
+    controller,
+    readInput: () => input,
+    publish(value) { void value; },
+  });
+
+  const registrations: readonly AnimationClipRegistration[] = [];
+  const animationFactory: typeof createThreeAnimationRuntime = createThreeAnimationRuntime;
+  const animationFeatureFactory: typeof createAnimationFeature = createAnimationFeature;
+  const animationRuntime: AnimationRuntime | null = null;
+  const animationInspection: AnimationInspection | null = animationRuntime;
+
+  // @ts-expect-error Public audio inspection is readonly.
+  audioInspection.muted = false;
+  // @ts-expect-error Public Character Controller state is readonly.
+  state.grounded = true;
+
+  void audioOutcome;
+  void audioFeature;
+  void assetOutcome;
+  void assetFeature;
+  void controllerFeature;
+  void registrations;
+  void animationFactory;
+  void animationFeatureFactory;
+  void animationInspection;
+}
+void exercisePrioritySFeatures;
 
 function exerciseM3ClientSubpaths(): void {
   const networkingOptions: NativeClientTransportOptions = {

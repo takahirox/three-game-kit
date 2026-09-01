@@ -21,7 +21,7 @@ injection, disconnect fencing, exact cleanup, and canonical two-context browser 
 consumer-owned external server-authoritative Interaction proof, range validation and toggle, semantic client
 queue/latest snapshot presentation, five packed kit tarballs installed outside the workspace, catalog/authoring
 docs, and rollback/idempotent cleanup evidence. Milestone 5 produces a release candidate backed by a clean
-`pnpm verify:m5`, audits of all five package archives and all five cataloged Features, and complete documentation
+`pnpm verify:m5`, audits of all five package archives and all ten catalog entries, and complete documentation
 and evidence. It does not include registry publication or hosted deployment.
 
 ## Bounded MVP
@@ -36,7 +36,10 @@ The MVP is one authoritative multiplayer vertical slice, not the full capability
 - Explicit public exports, boundary checks, concise Feature documentation, supported environments, limitations, and repeatable CI.
 
 Exactly one Optional Feature, server-authoritative Interaction, proves cross-runtime extensibility.
-Audio, WebXR, post-processing, reconnect, production authentication, alternate transports, generalized asset or animation systems, and the other proposed gameplay Features are outside the MVP.
+WebXR, post-processing, reconnect, production authentication, alternate transports, and the other
+proposed gameplay Features remain outside the MVP. The post-MVP Priority S layer adds optional
+Audio, Character Controller, Animation, and manifest-based Asset Manager Standard Features without
+making them Core dependencies.
 
 ## Architectural boundaries
 
@@ -57,6 +60,7 @@ Audio, WebXR, post-processing, reconnect, production authentication, alternate t
 - [Canonical foundation Feature catalog](./docs/features/foundation-catalog.json)
 - [Milestone 4 catalog evidence](./docs/features/catalog.json)
 - [Client Feature contracts](./docs/features/client-features.md)
+- [Priority S standard Features](./docs/features/standard-features.md)
 - [Interaction contract](./docs/features/interaction.md)
 - [Client-only Feature authoring](./docs/authoring/client-only-feature.md)
 - [Server-only Feature authoring](./docs/authoring/server-only-feature.md)
