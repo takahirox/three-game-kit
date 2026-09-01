@@ -623,3 +623,13 @@ function exerciseM3ClientSubpaths(): void {
   void replicationShutdown;
 }
 void exerciseM3ClientSubpaths;
+
+import { createGeneralPhysicsClientFeature, createInventoryClientFeature, createSaveLoadClientFeature, createBrowserStorageSaveAdapter } from "@three-game-kit/client/genre";
+import { createGeneralPhysicsRuntime as createGenrePhysics, createInventoryRuntime as createGenreInventory, createSaveLoadRuntime as createGenreSave } from "@three-game-kit/shared/genre";
+const typedBrowserStorage = { getItem: (_key: string): string | null => null, setItem(_key: string, _value: string) {}, removeItem(_key: string) {} };
+const typedGenreClientFeatures: readonly ClientFeatureDescriptor<unknown>[] = [
+  createGeneralPhysicsClientFeature(createGenrePhysics()),
+  createInventoryClientFeature(createGenreInventory([])),
+  createSaveLoadClientFeature(createGenreSave({ currentVersion: 1, capture: () => null, restore() {}, adapter: createBrowserStorageSaveAdapter(typedBrowserStorage) })),
+];
+void typedGenreClientFeatures;

@@ -42,15 +42,21 @@ async function sourceFilesBelow(directory) {
 }
 
 const expectedCatalogIds = [
+  "ability-skill",
   "animation",
   "asset-manager",
   "audio",
   "character-controller",
   "collision",
   "game-flow",
+  "general-physics",
   "health-damage",
   "interaction",
+  "inventory",
   "movement-input",
+  "projectile",
+  "save-load",
+  "simple-ai-navigation",
   "spawn-prefab",
   "third-person-camera",
   "three-rendering",
@@ -59,14 +65,20 @@ const expectedCatalogIds = [
   "vfx",
 ];
 const clientFeatures = new Map([
+  ["ability-skill", { factory: "createAbilitySkillClientFeature", featureId: "ability-skill.client", subpath: "genre", source: "packages/client/src/genre.ts", example: "examples/genre-expansion/main.ts" }],
   ["animation", { factory: "createAnimationFeature", subpath: "animation", source: "packages/client/src/animation.ts", example: "examples/standard-features/main.ts" }],
   ["asset-manager", { factory: "createAssetManagerFeature", subpath: "asset-manager", source: "packages/client/src/asset-manager.ts", example: "examples/standard-features/main.ts" }],
   ["audio", { factory: "createAudioFeature", subpath: "audio", source: "packages/client/src/audio.ts", example: "examples/standard-features/main.ts" }],
   ["character-controller", { factory: "createCharacterControllerFeature", subpath: "character-controller", source: "packages/client/src/character-controller.ts", example: "examples/standard-features/main.ts", publicImports: ["@three-game-kit/client/character-controller", "@three-game-kit/client/collision"] }],
   ["collision", { factory: "createCollisionFeature", subpath: "collision", source: "packages/client/src/collision.ts" }],
   ["game-flow", { factory: "createGameFlowClientFeature", featureId: "game-flow.client", subpath: "gameplay", source: "packages/client/src/gameplay.ts", example: "examples/common-gameplay/main.ts" }],
+  ["general-physics", { factory: "createGeneralPhysicsClientFeature", featureId: "general-physics.client", subpath: "genre", source: "packages/client/src/genre.ts", example: "examples/genre-expansion/main.ts" }],
   ["health-damage", { factory: "createHealthClientFeature", featureId: "health-damage.client", subpath: "gameplay", source: "packages/client/src/gameplay.ts", example: "examples/common-gameplay/main.ts" }],
+  ["inventory", { factory: "createInventoryClientFeature", featureId: "inventory.client", subpath: "genre", source: "packages/client/src/genre.ts", example: "examples/genre-expansion/main.ts" }],
   ["movement-input", { factory: "createInputFeature", subpath: "input", source: "packages/client/src/input.ts" }],
+  ["projectile", { factory: "createProjectileClientFeature", featureId: "projectile.client", subpath: "genre", source: "packages/client/src/genre.ts", example: "examples/genre-expansion/main.ts" }],
+  ["save-load", { factory: "createSaveLoadClientFeature", featureId: "save-load.client", subpath: "genre", source: "packages/client/src/genre.ts", example: "examples/genre-expansion/main.ts" }],
+  ["simple-ai-navigation", { factory: "createSimpleAiNavigationClientFeature", featureId: "simple-ai-navigation.client", subpath: "genre", source: "packages/client/src/genre.ts", example: "examples/genre-expansion/main.ts" }],
   ["spawn-prefab", { factory: "createSpawnPrefabClientFeature", featureId: "spawn-prefab.client", subpath: "gameplay", source: "packages/client/src/gameplay.ts", example: "examples/common-gameplay/main.ts" }],
   ["third-person-camera", { factory: "createCameraFeature", subpath: "camera", source: "packages/client/src/camera.ts" }],
   ["three-rendering", { factory: "createRenderingFeature", subpath: "rendering", source: "packages/client/src/rendering.ts" }],
@@ -98,9 +110,9 @@ const catalog = await readJson("docs/features/foundation-catalog.json");
 assert.deepEqual(Object.keys(catalog), ["schemaVersion", "features"], "foundation catalog keys changed");
 assert.equal(catalog.schemaVersion, 1, "foundation catalog schemaVersion must be 1");
 assert.ok(Array.isArray(catalog.features), "foundation catalog features must be an array");
-assert.equal(catalog.features.length, 15, "foundation catalog must contain exactly fifteen entries");
+assert.equal(catalog.features.length, 21, "foundation catalog must contain exactly twenty-one entries");
 assert.deepEqual(catalog.features.map(({ catalogId }) => catalogId), expectedCatalogIds, "catalog IDs must be sorted and exact");
-assert.equal(new Set(catalog.features.map(({ catalogId }) => catalogId)).size, 15, "catalog IDs must be unique");
+assert.equal(new Set(catalog.features.map(({ catalogId }) => catalogId)).size, 21, "catalog IDs must be unique");
 for (const feature of catalog.features) {
   assert.deepEqual(Object.keys(feature), entryKeys, `${feature.catalogId} top-level keys changed`);
 }
@@ -127,8 +139,8 @@ for (const directory of packageDirectories) {
   }
 }
 publicSpecifiers.sort();
-assert.equal(publicSpecifiers.length, 24, "package manifests must expose exactly 24 public specifiers");
-assert.equal(new Set(publicSpecifiers).size, 24, "public package specifiers must be unique");
+assert.equal(publicSpecifiers.length, 27, "package manifests must expose exactly 27 public specifiers");
+assert.equal(new Set(publicSpecifiers).size, 27, "public package specifiers must be unique");
 const publicSpecifierSet = new Set(publicSpecifiers);
 
 const clientManifest = manifests.get("@three-game-kit/client");
@@ -146,7 +158,7 @@ for (const [featureId, mapping] of clientFeatures) {
   assert.match(source, new RegExp(`["']${runtimeFeatureId.replace(".", "\\.")}["']`, "u"), `${mapping.factory} Feature ID changed`);
   const feature = catalog.features.find(({ catalogId }) => catalogId === featureId);
   assert.equal(feature.clientFeatureId, runtimeFeatureId, `${featureId} clientFeatureId changed`);
-  if (!["game-flow", "health-damage", "spawn-prefab", "trigger-area", "ui-hud"].includes(featureId)) {
+  if (!["game-flow", "health-damage", "spawn-prefab", "trigger-area", "ui-hud", "ability-skill", "general-physics", "inventory", "projectile", "save-load", "simple-ai-navigation"].includes(featureId)) {
     assert.deepEqual(feature.publicImports, { "@three-game-kit/client": mapping.publicImports ?? [`@three-game-kit/client/${mapping.subpath}`] });
   }
   const exampleSource = mapping.example === undefined
@@ -177,6 +189,28 @@ for (const [catalogId, sharedFactory, serverFactory, serverFeatureId] of commonG
     assert.match(serverGameplayTest, new RegExp(`\\b${serverFactory}\\s*\\(`, "u"), `${serverFactory} must have an external-style server test`);
     assert.ok(feature.publicImports["@three-game-kit/server"].includes("@three-game-kit/server/gameplay"), `${catalogId} must list Server gameplay`);
   }
+}
+
+const genreMappings = [
+  ["ability-skill", "createAbilityRuntime", "createAbilitySkillServerFeature", "ability-skill.server"],
+  ["general-physics", "createGeneralPhysicsRuntime", "createGeneralPhysicsServerFeature", "general-physics.server"],
+  ["inventory", "createInventoryRuntime", "createInventoryServerFeature", "inventory.server"],
+  ["projectile", "createProjectileRuntime", "createProjectileServerFeature", "projectile.server"],
+  ["save-load", "createSaveLoadRuntime", "createSaveLoadServerFeature", "save-load.server"],
+  ["simple-ai-navigation", "createSimpleAiRuntime", "createSimpleAiNavigationServerFeature", "simple-ai-navigation.server"],
+];
+const sharedGenreSource = await readFile(path.join(root, "packages/shared/src/genre.ts"), "utf8");
+const serverGenreSource = await readFile(path.join(root, "packages/server/src/genre.ts"), "utf8");
+const serverGenreTest = await readFile(path.join(root, "packages/server/test/genre.test.mjs"), "utf8");
+for (const [catalogId, sharedFactory, serverFactory, serverFeatureId] of genreMappings) {
+  const feature = catalog.features.find((entry) => entry.catalogId === catalogId);
+  assert.match(sharedGenreSource, new RegExp(`export function ${sharedFactory}\\b`, "u"));
+  assert.match(serverGenreSource, new RegExp(`export function ${serverFactory}\\b`, "u"));
+  assert.match(serverGenreSource, new RegExp(`["']${serverFeatureId.replace(".", "\\.")}["']`, "u"));
+  assert.match(serverGenreTest, new RegExp(`\\b${serverFactory}\\s*\\(`, "u"));
+  assert.equal(feature.serverFeatureId, serverFeatureId);
+  assert.ok(feature.publicImports["@three-game-kit/shared"].includes("@three-game-kit/shared/genre"));
+  assert.ok(feature.publicImports["@three-game-kit/server"].includes("@three-game-kit/server/genre"));
 }
 
 for (const feature of catalog.features) {
@@ -220,7 +254,9 @@ for (const feature of catalog.features) {
     assert.ok((await stat(resolved)).isFile(), `${examplePath} must be an existing file`);
   }
 
-  const expectedCommand = ["game-flow", "health-damage", "spawn-prefab", "trigger-area", "ui-hud"].includes(feature.catalogId)
+  const expectedCommand = ["ability-skill", "general-physics", "inventory", "projectile", "save-load", "simple-ai-navigation"].includes(feature.catalogId)
+    ? "pnpm verify:genre-expansion"
+    : ["game-flow", "health-damage", "spawn-prefab", "trigger-area", "ui-hud"].includes(feature.catalogId)
     ? "pnpm verify:common-gameplay"
     : feature.catalogId === "interaction"
     ? "pnpm test:m4-packed-consumer"
@@ -229,7 +265,7 @@ for (const feature of catalog.features) {
       : "pnpm verify:m2";
   assert.equal(feature.verificationCommand, expectedCommand, `${feature.catalogId} verificationCommand changed`);
 
-  if (!["interaction", "game-flow", "health-damage", "spawn-prefab", "trigger-area"].includes(feature.catalogId)) {
+  if (!["interaction", "game-flow", "health-damage", "spawn-prefab", "trigger-area", "ability-skill", "general-physics", "inventory", "projectile", "save-load", "simple-ai-navigation"].includes(feature.catalogId)) {
     assert.deepEqual(feature.runtimes, ["client"], `${feature.catalogId} must be client-only`);
     assert.equal(feature.serverFeatureId, "not-applicable", `${feature.catalogId} serverFeatureId must be explicit`);
     assert.deepEqual(feature.requires.server, [], `${feature.catalogId} server requirements must be empty`);
@@ -259,7 +295,7 @@ const listedFeatureIds = catalog.features.flatMap((feature) =>
 );
 assert.deepEqual(
   [...listedFeatureIds].sort(),
-  ["animation", "asset-manager", "audio", "character-controller", "collision", "external.interaction.client", "external.interaction.server", "game-flow.client", "game-flow.server", "health-damage.client", "health-damage.server", "movement-input", "spawn-prefab.client", "spawn-prefab.server", "third-person-camera", "three-rendering", "trigger-area.client", "trigger-area.server", "ui-hud", "vfx"],
+  ["ability-skill.client", "ability-skill.server", "animation", "asset-manager", "audio", "character-controller", "collision", "external.interaction.client", "external.interaction.server", "game-flow.client", "game-flow.server", "general-physics.client", "general-physics.server", "health-damage.client", "health-damage.server", "inventory.client", "inventory.server", "movement-input", "projectile.client", "projectile.server", "save-load.client", "save-load.server", "simple-ai-navigation.client", "simple-ai-navigation.server", "spawn-prefab.client", "spawn-prefab.server", "third-person-camera", "three-rendering", "trigger-area.client", "trigger-area.server", "ui-hud", "vfx"],
   "all public Feature IDs must be covered exactly once",
 );
 assert.equal(new Set(listedFeatureIds).size, listedFeatureIds.length, "public Feature IDs must not be duplicated");

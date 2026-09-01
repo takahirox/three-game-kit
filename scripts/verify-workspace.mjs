@@ -14,7 +14,7 @@ const packageContract = {
   },
   shared: {
     name: "@three-game-kit/shared",
-    exports: [".", "./movement", "./gameplay"],
+    exports: [".", "./movement", "./gameplay", "./genre"],
     dependencies: ["@three-game-kit/core"],
   },
   protocol: {
@@ -37,6 +37,7 @@ const packageContract = {
       "./animation",
       "./character-controller",
       "./gameplay",
+      "./genre",
       "./networking",
       "./replication",
     ],
@@ -50,7 +51,7 @@ const packageContract = {
   },
   server: {
     name: "@three-game-kit/server",
-    exports: [".", "./collision", "./authoritative", "./gameplay", "./networking"],
+    exports: [".", "./collision", "./authoritative", "./gameplay", "./genre", "./networking"],
     dependencies: [
       "@dimforge/rapier3d-compat",
       "@three-game-kit/core",
@@ -119,6 +120,9 @@ for (const script of [
   "typecheck:common-gameplay",
   "test:common-gameplay",
   "verify:common-gameplay",
+  "typecheck:genre-expansion",
+  "test:genre-expansion",
+  "verify:genre-expansion",
 ]) {
   assert.equal(
     typeof rootManifest.scripts[script],

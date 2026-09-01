@@ -2,6 +2,86 @@
   "schemaVersion": 1,
   "features": [
     {
+      "catalogId": "ability-skill",
+      "serverFeatureId": "ability-skill.server",
+      "clientFeatureId": "ability-skill.client",
+      "purpose": "Process deterministic ability requests with casting, cooldown, cancellation, and replaceable cost policy hooks.",
+      "ownership": "kit-owned",
+      "runtimes": [
+        "server",
+        "client"
+      ],
+      "requires": {
+        "server": [],
+        "client": []
+      },
+      "conflicts": [],
+      "configuration": {
+        "factoryInputs": {
+          "definitions": {
+            "type": "array",
+            "default": [],
+            "bounds": "Unique IDs and non-negative safe-integer cast/cooldown ticks."
+          },
+          "costHooks": {
+            "type": "callbacks",
+            "default": "allow",
+            "bounds": "Validation and consumption remain host policy."
+          }
+        }
+      },
+      "phases": {
+        "server": [
+          "gameplay: ability-skill-server-step (priority 500)"
+        ],
+        "clientSimulation": [
+          "shared-predict: ability-skill-client-step (priority 500)"
+        ],
+        "clientPresentation": []
+      },
+      "authority": {
+        "owner": "server in multiplayer; local host in non-networked single-player",
+        "intent": "Clients may predict requests, while the server validates cooldown, cast state, and costs.",
+        "validation": [
+          "Ability and actor IDs must be valid and the ability must be defined.",
+          "Server-owned cost and cooldown policy determines acceptance."
+        ],
+        "rejectionReasons": [
+          "cooldown",
+          "cost-rejected",
+          "already-casting"
+        ]
+      },
+      "lifecycle": {
+        "setup": "The wrapper activates one scheduled system and owns the runtime after setup.",
+        "dispose": "Shutdown or rollback clears pending casts and cooldown state idempotently.",
+        "borrowedResources": [
+          "Cost and publish callbacks remain caller-owned."
+        ]
+      },
+      "limitations": [
+        "No animation, targeting UI, effect graph, or network protocol is included.",
+        "Cancellation is stateful but network intent transport is host-owned."
+      ],
+      "compatibilityRange": "^0.1.0",
+      "publicImports": {
+        "@three-game-kit/shared": [
+          "@three-game-kit/shared/genre"
+        ],
+        "@three-game-kit/client": [
+          "@three-game-kit/client/genre"
+        ],
+        "@three-game-kit/server": [
+          "@three-game-kit/server/genre"
+        ]
+      },
+      "examplePaths": [
+        "examples/genre-expansion/main.ts",
+        "packages/shared/test/genre.test.mjs"
+      ],
+      "verificationCommand": "pnpm verify:genre-expansion"
+    },
+    {
       "catalogId": "animation",
       "serverFeatureId": "not-applicable",
       "clientFeatureId": "animation",
@@ -225,6 +305,92 @@
       "verificationCommand": "pnpm verify:common-gameplay"
     },
     {
+      "catalogId": "general-physics",
+      "serverFeatureId": "general-physics.server",
+      "clientFeatureId": "general-physics.client",
+      "purpose": "Provide a deterministic vendor-neutral physics contract with bodies, forces, contacts, sensors, layers, raycasts, and overlaps.",
+      "ownership": "kit-owned reference backend; replaceable adapter boundary",
+      "runtimes": [
+        "server",
+        "client"
+      ],
+      "requires": {
+        "server": [],
+        "client": []
+      },
+      "conflicts": [
+        "collision when both own the same body movement"
+      ],
+      "configuration": {
+        "factoryInputs": {
+          "gravity": {
+            "type": "finite vector",
+            "default": {
+              "x": 0,
+              "y": -9.81,
+              "z": 0
+            },
+            "bounds": "Exactly finite x, y, and z."
+          },
+          "bodies": {
+            "type": "runtime registrations",
+            "default": [],
+            "bounds": "Unique IDs, positive extents/mass, and 31-bit layer masks."
+          }
+        }
+      },
+      "phases": {
+        "server": [
+          "gameplay: general-physics-server-step (priority 300)"
+        ],
+        "clientSimulation": [
+          "shared-predict: general-physics-client-step (priority 300)"
+        ],
+        "clientPresentation": []
+      },
+      "authority": {
+        "owner": "server in multiplayer; local host in non-networked single-player",
+        "intent": "Client contacts are predictions; only server physics results are authoritative.",
+        "validation": [
+          "Body definitions, forces, impulses, masks, and queries are bounded and finite.",
+          "The server independently advances trusted bodies."
+        ],
+        "rejectionReasons": [
+          "unknown-body",
+          "invalid-body",
+          "authority-required"
+        ]
+      },
+      "lifecycle": {
+        "setup": "The wrapper activates one simulation step and owns the runtime.",
+        "dispose": "Shutdown or rollback clears bodies, contacts, and accumulated forces idempotently.",
+        "borrowedResources": [
+          "Publish callbacks remain caller-owned."
+        ]
+      },
+      "limitations": [
+        "The bundled backend is deterministic AABB reference physics, not a full rigid-body solver.",
+        "Rotation, joints, continuous collision detection, and network reconciliation are not included."
+      ],
+      "compatibilityRange": "^0.1.0",
+      "publicImports": {
+        "@three-game-kit/shared": [
+          "@three-game-kit/shared/genre"
+        ],
+        "@three-game-kit/client": [
+          "@three-game-kit/client/genre"
+        ],
+        "@three-game-kit/server": [
+          "@three-game-kit/server/genre"
+        ]
+      },
+      "examplePaths": [
+        "examples/genre-expansion/main.ts",
+        "packages/shared/test/genre.test.mjs"
+      ],
+      "verificationCommand": "pnpm verify:genre-expansion"
+    },
+    {
       "catalogId": "health-damage",
       "serverFeatureId": "health-damage.server",
       "clientFeatureId": "health-damage.client",
@@ -395,6 +561,84 @@
       "verificationCommand": "pnpm test:m4-packed-consumer"
     },
     {
+      "catalogId": "inventory",
+      "serverFeatureId": "inventory.server",
+      "clientFeatureId": "inventory.client",
+      "purpose": "Maintain deterministic bounded item containers with add, remove, capacity, and atomic transfer operations.",
+      "ownership": "kit-owned",
+      "runtimes": [
+        "server",
+        "client"
+      ],
+      "requires": {
+        "server": [],
+        "client": []
+      },
+      "conflicts": [],
+      "configuration": {
+        "factoryInputs": {
+          "items": {
+            "type": "array",
+            "default": [],
+            "bounds": "Unique item IDs and positive safe-integer stack sizes."
+          },
+          "containers": {
+            "type": "runtime registrations",
+            "default": [],
+            "bounds": "Unique IDs and positive slot capacities."
+          }
+        }
+      },
+      "phases": {
+        "server": [],
+        "clientSimulation": [],
+        "clientPresentation": []
+      },
+      "authority": {
+        "owner": "server in multiplayer; local host in non-networked single-player",
+        "intent": "Client inventory is provisional; server operations determine trusted ownership and quantities.",
+        "validation": [
+          "Items and containers must exist and quantities must be positive.",
+          "Transfers must satisfy source quantity and target capacity atomically."
+        ],
+        "rejectionReasons": [
+          "unknown-container",
+          "unknown-item",
+          "insufficient-items",
+          "capacity-exceeded",
+          "same-container"
+        ]
+      },
+      "lifecycle": {
+        "setup": "The passive wrapper owns a preconstructed inventory runtime.",
+        "dispose": "Shutdown or rollback clears every container idempotently.",
+        "borrowedResources": [
+          "Item definitions are validated and copied."
+        ]
+      },
+      "limitations": [
+        "No equipment slots, item metadata, persistence, trading protocol, or replication is included.",
+        "One item ID occupies stack slots according to its maximum stack size."
+      ],
+      "compatibilityRange": "^0.1.0",
+      "publicImports": {
+        "@three-game-kit/shared": [
+          "@three-game-kit/shared/genre"
+        ],
+        "@three-game-kit/client": [
+          "@three-game-kit/client/genre"
+        ],
+        "@three-game-kit/server": [
+          "@three-game-kit/server/genre"
+        ]
+      },
+      "examplePaths": [
+        "examples/genre-expansion/main.ts",
+        "packages/shared/test/genre.test.mjs"
+      ],
+      "verificationCommand": "pnpm verify:genre-expansion"
+    },
+    {
       "catalogId": "movement-input",
       "serverFeatureId": "not-applicable",
       "clientFeatureId": "movement-input",
@@ -469,6 +713,244 @@
         "examples/local-browser/main.ts"
       ],
       "verificationCommand": "pnpm verify:m2"
+    },
+    {
+      "catalogId": "projectile",
+      "serverFeatureId": "projectile.server",
+      "clientFeatureId": "projectile.client",
+      "purpose": "Advance deterministic projectiles with bounded lifetime and a replaceable hit-query hook.",
+      "ownership": "kit-owned state with consumer-owned hit policy",
+      "runtimes": [
+        "server",
+        "client"
+      ],
+      "requires": {
+        "server": [],
+        "client": []
+      },
+      "conflicts": [],
+      "configuration": {
+        "factoryInputs": {
+          "definitions": {
+            "type": "array",
+            "default": [],
+            "bounds": "Unique IDs, positive speed/radius, and non-negative safe-integer lifetime."
+          },
+          "queryHit": {
+            "type": "callback",
+            "default": "no hit",
+            "bounds": "Returns a target ID or null."
+          }
+        }
+      },
+      "phases": {
+        "server": [
+          "gameplay: projectile-server-step (priority 400)"
+        ],
+        "clientSimulation": [
+          "shared-predict: projectile-client-step (priority 400)"
+        ],
+        "clientPresentation": []
+      },
+      "authority": {
+        "owner": "server in multiplayer; local host in non-networked single-player",
+        "intent": "Clients predict trajectories and hits; the server independently decides trusted hits.",
+        "validation": [
+          "Projectile definitions and fire inputs are finite and bounded.",
+          "The authoritative hit hook validates targets and world collision."
+        ],
+        "rejectionReasons": [
+          "unknown-projectile",
+          "invalid-direction",
+          "invalid-target"
+        ]
+      },
+      "lifecycle": {
+        "setup": "The wrapper activates one scheduled system and owns the runtime.",
+        "dispose": "Shutdown or rollback clears live projectiles idempotently.",
+        "borrowedResources": [
+          "Hit-query and publish callbacks remain caller-owned."
+        ]
+      },
+      "limitations": [
+        "The runtime supplies straight-line kinematics rather than ballistics or swept-volume collision.",
+        "Damage, visual trails, pooling, and network reconciliation are separate concerns."
+      ],
+      "compatibilityRange": "^0.1.0",
+      "publicImports": {
+        "@three-game-kit/shared": [
+          "@three-game-kit/shared/genre"
+        ],
+        "@three-game-kit/client": [
+          "@three-game-kit/client/genre"
+        ],
+        "@three-game-kit/server": [
+          "@three-game-kit/server/genre"
+        ]
+      },
+      "examplePaths": [
+        "examples/genre-expansion/main.ts",
+        "packages/shared/test/genre.test.mjs"
+      ],
+      "verificationCommand": "pnpm verify:genre-expansion"
+    },
+    {
+      "catalogId": "save-load",
+      "serverFeatureId": "save-load.server",
+      "clientFeatureId": "save-load.client",
+      "purpose": "Capture, validate, migrate, persist, restore, and remove versioned JSON-like save documents through a replaceable adapter.",
+      "ownership": "kit-owned runtime with consumer-selected storage adapter",
+      "runtimes": [
+        "server",
+        "client"
+      ],
+      "requires": {
+        "server": [],
+        "client": []
+      },
+      "conflicts": [],
+      "configuration": {
+        "factoryInputs": {
+          "schemaVersion": {
+            "type": "positive safe integer",
+            "default": "not-applicable",
+            "bounds": "Migrations must cover every older version."
+          },
+          "adapter": {
+            "type": "SaveAdapter",
+            "default": "in-memory",
+            "bounds": "Read, write, remove, and dispose operations."
+          }
+        }
+      },
+      "phases": {
+        "server": [],
+        "clientSimulation": [],
+        "clientPresentation": []
+      },
+      "authority": {
+        "owner": "server for trusted multiplayer persistence; local host for single-player",
+        "intent": "A browser save adapter is local data and never grants multiplayer authority.",
+        "validation": [
+          "Documents are JSON-like, depth-bounded, versioned, migrated, and host-validated.",
+          "Trusted server persistence must authenticate the caller outside this module."
+        ],
+        "rejectionReasons": [
+          "not-found",
+          "future-version",
+          "migration-failed",
+          "validation-failed",
+          "adapter-failed"
+        ]
+      },
+      "lifecycle": {
+        "setup": "The passive wrapper owns the runtime and adapter after setup.",
+        "dispose": "Shutdown or rollback disposes the selected adapter idempotently.",
+        "borrowedResources": [
+          "Capture, restore, validation, and migration callbacks remain caller-owned."
+        ]
+      },
+      "limitations": [
+        "No encryption, compression, cloud sync, authentication, transaction log, or conflict resolution is included.",
+        "The browser adapter uses caller-supplied Storage and JSON serialization."
+      ],
+      "compatibilityRange": "^0.1.0",
+      "publicImports": {
+        "@three-game-kit/shared": [
+          "@three-game-kit/shared/genre"
+        ],
+        "@three-game-kit/client": [
+          "@three-game-kit/client/genre"
+        ],
+        "@three-game-kit/server": [
+          "@three-game-kit/server/genre"
+        ]
+      },
+      "examplePaths": [
+        "examples/genre-expansion/main.ts",
+        "packages/shared/test/genre.test.mjs"
+      ],
+      "verificationCommand": "pnpm verify:genre-expansion"
+    },
+    {
+      "catalogId": "simple-ai-navigation",
+      "serverFeatureId": "simple-ai-navigation.server",
+      "clientFeatureId": "simple-ai-navigation.client",
+      "purpose": "Advance simple deterministic waypoint navigation with replaceable behavior and target-selection policy hooks.",
+      "ownership": "kit-owned state with consumer-owned policy hooks",
+      "runtimes": [
+        "server",
+        "client"
+      ],
+      "requires": {
+        "server": [],
+        "client": []
+      },
+      "conflicts": [],
+      "configuration": {
+        "factoryInputs": {
+          "agents": {
+            "type": "runtime registrations",
+            "default": [],
+            "bounds": "Unique IDs, finite positions, and positive speed."
+          },
+          "policyHooks": {
+            "type": "callbacks",
+            "default": "idle or follow-path",
+            "bounds": "Return bounded behavior and optional target IDs."
+          }
+        }
+      },
+      "phases": {
+        "server": [
+          "gameplay: simple-ai-navigation-server-step (priority 600)"
+        ],
+        "clientSimulation": [
+          "shared-predict: simple-ai-navigation-client-step (priority 600)"
+        ],
+        "clientPresentation": []
+      },
+      "authority": {
+        "owner": "server in multiplayer; local host in non-networked single-player",
+        "intent": "Client AI is prediction or presentation; authoritative decisions and positions come from the server.",
+        "validation": [
+          "Agent IDs, speed, positions, waypoints, behaviors, and target IDs are validated.",
+          "The server selects trusted behavior and targeting hooks."
+        ],
+        "rejectionReasons": [
+          "unknown-agent",
+          "invalid-waypoint",
+          "invalid-policy-result"
+        ]
+      },
+      "lifecycle": {
+        "setup": "The wrapper activates one scheduled system and owns the runtime.",
+        "dispose": "Shutdown or rollback clears agents and waypoint queues idempotently.",
+        "borrowedResources": [
+          "Behavior, target, and publish callbacks remain caller-owned."
+        ]
+      },
+      "limitations": [
+        "No navmesh, obstacle avoidance, perception, behavior tree, or pathfinding backend is bundled.",
+        "Waypoints are caller supplied; policy hooks are intentionally replaceable."
+      ],
+      "compatibilityRange": "^0.1.0",
+      "publicImports": {
+        "@three-game-kit/shared": [
+          "@three-game-kit/shared/genre"
+        ],
+        "@three-game-kit/client": [
+          "@three-game-kit/client/genre"
+        ],
+        "@three-game-kit/server": [
+          "@three-game-kit/server/genre"
+        ]
+      },
+      "examplePaths": [
+        "examples/genre-expansion/main.ts",
+        "packages/shared/test/genre.test.mjs"
+      ],
+      "verificationCommand": "pnpm verify:genre-expansion"
     },
     {
       "catalogId": "spawn-prefab",

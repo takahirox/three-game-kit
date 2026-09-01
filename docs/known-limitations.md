@@ -15,10 +15,11 @@ support for omitted capabilities. Normative details remain in the linked contrac
 
 ## Physics, avatar, assets, and animation
 
-- Collision is a bounded static-world slice: a floor and static boxes with one
-  capsule-like kinematic avatar controller. It is not a general physics system.
-- Dynamic rigid bodies, forces, joints, destructible geometry, broad collision
-  filtering, and cross-platform bit-identical physics are outside the MVP.
+- Collision remains a bounded Rapier-backed static-world avatar slice. The optional
+  General Physics Feature adds a deterministic AABB reference backend with dynamic,
+  static, and kinematic bodies, forces, sensors, layers, and queries; it is not a
+  full rigid-body solver and does not provide rotation, joints, destructible
+  geometry, continuous collision detection, or cross-platform bit-identical vendor physics.
 - Rendering and asset loading cover the local scene and one URL-loaded glTF avatar
   with at most one animation clip. There is no generalized scene, asset cache/CDN,
   streaming, retry, animation graph, blending, retargeting, or character system.
@@ -82,6 +83,17 @@ support for omitted capabilities. Normative details remain in the linked contrac
   it does not load assets, define ECS schemas, place entities, or replicate them.
 - Game State/Flow has synchronous hooks and no scene loading or persistence. HUD is
   presentation-only and provides no layout, styling, focus, or localization policy.
+
+## Genre expansion
+
+- Projectile is straight-line kinematics with caller-owned hit policy; Inventory is
+  bounded stacks and containers; Ability/Skill is cast, cooldown, cancellation state,
+  and replaceable costs. They do not constitute a combat or replication protocol.
+- Simple AI/Navigation follows supplied waypoints and policy hooks without navmesh,
+  pathfinding, avoidance, perception, or behavior trees.
+- Save/Load handles versioned JSON-like data through adapters. It includes no encryption,
+  cloud sync, authentication, transactions, or conflict resolution. See the
+  [Priority B contract](./features/genre-expansion.md).
 
 ## Telemetry and performance
 

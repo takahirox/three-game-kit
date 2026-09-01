@@ -64,6 +64,7 @@ Client/Server authority wrappers.
 - [Client Feature contracts](./docs/features/client-features.md)
 - [Priority S standard Features](./docs/features/standard-features.md)
 - [Priority A common gameplay Features](./docs/features/common-gameplay.md)
+- [Priority B genre-expansion Features](./docs/features/genre-expansion.md)
 - [Interaction contract](./docs/features/interaction.md)
 - [Client-only Feature authoring](./docs/authoring/client-only-feature.md)
 - [Server-only Feature authoring](./docs/authoring/server-only-feature.md)
