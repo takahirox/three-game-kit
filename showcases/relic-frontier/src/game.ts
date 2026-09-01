@@ -34,22 +34,64 @@ import { createGameFlowRuntime, createHealthRuntime, createHudStateStore, create
 import { createAbilityRuntime, createInventoryRuntime, createProjectileRuntime, createSimpleAiRuntime } from "@three-game-kit/shared/genre";
 import type { RelicFrontierRenderer, RelicRendererInspection } from "./renderer.js";
 import {
+  CONSOLE_POSITION,
   DT,
   PLAYER_ID,
   PLAYER_SPAWN,
+  RELIC_POSITION,
+  createGuidanceState,
   createRelicState,
   distanceXZ,
   snapshotOf,
   vec3,
+  type EnemyState,
+  type GuidanceStage,
+  type GuidanceState,
   type MutableRelicState,
   type RelicAction,
   type RelicEvent,
+  type RelicScenario,
   type RelicSnapshot,
   type SemanticInput,
+  type UpgradeKind,
+  type Vec3,
 } from "./state.js";
 
 const MAX_STEPS = 1_200;
 const ACTIONS: readonly RelicAction[] = Object.freeze(["jump", "dash", "attack", "ability", "interact", "use-item"]);
+const STAGE_LABELS: Readonly<Record<GuidanceStage, string>> = Object.freeze({
+  start: "EXPEDITION BRIEFING",
+  cells: "STEP 1/5 · ENERGY CELLS",
+  mechanism: "STEP 2/5 · CHAMBER MECHANISM",
+  guardian: "STEP 3/5 · RELIC GUARDIAN",
+  relic: "STEP 4/5 · CLAIM THE RELIC",
+  escape: "STEP 5/5 · ESCAPE TO BASE CAMP",
+  complete: "EXPEDITION COMPLETE",
+  failed: "EXPEDITION FAILED",
+});
+const STAGE_STEPS: Readonly<Record<GuidanceStage, number>> = Object.freeze({ start: 0, cells: 1, mechanism: 2, guardian: 3, relic: 4, escape: 5, complete: 5, failed: 0 });
+const STAGE_OBJECTIVES: Readonly<Record<GuidanceStage, string>> = Object.freeze({
+  start: "Begin the expedition",
+  cells: "Recover Energy Cells (0/3)",
+  mechanism: "Power the chamber mechanism",
+  guardian: "Defeat the Relic Guardian",
+  relic: "Claim the Relic in the chamber",
+  escape: "Return to Base Camp and escape",
+  complete: "Expedition complete",
+  failed: "Suit signal lost",
+});
+const CELL_OBJECTIVES: readonly string[] = Object.freeze(["Recover Energy Cells (0/3)", "Recover Energy Cells (1/3)", "Recover Energy Cells (2/3)"]);
+const UPGRADE_PROMPTS: Readonly<Record<UpgradeKind, string>> = Object.freeze({ dash: "E · CHOOSE DASH UPGRADE", projectile: "E · CHOOSE PULSE UPGRADE", health: "E · CHOOSE HEALTH UPGRADE" });
+const BEARING_ARROWS: readonly string[] = Object.freeze(["↑", "↗", "→", "↘", "↓", "↙", "←", "↖"]);
+const EVENT_CLIPS: Readonly<Record<string, "impact" | "pickup" | "victory">> = Object.freeze({
+  "basic-attack": "impact",
+  "ability-fired": "impact",
+  "item-picked": "pickup",
+  "relic-acquired": "pickup",
+  "mechanism-powered": "victory",
+  "enemy-defeated": "victory",
+  "expedition-complete": "victory",
+});
 const EMPTY = defineFeatureConfiguration<Readonly<Record<string, never>>>({
   defaultValue: () => Object.freeze({}),
   parse(value) {
@@ -79,9 +121,10 @@ export interface RelicFrontierGame {
   advance(seconds: number): number;
   present(timestampMs: number): boolean;
   start(): void;
+  dismissOnboarding(): void;
   setInput(input: Partial<SemanticInput>): void;
   press(action: RelicAction): void;
-  loadScenario(id: "fresh" | "guardian" | "escape"): void;
+  loadScenario(id: RelicScenario): void;
   setDebugCamera(enabled: boolean): void;
   snapshot(): RelicSnapshot;
   events(): readonly RelicEvent[];
@@ -128,6 +171,10 @@ function clampAxis(value: number): number {
   return Number.isFinite(value) ? Math.max(-1, Math.min(1, value)) : 0;
 }
 
+function cooldownLabel(ticks: number): string {
+  return ticks <= 0 ? "READY" : `${(ticks * DT).toFixed(1)}s`;
+}
+
 class Game implements RelicFrontierGame {
   private state: MutableRelicState = createRelicState();
   private readonly renderer: RelicFrontierRenderer | null;
@@ -163,7 +210,12 @@ class Game implements RelicFrontierGame {
       { id: "results", allowedTo: [] },
     ],
   });
-  private readonly hud = createHudStateStore({ screen: "title", health: 100, maximumHealth: 100 });
+  private readonly hud = createHudStateStore({
+    screen: "title",
+    health: 100,
+    maximumHealth: 100,
+    extras: { objective: STAGE_OBJECTIVES.start, stage: STAGE_LABELS.start, cue: "", prompt: "", cells: "0/3", medkits: 0, ability: "READY", dash: "READY", guardian: "", guardianRatio: 0, healthRatio: 1, onboarding: false },
+  });
   private readonly assets = createAssetManager([
     { id: "procedural-ruins", kind: "gltf", source: "procedural://relic-frontier", groups: ["boot"] },
     { id: "failure-probe", kind: "gltf", source: "missing://qa-probe", groups: ["qa"] },
@@ -175,8 +227,8 @@ class Game implements RelicFrontierGame {
   private readonly triggers = createTriggerAreaRuntime([
     ...this.state.pickups.map((item) => ({ id: item.id, shape: "sphere" as const, center: item.position, radius: 2.2 })),
     ...this.state.upgrades.map((item) => ({ id: item.id, shape: "sphere" as const, center: item.position, radius: 2.2 })),
-    { id: "power-console", shape: "sphere", center: vec3(0, 0, -16), radius: 2.8 },
-    { id: "relic", shape: "sphere", center: vec3(0, 0, -26), radius: 2.8 },
+    { id: "power-console", shape: "sphere", center: CONSOLE_POSITION, radius: 2.8 },
+    { id: "relic", shape: "sphere", center: RELIC_POSITION, radius: 2.8 },
     { id: "escape-zone", shape: "sphere", center: PLAYER_SPAWN, radius: 3.2 },
   ]);
   private readonly ai = createSimpleAiRuntime({
@@ -226,7 +278,7 @@ class Game implements RelicFrontierGame {
       this.ai.register(enemy.id, enemy.position, enemy.kind === "drone" ? 2.3 : enemy.kind === "boss" ? 0.8 : 1.3);
       if (enemy.kind !== "boss") this.ai.setWaypoints(enemy.id, [enemy.position, vec3(-enemy.position.x, enemy.position.y, enemy.position.z - 2), enemy.position]);
     }
-    this.debug.registerProvider("game", () => ({ phase: this.state.phase, objective: this.state.objective, tick: this.state.tick }));
+    this.debug.registerProvider("game", () => ({ phase: this.state.phase, objective: this.guidanceFor(PLAYER_ID).objective, tick: this.state.tick }));
     this.debug.registerProvider("combat", () => ({ playerHealth: this.state.player.health, aliveEnemies: this.activeEnemies().map(({ id }) => id) }));
     this.debug.registerProvider("inventory", () => this.inventory.snapshot());
     void Promise.all([this.assets.load("procedural-ruins"), this.assets.load("failure-probe")]).then(([success, failure]) => {
@@ -257,6 +309,7 @@ class Game implements RelicFrontierGame {
         }
       }),
       createAbilitySkillClientFeature(this.ability, (events) => {
+        for (const event of events) if (event.kind === "started" && event.actorId === PLAYER_ID) this.state.player.pulseCooldownTicks = 151;
         for (const event of events) if (event.kind === "completed") this.firePlayerPulse();
         for (const event of events) if (event.kind === "rejected") this.emit("ability-rejected", event.code ?? "unknown");
       }),
@@ -318,7 +371,8 @@ class Game implements RelicFrontierGame {
     if (this.collected.length >= 512) this.collected.shift();
     this.collected.push(event);
     for (const listener of this.listeners) listener(event);
-    if (["basic-attack", "ability-fired", "item-picked", "relic-acquired", "enemy-defeated"].includes(kind)) this.audio.playEffect(kind === "item-picked" || kind === "relic-acquired" ? "pickup" : kind === "enemy-defeated" ? "victory" : "impact", { volume: 0.28 });
+    const clip = EVENT_CLIPS[kind];
+    if (clip !== undefined) this.audio.playEffect(clip, { volume: 0.28 });
     const position = subject === PLAYER_ID ? this.state.player.position : this.state.enemies.find(({ id }) => id === subject)?.position ?? this.state.player.position;
     this.renderer?.vfx.enqueue({ kind: "burst", position, count: 10, color: kind.includes("damage") ? 0xff5b68 : 0x51f6d4, speed: 2.4, lifetimeMs: 650, seed: (this.state.tick * 2654435761) >>> 0 });
   }
@@ -339,7 +393,6 @@ class Game implements RelicFrontierGame {
         this.state.defeatedEnemies += 1;
         this.state.score += enemy.kind === "boss" ? 1_000 : 150;
         this.emit("enemy-defeated", enemy.id, this.state.score);
-        if (enemy.kind === "boss") this.state.objective = "Claim the Relic in the chamber";
       }
     }
   }
@@ -357,7 +410,6 @@ class Game implements RelicFrontierGame {
       if (pickup.kind === "energy-cell") { this.inventory.add(PLAYER_ID, "energy-cell", 1); this.state.energyCells += 1; this.state.score += 100; }
       else { this.inventory.add(PLAYER_ID, "health-pack", 1); this.state.healthPacks += 1; }
       this.emit("item-picked", pickup.id);
-      this.state.objective = this.state.energyCells < 3 ? `Recover Energy Cells (${this.state.energyCells}/3)` : "Power the chamber gate";
       return;
     }
     for (const upgrade of this.state.upgrades) if (!upgrade.selected && this.state.nearby.has(upgrade.id)) {
@@ -368,7 +420,6 @@ class Game implements RelicFrontierGame {
     }
     if (this.state.nearby.has("power-console") && this.state.energyCells >= 3 && !this.state.mechanismPowered) {
       this.state.mechanismPowered = true;
-      this.state.objective = "Defeat the Relic Guardian";
       this.transition("guardian", "mechanism-powered");
       this.emit("mechanism-powered", "power-console");
       return;
@@ -377,15 +428,14 @@ class Game implements RelicFrontierGame {
     if (this.state.nearby.has("relic") && boss?.alive === false && !this.state.relicOwned) {
       this.inventory.add(PLAYER_ID, "relic", 1);
       this.state.relicOwned = true;
-      this.state.objective = "Return to Base Camp and escape";
       this.transition("escape", "relic-acquired");
       this.emit("relic-acquired", "relic");
       return;
     }
     if (this.state.nearby.has("escape-zone") && this.state.relicOwned && this.state.phase === "escape") {
       this.state.score += Math.max(0, 900 - Math.floor(this.state.elapsedTicks / 60));
-      this.state.objective = "Expedition complete";
       this.transition("results", "escaped");
+      this.emit("expedition-complete", PLAYER_ID, this.state.score);
     }
   }
 
@@ -409,6 +459,9 @@ class Game implements RelicFrontierGame {
     if (["explore", "guardian", "escape"].includes(this.state.phase)) this.state.elapsedTicks += 1;
     this.state.player.dashTicks = Math.max(0, this.state.player.dashTicks - 1);
     this.state.player.dashCooldownTicks = Math.max(0, this.state.player.dashCooldownTicks - 1);
+    this.state.player.pulseCooldownTicks = Math.max(0, this.state.player.pulseCooldownTicks - 1);
+    const guidance = this.guidanceFor(PLAYER_ID);
+    if (guidance.onboardingVisible && (this.pressed.size > 0 || this.state.input.moveX !== 0 || this.state.input.moveY !== 0)) this.dismissOnboarding();
     if (this.pressed.has("dash") && this.state.player.dashCooldownTicks === 0) {
       this.state.player.dashTicks = 18;
       this.state.player.dashCooldownTicks = this.state.upgrades.some(({ kind, selected }) => kind === "dash" && selected) ? 70 : 110;
@@ -433,13 +486,30 @@ class Game implements RelicFrontierGame {
         this.emit("enemy-attack", enemy.id);
       }
     }
+    this.updateGuidance();
+    const boss = this.state.enemies.find(({ kind }) => kind === "boss");
+    const activeBoss = boss !== undefined && boss.alive && this.state.phase === "guardian" ? boss : null;
+    const bearingIndex = ((Math.round(guidance.bearing / (Math.PI / 4)) % 8) + 8) % 8;
     this.hud.update({
       screen: this.state.phase,
       score: this.state.score,
       timerSeconds: Math.floor(this.state.elapsedTicks / 60),
       health: this.state.player.health,
       maximumHealth: this.state.player.maximumHealth,
-      extras: { objective: this.state.objective, cells: `${this.state.energyCells}/3`, medkits: this.state.healthPacks, ability: this.ability.inspect().casting.length > 0 ? "CAST" : "READY" },
+      extras: {
+        objective: guidance.objective,
+        stage: STAGE_LABELS[guidance.stage],
+        cue: guidance.target === null ? "" : `${BEARING_ARROWS[bearingIndex] ?? "↑"} ${Math.round(guidance.distance)} m`,
+        prompt: guidance.prompt,
+        cells: `${this.state.energyCells}/3`,
+        medkits: this.state.healthPacks,
+        ability: this.ability.inspect().casting.length > 0 ? "CAST" : cooldownLabel(this.state.player.pulseCooldownTicks),
+        dash: cooldownLabel(this.state.player.dashCooldownTicks),
+        guardian: activeBoss === null ? "" : `${activeBoss.health}/${activeBoss.maximumHealth}`,
+        guardianRatio: activeBoss === null ? 0 : activeBoss.health / activeBoss.maximumHealth,
+        healthRatio: this.state.player.health / this.state.player.maximumHealth,
+        onboarding: guidance.onboardingVisible,
+      },
     });
     this.renderer?.prepare(snapshotOf(this.state), this.collected.slice(-24));
   }
@@ -468,28 +538,48 @@ class Game implements RelicFrontierGame {
   start(): void {
     if (this.state.phase !== "title" || this.isDisposed) return;
     void this.audio.unlock();
-    this.state.objective = "Recover Energy Cells (0/3)";
+    this.guidanceFor(PLAYER_ID).onboardingVisible = true;
     this.transition("explore", "expedition-started");
+    this.updateGuidance();
+  }
+
+  dismissOnboarding(): void {
+    if (this.isDisposed) return;
+    const guidance = this.guidanceFor(PLAYER_ID);
+    if (!guidance.onboardingVisible) return;
+    guidance.onboardingVisible = false;
+    this.emit("onboarding-dismissed", PLAYER_ID);
   }
 
   setInput(input: Partial<SemanticInput>): void {
     if (this.isDisposed) return;
     const sampled = this.movement.sample();
-    this.movement.setMovement(clampAxis(input.moveX ?? sampled.x), clampAxis(-(input.moveY ?? -sampled.z)));
+    const x = clampAxis(input.moveX ?? sampled.x);
+    const z = clampAxis(-(input.moveY ?? -sampled.z));
+    // Two simultaneous orthogonal keys arrive as (±1, ±1); scale the pair back inside the unit disc
+    // before the public movement command validates it, keeping the framework guard intact.
+    const magnitude = Math.hypot(x, z);
+    const scale = magnitude > 1 ? (1 - 1e-6) / magnitude : 1;
+    this.movement.setMovement(x * scale, z * scale);
     this.state.input = Object.freeze({ ...this.state.input, cameraYaw: Number.isFinite(input.cameraYaw) ? input.cameraYaw ?? 0 : this.state.input.cameraYaw });
   }
 
   press(action: RelicAction): void { if (!this.isDisposed && ACTIONS.includes(action)) this.actions.press(action); }
 
-  loadScenario(id: "fresh" | "guardian" | "escape"): void {
+  loadScenario(id: RelicScenario): void {
     if (this.isDisposed) return;
-    if (id === "fresh") { if (this.state.phase === "title") this.start(); this.controller.teleport(PLAYER_SPAWN); return; }
     if (this.state.phase === "title") this.start();
+    if (id === "fresh") { this.controller.teleport(PLAYER_SPAWN); this.updateGuidance(); return; }
     for (const pickup of this.state.pickups) if (pickup.kind === "energy-cell" && !pickup.collected) { pickup.collected = true; this.inventory.add(PLAYER_ID, "energy-cell", 1); }
     this.state.energyCells = 3;
+    if (id === "mechanism") {
+      this.controller.teleport(vec3(0, 0, -13.5));
+      this.updateGuidance();
+      this.emit("scenario-loaded", id);
+      return;
+    }
     this.state.mechanismPowered = true;
     if (this.state.phase === "explore") this.transition("guardian", "qa-load");
-    this.state.objective = "Defeat the Relic Guardian";
     this.controller.teleport(vec3(0, 0, -19.5));
     if (id === "escape") {
       const boss = this.state.enemies.find(({ kind }) => kind === "boss");
@@ -497,10 +587,73 @@ class Game implements RelicFrontierGame {
       this.state.relicOwned = true;
       this.inventory.add(PLAYER_ID, "relic", 1);
       this.transition("escape", "qa-load");
-      this.state.objective = "Return to Base Camp and escape";
       this.controller.teleport(PLAYER_SPAWN);
     }
+    this.updateGuidance();
     this.emit("scenario-loaded", id);
+  }
+
+  private guidanceFor(playerId: string): GuidanceState {
+    const existing = this.state.guidance[playerId];
+    if (existing !== undefined) return existing;
+    const created = createGuidanceState(playerId);
+    this.state.guidance[playerId] = created;
+    return created;
+  }
+
+  private updateGuidance(): void {
+    const guidance = this.guidanceFor(PLAYER_ID);
+    const boss = this.state.enemies.find(({ kind }) => kind === "boss");
+    const player = this.state.player.position;
+    let stage: GuidanceStage = "cells";
+    let targetId: string | null = null;
+    let target: Vec3 | null = null;
+    if (this.state.phase === "title") stage = "start";
+    else if (this.state.phase === "defeated") stage = "failed";
+    else if (this.state.phase === "results") stage = "complete";
+    else if (this.state.relicOwned) { stage = "escape"; targetId = "escape-zone"; target = PLAYER_SPAWN; }
+    else if (boss !== undefined && !boss.alive) { stage = "relic"; targetId = "relic"; target = RELIC_POSITION; }
+    else if (this.state.mechanismPowered) { stage = "guardian"; targetId = boss?.id ?? null; target = boss?.position ?? null; }
+    else if (this.state.energyCells >= 3) { stage = "mechanism"; targetId = "power-console"; target = CONSOLE_POSITION; }
+    else {
+      let nearest = Number.POSITIVE_INFINITY;
+      for (const pickup of this.state.pickups) {
+        if (pickup.kind !== "energy-cell" || pickup.collected) continue;
+        const distance = distanceXZ(pickup.position, player);
+        if (distance < nearest) { nearest = distance; targetId = pickup.id; target = pickup.position; }
+      }
+    }
+    if (stage !== guidance.stage) {
+      guidance.stage = stage;
+      guidance.step = STAGE_STEPS[stage];
+      this.emit("objective-changed", stage, guidance.step);
+    }
+    guidance.objective = stage === "cells" ? CELL_OBJECTIVES[this.state.energyCells] ?? STAGE_OBJECTIVES.cells : STAGE_OBJECTIVES[stage];
+    guidance.targetId = targetId;
+    guidance.target = target;
+    if (target === null) {
+      guidance.distance = 0;
+      guidance.bearing = 0;
+    } else {
+      const dx = target.x - player.x;
+      const dz = target.z - player.z;
+      guidance.distance = Math.hypot(dx, dz);
+      guidance.bearing = Math.atan2(dx, -dz) + this.state.input.cameraYaw;
+    }
+    guidance.prompt = this.promptFor(stage, boss, target);
+  }
+
+  private promptFor(stage: GuidanceStage, boss: EnemyState | undefined, target: Vec3 | null): string {
+    if (stage === "start" || stage === "complete" || stage === "failed") return "";
+    const nearby = this.state.nearby;
+    for (const pickup of this.state.pickups) if (!pickup.collected && nearby.has(pickup.id)) return pickup.kind === "energy-cell" ? "E · TAKE ENERGY CELL" : "E · TAKE MEDKIT";
+    const chosen = this.state.upgrades.some(({ selected }) => selected);
+    for (const upgrade of this.state.upgrades) if (nearby.has(upgrade.id)) return chosen ? (upgrade.selected ? "FIELD UPGRADE ACTIVE" : "ONE UPGRADE PER EXPEDITION") : UPGRADE_PROMPTS[upgrade.kind];
+    if (nearby.has("power-console") && !this.state.mechanismPowered) return this.state.energyCells >= 3 ? "E · POWER THE MECHANISM" : "MECHANISM NEEDS 3 ENERGY CELLS";
+    if (nearby.has("relic") && boss?.alive === false && !this.state.relicOwned) return "E · CLAIM THE RELIC";
+    if (nearby.has("escape-zone") && stage === "escape") return "E · ESCAPE TO BASE CAMP";
+    if (stage === "cells" && target !== null && target.y - this.state.player.position.y > 1 && distanceXZ(target, this.state.player.position) < 3) return "SPACE · JUMP TO REACH THE CELL";
+    return "";
   }
 
   setDebugCamera(enabled: boolean): void { this.renderer?.setDebugCamera(enabled); }

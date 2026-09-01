@@ -28,6 +28,7 @@ The local host can move to `@three-game-kit/server` without rewriting presentati
 | Triggers, mechanisms, encounters, flow | server gameplay tick | interpolate/announce replicated events |
 | Spawn/despawn | server stable entity IDs | instantiate presentation prefabs |
 | Camera, HUD, animation, audio, VFX, post-processing | client only | derive from snapshots/events |
+| Objective guidance, prompts, onboarding | client derivation per player from replicated state | keep `snapshot.guidance[playerId]` local; it never gates progression |
 
 The next version would add connection-owned player IDs, protocol routes for bounded intents and snapshots, server-side actor positions for Trigger evaluation, and replication IDs for enemies/projectiles/items. Existing stable string IDs and tick-based cooldowns can cross that boundary unchanged. The client-only renderer and QA camera remain unaware of transport.
 
