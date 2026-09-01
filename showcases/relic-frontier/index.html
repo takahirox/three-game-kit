@@ -1,0 +1,47 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Relic Frontier · three-game-kit</title>
+    <link rel="stylesheet" href="./styles.css" />
+  </head>
+  <body>
+    <main id="app">
+      <canvas id="game-canvas" tabindex="0" aria-label="Relic Frontier 3D game"></canvas>
+      <section id="hud" aria-live="polite">
+        <div class="topbar">
+          <div class="brand"><span class="brand-mark">RF</span><div><strong>RELIC FRONTIER</strong><small>ANCIENT SIGNAL // 07</small></div></div>
+          <div class="objective"><small>ACTIVE OBJECTIVE</small><strong data-hud-bind="extra:objective">Begin the expedition</strong></div>
+          <div class="score"><small>SCORE</small><strong data-hud-bind="score">0</strong></div>
+        </div>
+        <div class="vitals">
+          <label>SUIT INTEGRITY <span><span data-hud-bind="health">100</span>/<span data-hud-bind="maximumHealth">100</span></span></label>
+          <div class="health-track"><i></i></div>
+          <div class="inventory"><span>CELLS <b data-hud-bind="extra:cells">0/3</b></span><span>MEDKITS <b data-hud-bind="extra:medkits">0</b></span><span>PULSE <b data-hud-bind="extra:ability">READY</b></span></div>
+        </div>
+        <div class="controls">WASD MOVE · DRAG LOOK · LMB ATTACK · RMB/F PULSE · SPACE JUMP · SHIFT DASH · E INTERACT · Q MEDKIT</div>
+        <section class="overlay" data-hud-screen="title">
+          <div class="eyebrow">OFFICIAL THREE-GAME-KIT SHOWCASE</div>
+          <h1>RELIC<br /><em>FRONTIER</em></h1>
+          <p>A dormant signal stirs beneath the frontier ruins. Recover three Energy Cells, wake the chamber, and bring the Relic home.</p>
+          <button type="button" data-hud-action="start">BEGIN EXPEDITION <span>→</span></button>
+          <small>10–15 MINUTE SINGLE-PLAYER VERTICAL SLICE</small>
+        </section>
+        <section class="overlay result" data-hud-screen="results" hidden>
+          <div class="eyebrow">EXPEDITION COMPLETE</div>
+          <h1>RELIC<br /><em>SECURED</em></h1>
+          <p>Frontier telemetry uploaded. The ancient signal is stable—for now.</p>
+          <button type="button" data-hud-action="restart">NEW EXPEDITION <span>↻</span></button>
+        </section>
+        <section class="overlay result danger" data-hud-screen="defeated" hidden>
+          <div class="eyebrow">SUIT SIGNAL LOST</div>
+          <h1>EXPEDITION<br /><em>FAILED</em></h1>
+          <button type="button" data-hud-action="restart">REDEPLOY <span>↻</span></button>
+        </section>
+      </section>
+      <output id="status">Initializing expedition…</output>
+    </main>
+    <script type="module" src="./src/main.ts"></script>
+  </body>
+</html>

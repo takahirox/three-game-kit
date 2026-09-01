@@ -1,0 +1,26 @@
+:root { color-scheme: dark; font-family: Inter, ui-sans-serif, system-ui, sans-serif; background: #07111e; color: #e8f7ff; }
+* { box-sizing: border-box; }
+html, body, #app { width: 100%; height: 100%; margin: 0; overflow: hidden; }
+body { background: radial-gradient(circle at 50% 20%, #18383b, #07111e 64%); }
+#game-canvas { width: 100%; height: 100%; display: block; outline: none; }
+#hud { position: fixed; inset: 0; z-index: 10; pointer-events: none; }
+.topbar { position: absolute; inset: 24px 28px auto; display: grid; grid-template-columns: 1fr minmax(300px, 520px) 1fr; align-items: start; gap: 24px; }
+.brand { display: flex; gap: 12px; align-items: center; letter-spacing: .12em; }
+.brand-mark { display: grid; place-items: center; width: 42px; height: 42px; border: 1px solid #48f5d1aa; color: #48f5d1; background: #07111ecc; clip-path: polygon(12% 0,100% 0,100% 88%,88% 100%,0 100%,0 12%); }
+.brand strong, .brand small { display: block; }.brand strong { font-size: 13px; }.brand small, .topbar small { color: #85a5af; font-size: 9px; letter-spacing: .18em; }
+.objective { justify-self: center; min-width: 300px; padding: 10px 24px; text-align: center; border-top: 1px solid #48f5d177; background: linear-gradient(90deg, transparent, #07111edb 20%, #07111edb 80%, transparent); }
+.objective strong { display: block; margin-top: 5px; color: #d9fff8; font-size: 13px; letter-spacing: .06em; }
+.score { justify-self: end; text-align: right; }.score strong { display: block; color: #ffbd59; font-size: 24px; font-weight: 500; }
+.vitals { position: absolute; left: 28px; bottom: 42px; width: 340px; padding: 14px 16px; background: linear-gradient(135deg, #07111eea, #102630dd); border-left: 2px solid #48f5d1; backdrop-filter: blur(9px); }
+.vitals label { display: flex; justify-content: space-between; color: #91bbc3; font-size: 10px; letter-spacing: .14em; }.vitals label span { color: #e8f7ff; }
+.health-track { height: 7px; margin: 8px 0 12px; background: #1d3540; overflow: hidden; }.health-track i { display: block; width: 100%; height: 100%; background: linear-gradient(90deg,#48f5d1,#a4ffe8); box-shadow: 0 0 16px #48f5d1; }
+.inventory { display: flex; gap: 14px; color: #7897a1; font-size: 9px; letter-spacing: .12em; }.inventory b { color: white; margin-left: 3px; }
+.controls { position: absolute; right: 26px; bottom: 42px; max-width: 520px; padding: 9px 13px; color: #9db2ba; background: #07111ec4; border-right: 1px solid #48f5d177; font-size: 9px; letter-spacing: .09em; }
+.overlay { pointer-events: auto; position: absolute; inset: 0; display: flex; flex-direction: column; align-items: flex-start; justify-content: center; padding-left: clamp(40px, 9vw, 150px); background: linear-gradient(90deg,#06101bf7 0%,#081620e8 36%,#07111e42 68%,transparent); }
+.overlay[hidden] { display: none; }.eyebrow { color: #48f5d1; letter-spacing: .27em; font-size: 10px; margin-bottom: 20px; }
+.overlay h1 { margin: 0; font-size: clamp(64px,10vw,128px); line-height: .78; letter-spacing: -.065em; font-weight: 900; text-shadow: 0 10px 50px #000; }.overlay h1 em { color: transparent; -webkit-text-stroke: 1px #48f5d1; font-style: normal; }
+.overlay p { max-width: 530px; margin: 32px 0; color: #b7c9cf; font-size: 15px; line-height: 1.7; }
+.overlay button { border: 1px solid #48f5d1; color: #07111e; background: #48f5d1; padding: 15px 22px; font: 700 11px/1 inherit; letter-spacing: .16em; cursor: pointer; clip-path: polygon(0 0,94% 0,100% 28%,100% 100%,6% 100%,0 72%); }.overlay button:hover { background: #b9fff0; }.overlay button span { margin-left: 18px; }
+.overlay > small { margin-top: 18px; color: #627d85; font-size: 8px; letter-spacing: .18em; }.result { background: radial-gradient(circle at 50% 45%,#163f3dbb,#06101bf5 62%); align-items: center; padding: 0; text-align: center; }.result p { text-align: center; }.danger h1 em { -webkit-text-stroke-color: #ff5f6d; }.danger .eyebrow { color: #ff5f6d; }
+#status { position: fixed; z-index: 11; left: 50%; bottom: 12px; transform: translateX(-50%); color: #66838d; font: 9px/1 ui-monospace,monospace; letter-spacing: .08em; }
+@media (max-width: 760px) { .topbar { grid-template-columns: 1fr auto; }.objective { position: absolute; top: 56px; left: 0; min-width: 0; text-align: left; padding-left: 0; }.controls { display: none; }.vitals { width: calc(100% - 56px); }.overlay { padding: 32px; }.overlay h1 { font-size: 62px; } }
