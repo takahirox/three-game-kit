@@ -2,7 +2,7 @@
 import * as THREE from "three";
 import type { RenderingFeatureAdapter, RendererCameraTransform } from "@three-game-kit/client/rendering";
 import { createVfxRuntime, type VfxRuntime } from "@three-game-kit/client/vfx";
-import type { RelicEvent, RelicSnapshot } from "./state.js";
+import { CONSOLE_POSITION, PLAYER_ID, PLAYER_SPAWN, type GuidanceStage, type RelicEvent, type RelicSnapshot } from "./state.js";
 
 export interface RelicRendererInspection {
   readonly backend: "three-webgl";
@@ -40,6 +40,13 @@ const COLORS = Object.freeze({
   coral: 0xff5f6d,
   violet: 0x9d7bff,
   moss: 0x3d8066,
+  cell: 0xffe75a,
+  white: 0xf4fbff,
+});
+
+const STAGE_COLORS: Readonly<Record<GuidanceStage, number>> = Object.freeze({
+  start: COLORS.cyan, cells: COLORS.cell, mechanism: COLORS.coral, guardian: COLORS.violet,
+  relic: COLORS.amber, escape: COLORS.amber, complete: COLORS.cyan, failed: COLORS.coral,
 });
 
 class Renderer implements RelicFrontierRenderer {
@@ -56,6 +63,11 @@ class Renderer implements RelicFrontierRenderer {
   private readonly guardianGate = new THREE.Group();
   private readonly relic = new THREE.Group();
   private readonly objectiveBeacon: THREE.PointLight;
+  private readonly cellRings = new Map<string, THREE.Mesh>();
+  private readonly objectiveMarker = new THREE.Group();
+  private readonly markerMaterial: THREE.MeshBasicMaterial;
+  private readonly consoleMaterial: THREE.MeshStandardMaterial;
+  private bossMaterial: THREE.MeshStandardMaterial | null = null;
   private snapshot: RelicSnapshot | null = null;
   private cameraTransform: RendererCameraTransform = Object.freeze({ position: { x: 0, y: 8, z: 31 }, lookAt: { x: 0, y: 1.4, z: 18 } });
   private eventOrdinal = 0;
@@ -153,6 +165,7 @@ class Renderer implements RelicFrontierRenderer {
       const group = new THREE.Group();
       const scale = kind === "boss" ? 2.1 : kind === "sentinel" ? 1.35 : 1;
       const material = mat(new THREE.MeshStandardMaterial({ color: enemyColors[kind], emissive: enemyColors[kind], emissiveIntensity: 0.45, roughness: 0.38, metalness: 0.7 }));
+      if (kind === "boss") this.bossMaterial = material;
       const core = new THREE.Mesh(kind === "drone" ? geo(new THREE.OctahedronGeometry(0.75, 0)) : geo(new THREE.DodecahedronGeometry(0.8, 0)), material);
       core.position.y = kind === "drone" ? 2.2 : 1.05;
       core.scale.setScalar(scale);
@@ -166,17 +179,33 @@ class Renderer implements RelicFrontierRenderer {
       this.scene.add(group);
     }
 
-    const pickupMat = mat(new THREE.MeshStandardMaterial({ color: COLORS.cyan, emissive: COLORS.cyan, emissiveIntensity: 1.9, metalness: 0.5, roughness: 0.2 }));
+    const pickupMat = mat(new THREE.MeshStandardMaterial({ color: COLORS.cell, emissive: COLORS.cell, emissiveIntensity: 1.9, metalness: 0.5, roughness: 0.2 }));
     const medMat = mat(new THREE.MeshStandardMaterial({ color: 0x8dff89, emissive: 0x2a8a45, emissiveIntensity: 1.2 }));
+    const cellRingGeo = geo(new THREE.RingGeometry(0.85, 1.2, 24));
+    cellRingGeo.rotateX(-Math.PI / 2);
+    const cellRingMat = mat(new THREE.MeshBasicMaterial({ color: COLORS.cell, transparent: true, opacity: 0.55 }));
     for (const id of ["cell-garden", "cell-power", "cell-tower"]) {
       const mesh = new THREE.Mesh(crystalGeo, pickupMat);
+      mesh.scale.set(0.9, 1.5, 0.9);
       this.pickupMeshes.set(id, mesh);
       this.scene.add(mesh);
+      const ring = new THREE.Mesh(cellRingGeo, cellRingMat);
+      this.cellRings.set(id, ring);
+      this.scene.add(ring);
     }
+    const medGeo = geo(new THREE.BoxGeometry(0.8, 0.55, 0.8));
+    const crossMat = mat(new THREE.MeshBasicMaterial({ color: COLORS.white }));
+    const crossLongGeo = geo(new THREE.BoxGeometry(0.5, 0.08, 0.16));
+    const crossShortGeo = geo(new THREE.BoxGeometry(0.16, 0.08, 0.5));
     for (const id of ["medkit-camp", "medkit-ruin"]) {
-      const mesh = new THREE.Mesh(geo(new THREE.BoxGeometry(0.8, 0.55, 0.8)), medMat);
-      this.pickupMeshes.set(id, mesh);
-      this.scene.add(mesh);
+      const group = new THREE.Group();
+      const crossLong = new THREE.Mesh(crossLongGeo, crossMat);
+      const crossShort = new THREE.Mesh(crossShortGeo, crossMat);
+      crossLong.position.y = 0.31;
+      crossShort.position.y = 0.31;
+      group.add(new THREE.Mesh(medGeo, medMat), crossLong, crossShort);
+      this.pickupMeshes.set(id, group);
+      this.scene.add(group);
     }
     for (const [index, id] of ["upgrade-dash", "upgrade-projectile", "upgrade-health"].entries()) {
       const upgradeColor = [COLORS.cyan, COLORS.violet, 0x7dff8f][index] ?? COLORS.cyan;
@@ -184,6 +213,41 @@ class Renderer implements RelicFrontierRenderer {
       this.upgradeMeshes.set(id, mesh);
       this.scene.add(mesh);
     }
+
+    const powerConsole = new THREE.Group();
+    const pedestal = new THREE.Mesh(geo(new THREE.CylinderGeometry(0.9, 1.2, 1.4, 8)), stone);
+    pedestal.position.y = 0.7;
+    pedestal.castShadow = true;
+    this.consoleMaterial = mat(new THREE.MeshStandardMaterial({ color: COLORS.coral, emissive: COLORS.coral, emissiveIntensity: 1.6, roughness: 0.3, metalness: 0.5 }));
+    const consoleTop = new THREE.Mesh(geo(new THREE.BoxGeometry(1.3, 0.3, 1.3)), this.consoleMaterial);
+    consoleTop.position.y = 1.55;
+    powerConsole.add(pedestal, consoleTop);
+    powerConsole.position.set(CONSOLE_POSITION.x, CONSOLE_POSITION.y, CONSOLE_POSITION.z);
+    this.scene.add(powerConsole);
+
+    const camp = new THREE.Group();
+    const campRingGeo = geo(new THREE.RingGeometry(2.6, 3.1, 24));
+    campRingGeo.rotateX(-Math.PI / 2);
+    const campRing = new THREE.Mesh(campRingGeo, mat(new THREE.MeshBasicMaterial({ color: COLORS.amber, transparent: true, opacity: 0.5 })));
+    campRing.position.y = 0.03;
+    const pole = new THREE.Mesh(geo(new THREE.BoxGeometry(0.12, 4, 0.12)), stone);
+    pole.position.set(2.7, 2, 0);
+    const flag = new THREE.Mesh(geo(new THREE.BoxGeometry(1.1, 0.6, 0.06)), mat(new THREE.MeshBasicMaterial({ color: COLORS.amber })));
+    flag.position.set(3.3, 3.6, 0);
+    camp.add(campRing, pole, flag);
+    camp.position.set(PLAYER_SPAWN.x, PLAYER_SPAWN.y, PLAYER_SPAWN.z);
+    this.scene.add(camp);
+
+    this.markerMaterial = mat(new THREE.MeshBasicMaterial({ color: COLORS.cell, transparent: true, opacity: 0.3, depthWrite: false, side: THREE.DoubleSide }));
+    const markerColumn = new THREE.Mesh(geo(new THREE.CylinderGeometry(0.3, 0.9, 9, 8, 1, true)), this.markerMaterial);
+    markerColumn.position.y = 4.5;
+    const markerRingGeo = geo(new THREE.RingGeometry(1.15, 1.6, 24));
+    markerRingGeo.rotateX(-Math.PI / 2);
+    const markerRing = new THREE.Mesh(markerRingGeo, this.markerMaterial);
+    markerRing.position.y = 0.05;
+    this.objectiveMarker.add(markerColumn, markerRing);
+    this.objectiveMarker.visible = false;
+    this.scene.add(this.objectiveMarker);
 
     const gateMaterial = mat(new THREE.MeshStandardMaterial({ color: COLORS.coral, emissive: COLORS.coral, emissiveIntensity: 1.4, transparent: true, opacity: 0.72 }));
     for (const x of [-3, -1.5, 0, 1.5, 3]) {
@@ -234,6 +298,11 @@ class Renderer implements RelicFrontierRenderer {
     }
     for (const pickup of snapshot.pickups) {
       const mesh = this.pickupMeshes.get(pickup.id);
+      const ring = this.cellRings.get(pickup.id);
+      if (ring !== undefined) {
+        ring.visible = !pickup.collected;
+        ring.position.set(pickup.position.x, pickup.position.y + 0.04, pickup.position.z);
+      }
       if (mesh === undefined) continue;
       mesh.visible = !pickup.collected;
       mesh.position.set(pickup.position.x, pickup.position.y + 0.85 + Math.sin(snapshot.time * 2 + pickup.id.length) * 0.15, pickup.position.z);
@@ -249,8 +318,22 @@ class Renderer implements RelicFrontierRenderer {
     this.guardianGate.visible = !snapshot.mechanismPowered;
     this.relic.visible = snapshot.phase === "guardian" && boss?.alive === false && !snapshot.relicOwned;
     this.relic.rotation.y = snapshot.time * 0.8;
-    this.objectiveBeacon.color.setHex(snapshot.phase === "guardian" ? COLORS.violet : snapshot.phase === "escape" ? COLORS.amber : COLORS.cyan);
-    this.objectiveBeacon.position.set(0, 4, snapshot.phase === "escape" ? 18 : snapshot.phase === "guardian" ? -24 : -16);
+    const guidance = snapshot.guidance[PLAYER_ID];
+    const target = guidance?.target ?? null;
+    const stageColor = STAGE_COLORS[guidance?.stage ?? "start"];
+    this.objectiveMarker.visible = target !== null;
+    this.objectiveBeacon.visible = target !== null;
+    if (target !== null) {
+      this.objectiveMarker.position.set(target.x, target.y, target.z);
+      this.objectiveBeacon.position.set(target.x, target.y + 4, target.z);
+    }
+    this.objectiveMarker.rotation.y = snapshot.time * 0.6;
+    this.markerMaterial.color.setHex(stageColor);
+    this.objectiveBeacon.color.setHex(stageColor);
+    const consoleColor = snapshot.mechanismPowered ? COLORS.cyan : COLORS.coral;
+    this.consoleMaterial.color.setHex(consoleColor);
+    this.consoleMaterial.emissive.setHex(consoleColor);
+    if (this.bossMaterial !== null && boss !== undefined) this.bossMaterial.emissiveIntensity = 0.45 + (1 - boss.health / boss.maximumHealth) * 1.4;
     this.eventOrdinal += events.length;
   }
 

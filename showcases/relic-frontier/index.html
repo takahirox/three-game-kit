@@ -12,13 +12,29 @@
       <section id="hud" aria-live="polite">
         <div class="topbar">
           <div class="brand"><span class="brand-mark">RF</span><div><strong>RELIC FRONTIER</strong><small>ANCIENT SIGNAL // 07</small></div></div>
-          <div class="objective"><small>ACTIVE OBJECTIVE</small><strong data-hud-bind="extra:objective">Begin the expedition</strong></div>
+          <div class="objective"><small data-hud-bind="extra:stage">EXPEDITION BRIEFING</small><strong data-hud-bind="extra:objective">Begin the expedition</strong><span class="cue" data-hud-bind="extra:cue"></span></div>
           <div class="score"><small>SCORE</small><strong data-hud-bind="score">0</strong></div>
         </div>
+        <div class="guardian" id="guardian" hidden>
+          <label>RELIC GUARDIAN <span data-hud-bind="extra:guardian"></span></label>
+          <div class="health-track boss"><i id="guardian-health"></i></div>
+        </div>
+        <section class="onboarding" id="onboarding" hidden>
+          <div class="eyebrow">FIELD BRIEFING</div>
+          <h2>Welcome to the frontier</h2>
+          <ol>
+            <li><b>WASD</b> move · <b>DRAG</b> look · <b>SHIFT</b> dash · <b>SPACE</b> jump</li>
+            <li><b>LMB</b> attack · <b>RMB / F</b> Relic Pulse · <b>E</b> interact · <b>Q</b> medkit</li>
+            <li>Follow the objective beam and compass cue: recover <b>3 Energy Cells</b>, power the <b>mechanism</b>, defeat the <b>Guardian</b>, claim the <b>Relic</b>, and escape to <b>Base Camp</b>.</li>
+          </ol>
+          <button type="button" data-hud-action="dismiss-onboarding">GOT IT <span>→</span></button>
+          <small>ESC OR ANY INPUT ALSO CLOSES THIS BRIEFING</small>
+        </section>
+        <div class="prompt" data-hud-bind="extra:prompt"></div>
         <div class="vitals">
           <label>SUIT INTEGRITY <span><span data-hud-bind="health">100</span>/<span data-hud-bind="maximumHealth">100</span></span></label>
-          <div class="health-track"><i></i></div>
-          <div class="inventory"><span>CELLS <b data-hud-bind="extra:cells">0/3</b></span><span>MEDKITS <b data-hud-bind="extra:medkits">0</b></span><span>PULSE <b data-hud-bind="extra:ability">READY</b></span></div>
+          <div class="health-track"><i id="player-health"></i></div>
+          <div class="inventory"><span>CELLS <b data-hud-bind="extra:cells">0/3</b></span><span>MEDKITS <b data-hud-bind="extra:medkits">0</b></span><span>PULSE <b data-hud-bind="extra:ability">READY</b></span><span>DASH <b data-hud-bind="extra:dash">READY</b></span></div>
         </div>
         <div class="controls">WASD MOVE · DRAG LOOK · LMB ATTACK · RMB/F PULSE · SPACE JUMP · SHIFT DASH · E INTERACT · Q MEDKIT</div>
         <section class="overlay" data-hud-screen="title">
@@ -32,6 +48,7 @@
           <div class="eyebrow">EXPEDITION COMPLETE</div>
           <h1>RELIC<br /><em>SECURED</em></h1>
           <p>Frontier telemetry uploaded. The ancient signal is stable—for now.</p>
+          <p class="tally">SCORE <b data-hud-bind="score">0</b> · TIME <b data-hud-bind="timer">0</b>s · CELLS <b data-hud-bind="extra:cells">0/3</b></p>
           <button type="button" data-hud-action="restart">NEW EXPEDITION <span>↻</span></button>
         </section>
         <section class="overlay result danger" data-hud-screen="defeated" hidden>

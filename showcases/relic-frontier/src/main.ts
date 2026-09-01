@@ -1,9 +1,10 @@
 /// <reference lib="dom" />
-import { createDomHudAdapter } from "@three-game-kit/client/gameplay";
+import { createDomHudAdapter, type HudAdapter } from "@three-game-kit/client/gameplay";
 import { createAudioRuntime, createSilentAudioDriver, createWebAudioDriver, type AudioRuntime } from "@three-game-kit/client/audio";
+import type { HudState } from "@three-game-kit/shared/gameplay";
 import { createRelicFrontierGame, type RelicFrontierGame, type RelicLeakInspection, type RelicRuntimeInspection } from "./game.js";
 import { createRelicFrontierRenderer, type RelicFrontierRenderer, type RelicRendererInspection } from "./renderer.js";
-import type { RelicAction, RelicEvent, RelicSnapshot, SemanticInput } from "./state.js";
+import type { RelicAction, RelicEvent, RelicScenario, RelicSnapshot, SemanticInput } from "./state.js";
 
 type HostMode = "normal" | "test";
 interface HostError { readonly source: string; readonly message: string; }
@@ -13,12 +14,13 @@ export interface RelicFrontierHandle {
   readonly mode: HostMode;
   readonly status: string;
   start(): void;
+  dismissOnboarding(): void;
   restart(): void;
   dispose(): void;
   setInput(input: Partial<SemanticInput>): void;
   press(action: RelicAction): void;
   advance(seconds: number): number;
-  loadScenario(id: "fresh" | "guardian" | "escape"): void;
+  loadScenario(id: RelicScenario): void;
   setDebugCamera(enabled: boolean): void;
   snapshot(): RelicSnapshot;
   events(): readonly RelicEvent[];
@@ -40,6 +42,38 @@ function requireElement<T extends Element>(selector: string): T {
 const canvas = requireElement<HTMLCanvasElement>("#game-canvas");
 const hud = requireElement<HTMLElement>("#hud");
 const statusElement = requireElement<HTMLElement>("#status");
+
+function hudRatio(value: unknown): number {
+  return typeof value === "number" && Number.isFinite(value) ? Math.max(0, Math.min(1, value)) : 0;
+}
+
+function createRelicHudAdapter(root: HTMLElement, onAction: (action: string) => void): HudAdapter {
+  const dom = createDomHudAdapter(root, { onAction });
+  const playerHealth = requireElement<HTMLElement>("#player-health");
+  const guardianPanel = requireElement<HTMLElement>("#guardian");
+  const guardianHealth = requireElement<HTMLElement>("#guardian-health");
+  const onboarding = requireElement<HTMLElement>("#onboarding");
+  let lastHealth = -1;
+  let lastGuardian = -1;
+  let lastGuardianVisible: boolean | null = null;
+  let lastOnboarding: boolean | null = null;
+  return Object.freeze({
+    get disposed(): boolean { return dom.disposed; },
+    render(state: HudState): void {
+      dom.render(state);
+      const health = hudRatio(state.extras.healthRatio);
+      if (health !== lastHealth) { lastHealth = health; playerHealth.style.width = `${Math.round(health * 100)}%`; }
+      const guardian = hudRatio(state.extras.guardianRatio);
+      if (guardian !== lastGuardian) { lastGuardian = guardian; guardianHealth.style.width = `${Math.round(guardian * 100)}%`; }
+      const guardianVisible = typeof state.extras.guardian === "string" && state.extras.guardian.length > 0;
+      if (guardianVisible !== lastGuardianVisible) { lastGuardianVisible = guardianVisible; guardianPanel.hidden = !guardianVisible; }
+      const onboardingVisible = state.extras.onboarding === true;
+      if (onboardingVisible !== lastOnboarding) { lastOnboarding = onboardingVisible; onboarding.hidden = !onboardingVisible; }
+    },
+    inspect() { return dom.inspect(); },
+    dispose(): void { dom.dispose(); },
+  });
+}
 
 const mode: HostMode = new URLSearchParams(location.search).get("test") === "1" ? "test" : "normal";
 const hostErrors: HostError[] = [];
@@ -87,6 +121,7 @@ const actionKeys = new Map<string, RelicAction>([
 listen(window, "keydown", ((event: KeyboardEvent) => {
   if (event.code.startsWith("Key") || event.code === "Space" || event.code.startsWith("Shift")) event.preventDefault();
   if (["KeyW", "KeyA", "KeyS", "KeyD"].includes(event.code)) { held.add(event.code); updateMovement(); }
+  if (event.code === "Escape" && !event.repeat) handle.dismissOnboarding();
   const action = actionKeys.get(event.code);
   if (action !== undefined && !event.repeat) { game?.press(action); if (mode === "test") { game?.advance(1 / 60); renderNow(); } }
 }) as EventListener);
@@ -126,11 +161,10 @@ function boot(): void {
     for (const id of ["impact", "pickup", "victory"]) runtime.registerClip(id, Object.freeze({ id }));
     return runtime;
   })();
-  const adapter = createDomHudAdapter(hud, {
-    onAction(action) {
-      if (action === "start") { game?.start(); renderNow(); }
-      if (action === "restart") handle.restart();
-    },
+  const adapter = createRelicHudAdapter(hud, (action) => {
+    if (action === "start") { game?.start(); renderNow(); }
+    if (action === "dismiss-onboarding") handle.dismissOnboarding();
+    if (action === "restart") handle.restart();
   });
   game = createRelicFrontierGame({ renderer, hudAdapter: adapter, audio });
   if (mode === "test") {
@@ -157,6 +191,7 @@ const handle: RelicFrontierHandle = Object.freeze({
   get mode() { return mode; },
   get status() { return statusElement.textContent ?? ""; },
   start() { game?.start(); renderNow(); },
+  dismissOnboarding() { game?.dismissOnboarding(); if (mode === "test") game?.advance(1 / 60); renderNow(); },
   restart() {
     game?.dispose();
     void audioContext?.close();
@@ -183,7 +218,7 @@ const handle: RelicFrontierHandle = Object.freeze({
   setInput(input: Partial<SemanticInput>) { game?.setInput(input); renderNow(); },
   press(action: RelicAction) { game?.press(action); },
   advance(seconds: number) { const steps = game?.advance(seconds) ?? 0; renderNow(); return steps; },
-  loadScenario(id: "fresh" | "guardian" | "escape") { game?.loadScenario(id); game?.advance(1 / 60); renderNow(); },
+  loadScenario(id: RelicScenario) { game?.loadScenario(id); game?.advance(1 / 60); renderNow(); },
   setDebugCamera(enabled: boolean) { game?.setDebugCamera(enabled); renderNow(); },
   snapshot() { if (game === null) throw new Error("Relic Frontier is not booted"); return game.snapshot(); },
   events() { return game?.events() ?? Object.freeze([]); },

@@ -1,7 +1,9 @@
 export type RelicPhase = "title" | "explore" | "guardian" | "escape" | "results" | "defeated";
 export type RelicAction = "jump" | "dash" | "attack" | "ability" | "interact" | "use-item";
+export type RelicScenario = "fresh" | "mechanism" | "guardian" | "escape";
 export type EnemyKind = "drone" | "shooter" | "sentinel" | "boss";
 export type UpgradeKind = "dash" | "projectile" | "health";
+export type GuidanceStage = "start" | "cells" | "mechanism" | "guardian" | "relic" | "escape" | "complete" | "failed";
 
 export interface Vec3 { readonly x: number; readonly y: number; readonly z: number; }
 export interface SemanticInput { readonly moveX: number; readonly moveY: number; readonly cameraYaw: number; }
@@ -25,6 +27,18 @@ export interface UpgradeState {
   readonly position: Vec3;
   selected: boolean;
 }
+export interface GuidanceState {
+  readonly playerId: string;
+  stage: GuidanceStage;
+  step: number;
+  objective: string;
+  targetId: string | null;
+  target: Vec3 | null;
+  distance: number;
+  bearing: number;
+  prompt: string;
+  onboardingVisible: boolean;
+}
 export type RelicEvent = Readonly<{
   readonly kind: string;
   readonly tick: number;
@@ -43,11 +57,13 @@ export interface RelicSnapshot {
     readonly maximumHealth: number;
     readonly grounded: boolean;
     readonly dashCooldownTicks: number;
+    readonly pulseCooldownTicks: number;
     readonly animation: "idle" | "run" | "jump" | "dash" | "attack";
   }>;
   readonly enemies: readonly Readonly<EnemyState>[];
   readonly pickups: readonly Readonly<PickupState>[];
   readonly upgrades: readonly Readonly<UpgradeState>[];
+  readonly guidance: Readonly<Record<string, Readonly<GuidanceState>>>;
   readonly energyCells: number;
   readonly healthPacks: number;
   readonly relicOwned: boolean;
@@ -60,7 +76,6 @@ export interface RelicSnapshot {
 export interface MutableRelicState {
   tick: number;
   phase: RelicPhase;
-  objective: string;
   input: SemanticInput;
   player: {
     position: Vec3;
@@ -70,11 +85,13 @@ export interface MutableRelicState {
     grounded: boolean;
     dashTicks: number;
     dashCooldownTicks: number;
+    pulseCooldownTicks: number;
     animation: "idle" | "run" | "jump" | "dash" | "attack";
   };
   enemies: EnemyState[];
   pickups: PickupState[];
   upgrades: UpgradeState[];
+  guidance: Record<string, GuidanceState>;
   nearby: Set<string>;
   energyCells: number;
   healthPacks: number;
@@ -89,6 +106,8 @@ export const DT = 1 / 60;
 export const PLAYER_ID = "player";
 export const PLAYER_SPAWN: Vec3 = Object.freeze({ x: 0, y: 0, z: 18 });
 export const NEUTRAL_INPUT: SemanticInput = Object.freeze({ moveX: 0, moveY: 0, cameraYaw: 0 });
+export const CONSOLE_POSITION: Vec3 = Object.freeze({ x: 0, y: 0, z: -16 });
+export const RELIC_POSITION: Vec3 = Object.freeze({ x: 0, y: 0, z: -26 });
 
 export function vec3(x: number, y: number, z: number): Vec3 {
   return Object.freeze({ x, y, z });
@@ -98,11 +117,14 @@ export function distanceXZ(a: Vec3, b: Vec3): number {
   return Math.hypot(a.x - b.x, a.z - b.z);
 }
 
+export function createGuidanceState(playerId: string): GuidanceState {
+  return { playerId, stage: "start", step: 0, objective: "Begin the expedition", targetId: null, target: null, distance: 0, bearing: 0, prompt: "", onboardingVisible: false };
+}
+
 export function createRelicState(): MutableRelicState {
   return {
     tick: 0,
     phase: "title",
-    objective: "Begin the expedition",
     input: NEUTRAL_INPUT,
     player: {
       position: PLAYER_SPAWN,
@@ -112,6 +134,7 @@ export function createRelicState(): MutableRelicState {
       grounded: true,
       dashTicks: 0,
       dashCooldownTicks: 0,
+      pulseCooldownTicks: 0,
       animation: "idle",
     },
     enemies: [
@@ -132,6 +155,7 @@ export function createRelicState(): MutableRelicState {
       { id: "upgrade-projectile", kind: "projectile", position: vec3(0, 0, 9), selected: false },
       { id: "upgrade-health", kind: "health", position: vec3(6, 0, 11), selected: false },
     ],
+    guidance: { [PLAYER_ID]: createGuidanceState(PLAYER_ID) },
     nearby: new Set(),
     energyCells: 0,
     healthPacks: 0,
@@ -143,16 +167,28 @@ export function createRelicState(): MutableRelicState {
   };
 }
 
+function snapshotGuidance(state: MutableRelicState): Readonly<Record<string, Readonly<GuidanceState>>> {
+  const result: Record<string, Readonly<GuidanceState>> = {};
+  for (const [playerId, guidance] of Object.entries(state.guidance)) {
+    result[playerId] = Object.freeze({
+      ...guidance,
+      target: guidance.target === null ? null : Object.freeze({ ...guidance.target }),
+    });
+  }
+  return Object.freeze(result);
+}
+
 export function snapshotOf(state: MutableRelicState): RelicSnapshot {
   return Object.freeze({
     tick: state.tick,
     time: state.tick * DT,
     phase: state.phase,
-    objective: state.objective,
+    objective: state.guidance[PLAYER_ID]?.objective ?? "",
     player: Object.freeze({ ...state.player, position: Object.freeze({ ...state.player.position }), velocity: Object.freeze({ ...state.player.velocity }) }),
     enemies: Object.freeze(state.enemies.map((enemy) => Object.freeze({ ...enemy, position: Object.freeze({ ...enemy.position }) }))),
     pickups: Object.freeze(state.pickups.map((pickup) => Object.freeze({ ...pickup, position: Object.freeze({ ...pickup.position }) }))),
     upgrades: Object.freeze(state.upgrades.map((upgrade) => Object.freeze({ ...upgrade, position: Object.freeze({ ...upgrade.position }) }))),
+    guidance: snapshotGuidance(state),
     energyCells: state.energyCells,
     healthPacks: state.healthPacks,
     relicOwned: state.relicOwned,
