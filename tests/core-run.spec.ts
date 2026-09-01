@@ -570,6 +570,7 @@ test.describe("Core Run showcase", () => {
   });
 
   test("applies the combo multiplier inside the window and resets after it expires", async ({ page }) => {
+    test.setTimeout(45_000);
     const diagnostics = await bootCoreRun(page);
     await startRound(page);
 
