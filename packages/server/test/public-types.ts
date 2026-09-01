@@ -483,3 +483,12 @@ void [
   networkingState,
   networkingOutcome,
 ];
+
+import { createGeneralPhysicsServerFeature, createInventoryServerFeature, createSaveLoadServerFeature } from "@three-game-kit/server/genre";
+import { createGeneralPhysicsRuntime as createGenrePhysics, createInMemorySaveAdapter as createGenreAdapter, createInventoryRuntime as createGenreInventory, createSaveLoadRuntime as createGenreSave } from "@three-game-kit/shared/genre";
+const typedGenreServerFeatures: readonly FeatureDescriptor<unknown, ServerRuntimeContribution>[] = [
+  createGeneralPhysicsServerFeature(createGenrePhysics()),
+  createInventoryServerFeature(createGenreInventory([])),
+  createSaveLoadServerFeature(createGenreSave({ currentVersion: 1, capture: () => null, restore() {}, adapter: createGenreAdapter() })),
+];
+void typedGenreServerFeatures;

@@ -27,6 +27,10 @@
       "types": "./dist/gameplay.d.ts",
       "import": "./dist/gameplay.js"
     },
+    "./genre": {
+      "types": "./dist/genre.d.ts",
+      "import": "./dist/genre.js"
+    },
     "./networking": {
       "types": "./dist/networking.d.ts",
       "import": "./dist/networking.js"

@@ -47,3 +47,27 @@ createTriggerAreaRuntime([{ id: "bad", shape: "sphere", center: { x: "0", y: 0, 
 hudState.score = 2;
 
 void [triggerEvents, healthEvents, instance, outcome, hudState];
+
+import {
+  createAbilityRuntime,
+  createGeneralPhysicsRuntime,
+  createInMemorySaveAdapter,
+  createInventoryRuntime,
+  createProjectileRuntime,
+  createSaveLoadRuntime,
+  createSimpleAiRuntime,
+  type GenreVector3,
+  type SaveLoadOutcome,
+} from "@three-game-kit/shared/genre";
+const genrePosition: GenreVector3 = { x: 0, y: 0, z: 0 };
+const genrePhysics = createGeneralPhysicsRuntime();
+genrePhysics.addBody({ id: "body", kind: "dynamic", position: genrePosition, halfExtents: { x: 1, y: 1, z: 1 } });
+const genreProjectile = createProjectileRuntime([{ id: "bolt", speed: 1, lifetimeTicks: 2 }]);
+const genreInventory = createInventoryRuntime([{ id: "key", maximumStack: 1 }]);
+const genreAbility = createAbilityRuntime([{ id: "dash", cooldownTicks: 1 }]);
+const genreAi = createSimpleAiRuntime();
+const genreSave = createSaveLoadRuntime({ currentVersion: 1, capture: () => ({ ok: true }), restore() {}, adapter: createInMemorySaveAdapter() });
+const genreSaveOutcome: Promise<SaveLoadOutcome> = genreSave.save("slot");
+// @ts-expect-error Physics positions require numeric components.
+genrePhysics.addBody({ id: "bad", kind: "dynamic", position: { x: "0", y: 0, z: 0 }, halfExtents: { x: 1, y: 1, z: 1 } });
+void [genreProjectile, genreInventory, genreAbility, genreAi, genreSaveOutcome];

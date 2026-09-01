@@ -22,6 +22,10 @@
     "./gameplay": {
       "types": "./dist/gameplay.d.ts",
       "import": "./dist/gameplay.js"
+    },
+    "./genre": {
+      "types": "./dist/genre.d.ts",
+      "import": "./dist/genre.js"
     }
   },
   "dependencies": {
