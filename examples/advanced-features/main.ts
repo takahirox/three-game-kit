@@ -1,0 +1,23 @@
+import { createDeterministicPresentationFrameSource } from "@three-game-kit/core";
+import { createClientRuntime } from "@three-game-kit/client";
+import { createCameraEffectsRuntime, createCameraExtensionsFeature, createDebugDevToolsClientFeature, createDialogueClientFeature, createInputExperienceFeature, createInputExperienceRuntime, createPostProcessingFeature, createPostProcessingRuntime, createVehiclesClientFeature } from "@three-game-kit/client/advanced";
+import { createDebugDevToolsRuntime, createDialogueRuntime, createVehicleRuntime } from "@three-game-kit/shared/advanced";
+
+interface AdvancedReport { readonly ready: boolean; readonly dialogueLineId: string | null; readonly vehicleSpeed: number; readonly postRenderCount: number; readonly cameraZ: number; readonly movementX: number; readonly action: string; readonly debugProviders: readonly string[]; readonly cleanup: Readonly<{ clean: boolean; allDisposed: boolean; disposedOrder: readonly string[] }>; }
+declare global { interface Window { __THREE_GAME_KIT_ADVANCED__?: AdvancedReport; } }
+document.querySelector<HTMLButtonElement>("#run")?.addEventListener("click", () => { void run(); }, { once: true });
+
+async function run(): Promise<void> {
+  const dialogue = createDialogueRuntime([{ id: "quest", startNodeId: "offer", nodes: [{ id: "offer", lineId: "quest.offer", choices: [{ id: "accept", targetNodeId: "accepted", effectId: "quest.accept" }] }, { id: "accepted", lineId: "quest.accepted", nextNodeId: null }] }]); dialogue.start("quest"); dialogue.choose("accept");
+  const vehicles = createVehicleRuntime([{ id: "kart", seats: [{ id: "driver", role: "driver" }], acceleration: 3, braking: 6, steering: 0.5 }]); vehicles.enter("kart", "hero", "driver"); vehicles.requestControl("kart", "hero", { throttle: 1, brake: 0, steering: 0.5 });
+  const input = createInputExperienceRuntime({ contexts: { gameplay: { jump: ["gamepad:A"] }, ui: { confirm: ["gamepad:A"] } }, initialContext: "gameplay" }); input.updateGamepad("demo-pad", 1, 0, ["A"]);
+  const post = createPostProcessingRuntime({ addPass() {}, removePass() {}, setPassEnabled() {}, resize() {}, render() {}, dispose() {} }); post.register({ id: "consumer-pass", order: 10, handle: {} }); post.resize(800, 600, 1);
+  const camera = createCameraEffectsRuntime({ kind: "orbit", distance: 4, height: 2, yaw: 0 }); camera.setZoom(1.5);
+  const debug = createDebugDevToolsRuntime({ reset: () => {} }); debug.registerProvider("dialogue", () => dialogue.snapshot()); debug.registerProvider("vehicles", () => vehicles.snapshot());
+  const vehicleEvents: number[] = []; const snapshots: string[][] = []; const movements: number[] = []; const actions: string[] = []; const cameraZ: number[] = [];
+  const frameSource = createDeterministicPresentationFrameSource();
+  const runtime = createClientRuntime({ frameSource, features: [createDialogueClientFeature(dialogue), createVehiclesClientFeature(vehicles, (events) => vehicleEvents.push(...events.map(({ state }) => state.speed))), createInputExperienceFeature({ runtime: input, publishMovement: (command) => movements.push(command.x), publishAction: (action) => actions.push(action) }), createDebugDevToolsClientFeature(debug, (snapshot) => snapshots.push(Object.keys(snapshot.providers))), createCameraExtensionsFeature({ runtime: camera, readTarget: () => ({ x: 0, y: 0, z: 0 }), readTick: () => 1, publish: (transform) => cameraZ.push(transform.position.z) }), createPostProcessingFeature(post)] });
+  const boot = await runtime.boot(); if (boot.state !== "running") throw new Error("Advanced runtime failed to boot"); const stepped = runtime.stepExact(1); if (!stepped.ok) throw new Error("Advanced runtime failed to step"); const started = runtime.startPresentation(); if (!started.ok || !frameSource.deliver(16)) throw new Error("Advanced presentation failed");
+  const dialogueLineId = dialogue.snapshot()?.lineId ?? null; const vehicleSpeed = vehicleEvents[0] ?? -1; const postRenderCount = post.inspect().renderCount; const shutdown = await runtime.shutdown();
+  const report: AdvancedReport = Object.freeze({ ready: true, dialogueLineId, vehicleSpeed, postRenderCount, cameraZ: cameraZ[0] ?? -1, movementX: movements[0] ?? 0, action: actions[0] ?? "", debugProviders: Object.freeze(snapshots[0] ?? []), cleanup: Object.freeze({ clean: shutdown.clean, allDisposed: dialogue.disposed && vehicles.disposed && input.disposed && post.disposed && camera.disposed && debug.disposed, disposedOrder: shutdown.disposedOrder }) }); window.__THREE_GAME_KIT_ADVANCED__ = report; const status = document.querySelector("#status"); if (status !== null) status.textContent = JSON.stringify(report, null, 2);
+}

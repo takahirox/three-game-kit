@@ -492,3 +492,12 @@ const typedGenreServerFeatures: readonly FeatureDescriptor<unknown, ServerRuntim
   createSaveLoadServerFeature(createGenreSave({ currentVersion: 1, capture: () => null, restore() {}, adapter: createGenreAdapter() })),
 ];
 void typedGenreServerFeatures;
+
+import { createDebugDevToolsServerFeature, createDialogueServerFeature, createVehiclesServerFeature } from "@three-game-kit/server/advanced";
+import { createDebugDevToolsRuntime as createAdvancedDebug, createDialogueRuntime as createAdvancedDialogue, createVehicleRuntime as createAdvancedVehicle } from "@three-game-kit/shared/advanced";
+const typedAdvancedServerFeatures: readonly FeatureDescriptor<unknown, ServerRuntimeContribution>[] = [
+  createDialogueServerFeature(createAdvancedDialogue([{ id: "d", startNodeId: "n", nodes: [{ id: "n", lineId: "line" }] }])),
+  createVehiclesServerFeature(createAdvancedVehicle([{ id: "v", seats: [{ id: "driver", role: "driver" }], acceleration: 1, braking: 1, steering: 1 }])),
+  createDebugDevToolsServerFeature(createAdvancedDebug()),
+];
+void typedAdvancedServerFeatures;

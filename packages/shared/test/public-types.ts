@@ -71,3 +71,13 @@ const genreSaveOutcome: Promise<SaveLoadOutcome> = genreSave.save("slot");
 // @ts-expect-error Physics positions require numeric components.
 genrePhysics.addBody({ id: "bad", kind: "dynamic", position: { x: "0", y: 0, z: 0 }, halfExtents: { x: 1, y: 1, z: 1 } });
 void [genreProjectile, genreInventory, genreAbility, genreAi, genreSaveOutcome];
+
+import { createDebugDevToolsRuntime, createDialogueRuntime, createVehicleRuntime, type DialogueState, type VehicleState } from "@three-game-kit/shared/advanced";
+const typedDialogue = createDialogueRuntime([{ id: "dialogue", startNodeId: "node", nodes: [{ id: "node", lineId: "line", nextNodeId: null }] }]);
+const typedDialogueState: DialogueState = typedDialogue.start("dialogue");
+const typedVehicle = createVehicleRuntime([{ id: "vehicle", seats: [{ id: "driver", role: "driver" }], acceleration: 1, braking: 1, steering: 1 }]);
+const typedVehicleStates: readonly VehicleState[] = typedVehicle.snapshot();
+const typedDebug = createDebugDevToolsRuntime(); typedDebug.registerProvider("dialogue", () => typedDialogueState);
+// @ts-expect-error Vehicle control values must be numeric.
+typedVehicle.requestControl("vehicle", "actor", { throttle: "1", brake: 0, steering: 0 });
+void [typedDialogueState, typedVehicleStates, typedDebug];

@@ -170,6 +170,70 @@
       "verificationCommand": "pnpm verify:standard-features"
     },
     {
+      "catalogId": "camera-extensions",
+      "serverFeatureId": "not-applicable",
+      "clientFeatureId": "camera-extensions",
+      "purpose": "Publish first-person, orbit, and fixed-follow camera transforms with blends, zoom limits, occlusion hooks, and deterministic shake.",
+      "ownership": "kit-owned client presentation runtime with caller-owned occlusion and publish hooks",
+      "runtimes": [
+        "client"
+      ],
+      "requires": {
+        "server": [],
+        "client": []
+      },
+      "conflicts": [],
+      "configuration": {
+        "factoryInputs": {
+          "runtime": {
+            "type": "public runtime or adapter options",
+            "default": "not-applicable",
+            "bounds": "Validated, bounded, and replaceable through public contracts."
+          }
+        }
+      },
+      "phases": {
+        "server": [],
+        "clientSimulation": [],
+        "clientPresentation": [
+          "camera-view: camera-extensions-view (priority 100)"
+        ]
+      },
+      "authority": {
+        "owner": "not-applicable",
+        "intent": "This is local presentation or input behavior and cannot mutate trusted multiplayer authority.",
+        "validation": [
+          "not-applicable"
+        ],
+        "rejectionReasons": [
+          "not-applicable"
+        ]
+      },
+      "lifecycle": {
+        "setup": "The optional Feature establishes ownership only after successful setup.",
+        "dispose": "Shutdown or later-Feature rollback fences scheduled work and disposes owned state idempotently.",
+        "borrowedResources": [
+          "Consumer callbacks, presentation handles, and host services remain caller-owned unless explicitly transferred."
+        ]
+      },
+      "limitations": [
+        "Camera effects are presentation-only and never grant gameplay authority.",
+        "No monolithic camera controller, physics query, or cinematic timeline is bundled."
+      ],
+      "compatibilityRange": "^0.1.0",
+      "publicImports": {
+        "@three-game-kit/client": [
+          "@three-game-kit/client/advanced"
+        ]
+      },
+      "examplePaths": [
+        "examples/advanced-features/main.ts",
+        "examples/advanced-features/README.md",
+        "packages/client/test/advanced.test.mjs"
+      ],
+      "verificationCommand": "pnpm verify:advanced-features"
+    },
+    {
       "catalogId": "character-controller",
       "serverFeatureId": "not-applicable",
       "clientFeatureId": "character-controller",
@@ -284,6 +348,156 @@
         "examples/local-browser/main.ts"
       ],
       "verificationCommand": "pnpm verify:m2"
+    },
+    {
+      "catalogId": "debug-devtools",
+      "serverFeatureId": "debug-devtools.server",
+      "clientFeatureId": "debug-devtools.client",
+      "purpose": "Capture AI-readable structured provider snapshots and expose allowlisted semantic command injection for client and headless server diagnostics.",
+      "ownership": "kit-owned snapshot registry with consumer-owned providers and command handlers",
+      "runtimes": [
+        "server",
+        "client"
+      ],
+      "requires": {
+        "server": [],
+        "client": []
+      },
+      "conflicts": [],
+      "configuration": {
+        "factoryInputs": {
+          "runtime": {
+            "type": "public runtime or adapter options",
+            "default": "not-applicable",
+            "bounds": "Validated, bounded, and replaceable through public contracts."
+          }
+        }
+      },
+      "phases": {
+        "server": [
+          "telemetry: debug-devtools-server-capture (priority 1000)"
+        ],
+        "clientSimulation": [
+          "telemetry: debug-devtools-client-capture (priority 1000)"
+        ],
+        "clientPresentation": []
+      },
+      "authority": {
+        "owner": "server in multiplayer; local host in non-networked single-player",
+        "intent": "Debug snapshots observe state; allowlisted injection is a host-authorized development seam and not network authority.",
+        "validation": [
+          "Provider output must be depth-bounded JSON-like data.",
+          "Only explicitly registered command kinds can be injected."
+        ],
+        "rejectionReasons": [
+          "unknown-command",
+          "invalid-payload",
+          "provider-failed"
+        ]
+      },
+      "lifecycle": {
+        "setup": "The optional Feature establishes ownership only after successful setup.",
+        "dispose": "Shutdown or later-Feature rollback fences scheduled work and disposes owned state idempotently.",
+        "borrowedResources": [
+          "Consumer callbacks, presentation handles, and host services remain caller-owned unless explicitly transferred."
+        ]
+      },
+      "limitations": [
+        "No opaque overlay, remote administration server, authentication layer, or production console is bundled.",
+        "Renderer, ECS, physics, and telemetry details appear only through registered providers."
+      ],
+      "compatibilityRange": "^0.1.0",
+      "publicImports": {
+        "@three-game-kit/shared": [
+          "@three-game-kit/shared/advanced"
+        ],
+        "@three-game-kit/client": [
+          "@three-game-kit/client/advanced"
+        ],
+        "@three-game-kit/server": [
+          "@three-game-kit/server/advanced"
+        ]
+      },
+      "examplePaths": [
+        "examples/advanced-features/main.ts",
+        "examples/advanced-features/README.md",
+        "packages/client/test/advanced.test.mjs"
+      ],
+      "verificationCommand": "pnpm verify:advanced-features"
+    },
+    {
+      "catalogId": "dialogue",
+      "serverFeatureId": "dialogue.server",
+      "clientFeatureId": "dialogue.client",
+      "purpose": "Model deterministic localized dialogue nodes, linear progression, branching choices, conditions, effects, and save-friendly state.",
+      "ownership": "kit-owned state with consumer-owned condition/effect hooks and separate UI",
+      "runtimes": [
+        "server",
+        "client"
+      ],
+      "requires": {
+        "server": [],
+        "client": []
+      },
+      "conflicts": [],
+      "configuration": {
+        "factoryInputs": {
+          "runtime": {
+            "type": "public runtime or adapter options",
+            "default": "not-applicable",
+            "bounds": "Validated, bounded, and replaceable through public contracts."
+          }
+        }
+      },
+      "phases": {
+        "server": [],
+        "clientSimulation": [],
+        "clientPresentation": []
+      },
+      "authority": {
+        "owner": "server in multiplayer; local host in non-networked single-player",
+        "intent": "Clients may present or predict dialogue, while the server validates authoritative choices and effects.",
+        "validation": [
+          "Dialogue, node, line, choice, condition, and effect IDs are validated.",
+          "Choice conditions must pass before effects and transitions run."
+        ],
+        "rejectionReasons": [
+          "not-started",
+          "choice-required",
+          "unknown-choice",
+          "condition-rejected",
+          "already-complete"
+        ]
+      },
+      "lifecycle": {
+        "setup": "The optional Feature establishes ownership only after successful setup.",
+        "dispose": "Shutdown or later-Feature rollback fences scheduled work and disposes owned state idempotently.",
+        "borrowedResources": [
+          "Consumer callbacks, presentation handles, and host services remain caller-owned unless explicitly transferred."
+        ]
+      },
+      "limitations": [
+        "The runtime stores localization-friendly IDs rather than presentation text or UI layout.",
+        "Voice playback, rich-text formatting, network transport, and quest orchestration are outside this Feature."
+      ],
+      "compatibilityRange": "^0.1.0",
+      "publicImports": {
+        "@three-game-kit/shared": [
+          "@three-game-kit/shared/advanced"
+        ],
+        "@three-game-kit/client": [
+          "@three-game-kit/client/advanced"
+        ],
+        "@three-game-kit/server": [
+          "@three-game-kit/server/advanced"
+        ]
+      },
+      "examplePaths": [
+        "examples/advanced-features/main.ts",
+        "examples/advanced-features/README.md",
+        "packages/client/test/advanced.test.mjs"
+      ],
+      "verificationCommand": "pnpm verify:advanced-features"
     },
     {
       "catalogId": "game-flow",
@@ -408,6 +622,70 @@
       "publicImports": { "@three-game-kit/shared": ["@three-game-kit/shared/gameplay"], "@three-game-kit/client": ["@three-game-kit/client/gameplay"], "@three-game-kit/server": ["@three-game-kit/server/gameplay"] },
       "examplePaths": ["examples/common-gameplay/main.ts", "packages/shared/test/gameplay.test.mjs", "packages/server/test/gameplay.test.mjs"],
       "verificationCommand": "pnpm verify:common-gameplay"
+    },
+    {
+      "catalogId": "input-experience-extensions",
+      "serverFeatureId": "not-applicable",
+      "clientFeatureId": "input-experience-extensions",
+      "purpose": "Extend semantic movement/actions with gamepad and touch updates, rebinding, contexts, sensitivity, dead zones, and device disconnect cleanup.",
+      "ownership": "kit-owned client input state with programmable device-neutral update methods",
+      "runtimes": [
+        "client"
+      ],
+      "requires": {
+        "server": [],
+        "client": []
+      },
+      "conflicts": [],
+      "configuration": {
+        "factoryInputs": {
+          "runtime": {
+            "type": "public runtime or adapter options",
+            "default": "not-applicable",
+            "bounds": "Validated, bounded, and replaceable through public contracts."
+          }
+        }
+      },
+      "phases": {
+        "server": [],
+        "clientSimulation": [
+          "action-sample: input-experience-sample (priority 100)"
+        ],
+        "clientPresentation": []
+      },
+      "authority": {
+        "owner": "not-applicable",
+        "intent": "This is local presentation or input behavior and cannot mutate trusted multiplayer authority.",
+        "validation": [
+          "not-applicable"
+        ],
+        "rejectionReasons": [
+          "not-applicable"
+        ]
+      },
+      "lifecycle": {
+        "setup": "The optional Feature establishes ownership only after successful setup.",
+        "dispose": "Shutdown or later-Feature rollback fences scheduled work and disposes owned state idempotently.",
+        "borrowedResources": [
+          "Consumer callbacks, presentation handles, and host services remain caller-owned unless explicitly transferred."
+        ]
+      },
+      "limitations": [
+        "Browser device enumeration and event listeners remain adapters supplied by the consumer.",
+        "Haptics, platform-specific layouts, accessibility UI, and persistence of bindings are not bundled."
+      ],
+      "compatibilityRange": "^0.1.0",
+      "publicImports": {
+        "@three-game-kit/client": [
+          "@three-game-kit/client/advanced"
+        ]
+      },
+      "examplePaths": [
+        "examples/advanced-features/main.ts",
+        "examples/advanced-features/README.md",
+        "packages/client/test/advanced.test.mjs"
+      ],
+      "verificationCommand": "pnpm verify:advanced-features"
     },
     {
       "catalogId": "interaction",
@@ -713,6 +991,70 @@
         "examples/local-browser/main.ts"
       ],
       "verificationCommand": "pnpm verify:m2"
+    },
+    {
+      "catalogId": "post-processing",
+      "serverFeatureId": "not-applicable",
+      "clientFeatureId": "post-processing",
+      "purpose": "Own an optional ordered post-processing composer/pass lifecycle with resize, enable state, rendering, extension handles, and deterministic cleanup.",
+      "ownership": "kit-owned lifecycle around a consumer-selected composer adapter",
+      "runtimes": [
+        "client"
+      ],
+      "requires": {
+        "server": [],
+        "client": []
+      },
+      "conflicts": [],
+      "configuration": {
+        "factoryInputs": {
+          "runtime": {
+            "type": "public runtime or adapter options",
+            "default": "not-applicable",
+            "bounds": "Validated, bounded, and replaceable through public contracts."
+          }
+        }
+      },
+      "phases": {
+        "server": [],
+        "clientSimulation": [],
+        "clientPresentation": [
+          "render: post-processing-render (priority 100)"
+        ]
+      },
+      "authority": {
+        "owner": "not-applicable",
+        "intent": "This is local presentation or input behavior and cannot mutate trusted multiplayer authority.",
+        "validation": [
+          "not-applicable"
+        ],
+        "rejectionReasons": [
+          "not-applicable"
+        ]
+      },
+      "lifecycle": {
+        "setup": "The optional Feature establishes ownership only after successful setup.",
+        "dispose": "Shutdown or later-Feature rollback fences scheduled work and disposes owned state idempotently.",
+        "borrowedResources": [
+          "Consumer callbacks, presentation handles, and host services remain caller-owned unless explicitly transferred."
+        ]
+      },
+      "limitations": [
+        "No standard effect pass or Three.js examples dependency is forced into unrelated imports.",
+        "The consumer chooses whether the composer replaces or follows its base renderer."
+      ],
+      "compatibilityRange": "^0.1.0",
+      "publicImports": {
+        "@three-game-kit/client": [
+          "@three-game-kit/client/advanced"
+        ]
+      },
+      "examplePaths": [
+        "examples/advanced-features/main.ts",
+        "examples/advanced-features/README.md",
+        "packages/client/test/advanced.test.mjs"
+      ],
+      "verificationCommand": "pnpm verify:advanced-features"
     },
     {
       "catalogId": "projectile",
@@ -1171,6 +1513,83 @@
       "publicImports": { "@three-game-kit/shared": ["@three-game-kit/shared/gameplay"], "@three-game-kit/client": ["@three-game-kit/client/gameplay"] },
       "examplePaths": ["examples/common-gameplay/main.ts", "examples/common-gameplay/index.html", "tests/common-gameplay.spec.ts"],
       "verificationCommand": "pnpm verify:common-gameplay"
+    },
+    {
+      "catalogId": "vehicles",
+      "serverFeatureId": "vehicles.server",
+      "clientFeatureId": "vehicles.client",
+      "purpose": "Provide deterministic enter/exit seats, driver/passenger roles, bounded controls, replaceable integration, and server validation hooks.",
+      "ownership": "kit-owned control/occupancy state with consumer-owned physics integration hooks",
+      "runtimes": [
+        "server",
+        "client"
+      ],
+      "requires": {
+        "server": [],
+        "client": []
+      },
+      "conflicts": [],
+      "configuration": {
+        "factoryInputs": {
+          "runtime": {
+            "type": "public runtime or adapter options",
+            "default": "not-applicable",
+            "bounds": "Validated, bounded, and replaceable through public contracts."
+          }
+        }
+      },
+      "phases": {
+        "server": [
+          "gameplay: vehicles-server-step (priority 700)"
+        ],
+        "clientSimulation": [
+          "shared-predict: vehicles-client-step (priority 700)"
+        ],
+        "clientPresentation": []
+      },
+      "authority": {
+        "owner": "server in multiplayer; local host in non-networked single-player",
+        "intent": "Clients submit provisional vehicle controls; the server validates the bound driver and integration policy.",
+        "validation": [
+          "The actor must occupy the configured driver seat.",
+          "Throttle, brake, and steering are finite and bounded before integration."
+        ],
+        "rejectionReasons": [
+          "not-driver",
+          "validation-rejected",
+          "unknown-vehicle",
+          "seat-occupied"
+        ]
+      },
+      "lifecycle": {
+        "setup": "The optional Feature establishes ownership only after successful setup.",
+        "dispose": "Shutdown or later-Feature rollback fences scheduled work and disposes owned state idempotently.",
+        "borrowedResources": [
+          "Consumer callbacks, presentation handles, and host services remain caller-owned unless explicitly transferred."
+        ]
+      },
+      "limitations": [
+        "The reference integrator is an arcade scalar speed/steering abstraction, not a realistic simulator.",
+        "Physics bodies, wheel models, camera/input handoff, replication, and prediction reconciliation remain replaceable host integrations."
+      ],
+      "compatibilityRange": "^0.1.0",
+      "publicImports": {
+        "@three-game-kit/shared": [
+          "@three-game-kit/shared/advanced"
+        ],
+        "@three-game-kit/client": [
+          "@three-game-kit/client/advanced"
+        ],
+        "@three-game-kit/server": [
+          "@three-game-kit/server/advanced"
+        ]
+      },
+      "examplePaths": [
+        "examples/advanced-features/main.ts",
+        "examples/advanced-features/README.md",
+        "packages/client/test/advanced.test.mjs"
+      ],
+      "verificationCommand": "pnpm verify:advanced-features"
     },
     {
       "catalogId": "vfx",

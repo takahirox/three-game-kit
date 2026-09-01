@@ -8,6 +8,7 @@ Shared provides authority-neutral semantic movement rules and static-scene descr
 - `@three-game-kit/shared/movement`
 - `@three-game-kit/shared/gameplay`
 - `@three-game-kit/shared/genre`
+- `@three-game-kit/shared/advanced`
 
 ```js
 import { createMovementCommand } from "@three-game-kit/shared/movement";
@@ -23,6 +24,7 @@ transferred to. Server validation and state application remain authoritative; us
 rules for client prediction does not transfer authority.
 Genre runtimes use the same ownership rule and provide optional General Physics,
 Projectile, Inventory, Ability/Skill, Simple AI/Navigation, and Save/Load state.
+Advanced runtimes provide optional Dialogue, Vehicles, and structured Debug/DevTools state.
 
 ## Bounded MVP
 

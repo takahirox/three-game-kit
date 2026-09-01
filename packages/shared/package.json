@@ -26,6 +26,10 @@
     "./genre": {
       "types": "./dist/genre.d.ts",
       "import": "./dist/genre.js"
+    },
+    "./advanced": {
+      "types": "./dist/advanced.d.ts",
+      "import": "./dist/advanced.js"
     }
   },
   "dependencies": {
