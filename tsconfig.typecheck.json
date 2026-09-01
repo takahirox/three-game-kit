@@ -12,6 +12,7 @@
     "packages/core/test/public-types.ts",
     "packages/client/test/public-types.ts",
     "packages/protocol/test/public-types.ts",
+    "packages/shared/test/public-types.ts",
     "packages/server/test/public-types.ts"
   ]
 }

@@ -104,6 +104,7 @@ const requiredFiles = [
   "docs/features/foundation-catalog.json",
   "docs/features/client-features.md",
   "docs/features/standard-features.md",
+  "docs/features/common-gameplay.md",
   "docs/authoring/client-only-feature.md",
   "docs/authoring/server-only-feature.md",
   "docs/authoring/cross-runtime-interaction.md",
@@ -192,6 +193,7 @@ const packageMap = documents.get("docs/architecture/package-map.md") ?? "";
 const publicSpecifiers = [
   "@three-game-kit/core",
   "@three-game-kit/shared",
+  "@three-game-kit/shared/gameplay",
   "@three-game-kit/shared/movement",
   "@three-game-kit/protocol",
   "@three-game-kit/client",
@@ -205,11 +207,13 @@ const publicSpecifiers = [
   "@three-game-kit/client/audio",
   "@three-game-kit/client/animation",
   "@three-game-kit/client/character-controller",
+  "@three-game-kit/client/gameplay",
   "@three-game-kit/client/networking",
   "@three-game-kit/client/replication",
   "@three-game-kit/server",
   "@three-game-kit/server/collision",
   "@three-game-kit/server/authoritative",
+  "@three-game-kit/server/gameplay",
   "@three-game-kit/server/networking"
 ];
 requireAll(packageMap, publicSpecifiers, "package map missing public specifier");
@@ -217,8 +221,8 @@ for (const packageName of ["client", "core", "protocol", "server", "shared"]) {
   if (!await exists(resolve(root, `packages/${packageName}/README.md`))) fail(`missing packages/${packageName}/README.md`);
 }
 
-const featureDocs = `${documents.get("docs/features/client-features.md") ?? ""}\n${documents.get("docs/features/standard-features.md") ?? ""}\n${documents.get("docs/features/interaction.md") ?? ""}`;
-requireAll(featureDocs, ["createInputFeature", "createCameraFeature", "createRenderingFeature", "createVfxFeature", "createCollisionFeature", "createAudioFeature", "createCharacterControllerFeature", "createAnimationFeature", "createAssetManagerFeature", "Interaction"], "missing documented Feature");
+const featureDocs = `${documents.get("docs/features/client-features.md") ?? ""}\n${documents.get("docs/features/standard-features.md") ?? ""}\n${documents.get("docs/features/common-gameplay.md") ?? ""}\n${documents.get("docs/features/interaction.md") ?? ""}`;
+requireAll(featureDocs, ["createInputFeature", "createCameraFeature", "createRenderingFeature", "createVfxFeature", "createCollisionFeature", "createAudioFeature", "createCharacterControllerFeature", "createAnimationFeature", "createAssetManagerFeature", "createHudFeature", "createTriggerAreaClientFeature", "createHealthServerFeature", "createSpawnPrefabClientFeature", "createGameFlowServerFeature", "Interaction"], "missing documented Feature");
 
 const narrative = documents.get("docs/architecture/cross-runtime-narrative.md") ?? "";
 const narrativeTerms = [
@@ -236,7 +240,9 @@ requireAll(verifyM5, [
   "test:m2-browser",
   "verify:m4",
   "test:m5-catalog",
-  "test:m5-release"
+  "test:m5-release",
+  "typecheck:common-gameplay",
+  "test:common-gameplay"
 ], "verify:m5 missing required gate");
 
 const ci = await readFile(resolve(root, ".github/workflows/ci.yml"), "utf8");
@@ -281,7 +287,7 @@ if (failures.length) {
     links: checkedLinks.length,
     requiredDocuments: requiredFiles.length,
     publicSpecifiers: publicSpecifiers.length,
-    features: 10,
+    features: 15,
     failures: 0
   }));
 }

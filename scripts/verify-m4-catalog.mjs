@@ -100,6 +100,7 @@ const expectedPublicSpecifiers = [
   "@three-game-kit/client/camera",
   "@three-game-kit/client/character-controller",
   "@three-game-kit/client/collision",
+  "@three-game-kit/client/gameplay",
   "@three-game-kit/client/input",
   "@three-game-kit/client/networking",
   "@three-game-kit/client/rendering",
@@ -110,8 +111,10 @@ const expectedPublicSpecifiers = [
   "@three-game-kit/server",
   "@three-game-kit/server/authoritative",
   "@three-game-kit/server/collision",
+  "@three-game-kit/server/gameplay",
   "@three-game-kit/server/networking",
   "@three-game-kit/shared",
+  "@three-game-kit/shared/gameplay",
   "@three-game-kit/shared/movement",
 ];
 const publicSpecifiers = [];
@@ -125,7 +128,7 @@ for (const directory of packageDirectories) {
 }
 publicSpecifiers.sort();
 assert.deepEqual(publicSpecifiers, expectedPublicSpecifiers, "public kit specifiers changed");
-assert.equal(new Set(publicSpecifiers).size, 21, "public kit specifiers must be unique");
+assert.equal(new Set(publicSpecifiers).size, 24, "public kit specifiers must be unique");
 
 assertExactKeys(
   feature.publicImports,

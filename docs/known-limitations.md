@@ -68,9 +68,20 @@ support for omitted capabilities. Normative details remain in the linked contrac
 - The only optional cross-runtime proof is the consumer-owned Interaction example:
   one configured target, finite inclusive range validation, and one boolean toggle.
 - It does not provide line-of-sight or physics-occlusion checks, multiple-target
-  policy, inventory, combat, damage, abilities, dialogue, navigation, vehicles, or
+  policy, inventory, combat orchestration, abilities, dialogue, navigation, vehicles, or
   arbitrary actions. Removing it leaves the base movement slice intact. See the
   [Interaction contract](./features/interaction.md).
+
+## Common gameplay
+
+- Trigger/Area is limited to axis-aligned boxes, spheres, and string layers; it has
+  no mesh queries, rotations, or built-in gameplay effects.
+- Health/Damage is a bounded numeric rule model, not a combat, ability, armor,
+  status-effect, team, persistence, or replication system.
+- Spawn/Prefab accepts immutable JSON-like descriptors and opaque adapter handles;
+  it does not load assets, define ECS schemas, place entities, or replicate them.
+- Game State/Flow has synchronous hooks and no scene loading or persistence. HUD is
+  presentation-only and provides no layout, styling, focus, or localization policy.
 
 ## Telemetry and performance
 

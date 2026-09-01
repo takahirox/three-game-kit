@@ -21,7 +21,7 @@ injection, disconnect fencing, exact cleanup, and canonical two-context browser 
 consumer-owned external server-authoritative Interaction proof, range validation and toggle, semantic client
 queue/latest snapshot presentation, five packed kit tarballs installed outside the workspace, catalog/authoring
 docs, and rollback/idempotent cleanup evidence. Milestone 5 produces a release candidate backed by a clean
-`pnpm verify:m5`, audits of all five package archives and all ten catalog entries, and complete documentation
+`pnpm verify:m5`, audits of all five package archives and all fifteen catalog entries, and complete documentation
 and evidence. It does not include registry publication or hosted deployment.
 
 ## Bounded MVP
@@ -35,11 +35,13 @@ The MVP is one authoritative multiplayer vertical slice, not the full capability
 - A browser sandbox, exact-tick headless tests, the normative two-client test, required telemetry, and one packed external-consumer fixture.
 - Explicit public exports, boundary checks, concise Feature documentation, supported environments, limitations, and repeatable CI.
 
-Exactly one Optional Feature, server-authoritative Interaction, proves cross-runtime extensibility.
-WebXR, post-processing, reconnect, production authentication, alternate transports, and the other
-proposed gameplay Features remain outside the MVP. The post-MVP Priority S layer adds optional
+The consumer-owned server-authoritative Interaction example proves cross-runtime extensibility.
+WebXR, post-processing, reconnect, production authentication, and alternate transports remain
+outside the MVP. The post-MVP Priority S layer adds optional
 Audio, Character Controller, Animation, and manifest-based Asset Manager Standard Features without
-making them Core dependencies.
+making them Core dependencies. The Priority A layer adds optional UI/HUD, Trigger/Area,
+Health/Damage, Spawn/Prefab, and Game State/Flow Features with Shared rules and explicit
+Client/Server authority wrappers.
 
 ## Architectural boundaries
 
@@ -61,6 +63,7 @@ making them Core dependencies.
 - [Milestone 4 catalog evidence](./docs/features/catalog.json)
 - [Client Feature contracts](./docs/features/client-features.md)
 - [Priority S standard Features](./docs/features/standard-features.md)
+- [Priority A common gameplay Features](./docs/features/common-gameplay.md)
 - [Interaction contract](./docs/features/interaction.md)
 - [Client-only Feature authoring](./docs/authoring/client-only-feature.md)
 - [Server-only Feature authoring](./docs/authoring/server-only-feature.md)

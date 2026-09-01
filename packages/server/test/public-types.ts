@@ -41,6 +41,27 @@ import {
   type AuthoritativeWebSocketServerState,
   type ServerOutboundMessage,
 } from "@three-game-kit/server/networking";
+import type { FeatureDescriptor, ServerRuntimeContribution } from "@three-game-kit/core";
+import {
+  createGameFlowServerFeature,
+  createHealthServerFeature,
+  createSpawnPrefabServerFeature,
+  createTriggerAreaServerFeature,
+} from "@three-game-kit/server/gameplay";
+import {
+  createGameFlowRuntime,
+  createHealthRuntime,
+  createSpawnPrefabRuntime,
+  createTriggerAreaRuntime,
+} from "@three-game-kit/shared/gameplay";
+
+const gameplayServerFeatures: readonly FeatureDescriptor<unknown, ServerRuntimeContribution>[] = [
+  createTriggerAreaServerFeature({ runtime: createTriggerAreaRuntime([]), readActors: () => [], publish() {} }),
+  createHealthServerFeature({ runtime: createHealthRuntime(), publish() {} }),
+  createSpawnPrefabServerFeature(createSpawnPrefabRuntime([{ id: "entity" }], { create: () => ({}), reuse() {}, release() {} })),
+  createGameFlowServerFeature(createGameFlowRuntime({ states: [{ id: "boot", allowedTo: [] }], initialState: "boot" })),
+];
+void gameplayServerFeatures;
 
 const adapter: ServerCollisionAdapter =
   createRapierServerCollisionAdapter({
