@@ -93,6 +93,7 @@ assert.ok(
 const packageDirectories = ["core", "shared", "protocol", "client", "server"];
 const expectedPublicSpecifiers = [
   "@three-game-kit/client",
+  "@three-game-kit/client/advanced",
   "@three-game-kit/client/animation",
   "@three-game-kit/client/asset-manager",
   "@three-game-kit/client/assets",
@@ -110,12 +111,14 @@ const expectedPublicSpecifiers = [
   "@three-game-kit/core",
   "@three-game-kit/protocol",
   "@three-game-kit/server",
+  "@three-game-kit/server/advanced",
   "@three-game-kit/server/authoritative",
   "@three-game-kit/server/collision",
   "@three-game-kit/server/gameplay",
   "@three-game-kit/server/genre",
   "@three-game-kit/server/networking",
   "@three-game-kit/shared",
+  "@three-game-kit/shared/advanced",
   "@three-game-kit/shared/gameplay",
   "@three-game-kit/shared/genre",
   "@three-game-kit/shared/movement",
@@ -131,7 +134,7 @@ for (const directory of packageDirectories) {
 }
 publicSpecifiers.sort();
 assert.deepEqual(publicSpecifiers, expectedPublicSpecifiers, "public kit specifiers changed");
-assert.equal(new Set(publicSpecifiers).size, 27, "public kit specifiers must be unique");
+assert.equal(new Set(publicSpecifiers).size, 30, "public kit specifiers must be unique");
 
 assertExactKeys(
   feature.publicImports,

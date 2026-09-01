@@ -95,6 +95,18 @@ support for omitted capabilities. Normative details remain in the linked contrac
   cloud sync, authentication, transactions, or conflict resolution. See the
   [Priority B contract](./features/genre-expansion.md).
 
+## Advanced and specialized Features
+
+- Dialogue is an ID/state model without UI, localization tables, voice, or quest orchestration.
+  Vehicles use a replaceable arcade control abstraction, not a realistic wheel simulator.
+- Post-processing owns consumer-supplied composer/pass handles but bundles no standard passes.
+  Camera extensions are non-authoritative transforms without a cinematic editor.
+- Input extensions expose device-neutral gamepad/touch updates; browser listeners, haptics,
+  accessibility UI, and binding persistence remain consumer responsibilities.
+- Debug/DevTools exports structured snapshots and allowlisted injection hooks. It is not a
+  production remote console, authentication system, or opaque game-specific overlay. See the
+  [Priority C contract](./features/advanced-features.md).
+
 ## Telemetry and performance
 
 - Telemetry is bounded in-memory inspection: structured errors, counters, gauges,

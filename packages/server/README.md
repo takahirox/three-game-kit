@@ -9,6 +9,7 @@ Server provides the headless authoritative runtime, Rapier collision, authoritat
 - `@three-game-kit/server/authoritative`
 - `@three-game-kit/server/gameplay`
 - `@three-game-kit/server/genre`
+- `@three-game-kit/server/advanced`
 - `@three-game-kit/server/networking`
 
 ```js
@@ -30,6 +31,7 @@ The Server Runtime owns authoritative multiplayer state, fixed ticks, its Core W
 - Authority covers server-owned identity, movement application, one optional interaction contract, replication, and disconnect cleanup.
 - Common gameplay wrappers run authoritative Trigger and Health rules and own passive Prefab and Flow runtimes.
 - Genre wrappers run authoritative optional physics, projectile, ability, and AI systems and own passive inventory and save state.
+- Advanced wrappers own authoritative Dialogue, Vehicles, and structured headless Debug/DevTools state.
 - Observability is bounded structured telemetry and resource accounting.
 
 See the [Three Game Kit repository documentation](https://github.com/takahirox/three-game-kit#documentation) for server scheduling, lifecycle, and authority contracts.

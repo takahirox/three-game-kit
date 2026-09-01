@@ -1,0 +1,5 @@
+{
+  "extends": "../../tsconfig.base.json",
+  "compilerOptions": { "noEmit": true, "lib": ["ES2023", "ESNext.Disposable", "DOM"], "types": [], "declaration": false, "declarationMap": false, "sourceMap": false, "paths": { "@three-game-kit/core": ["../../packages/core/src/index.ts"], "@three-game-kit/shared": ["../../packages/shared/src/index.ts"], "@three-game-kit/shared/*": ["../../packages/shared/src/*.ts"], "@three-game-kit/client": ["../../packages/client/src/index.ts"], "@three-game-kit/client/*": ["../../packages/client/src/*.ts"] } },
+  "include": ["main.ts"]
+}

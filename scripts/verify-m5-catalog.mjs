@@ -46,14 +46,19 @@ const expectedCatalogIds = [
   "animation",
   "asset-manager",
   "audio",
+  "camera-extensions",
   "character-controller",
   "collision",
+  "debug-devtools",
+  "dialogue",
   "game-flow",
   "general-physics",
   "health-damage",
+  "input-experience-extensions",
   "interaction",
   "inventory",
   "movement-input",
+  "post-processing",
   "projectile",
   "save-load",
   "simple-ai-navigation",
@@ -62,6 +67,7 @@ const expectedCatalogIds = [
   "three-rendering",
   "trigger-area",
   "ui-hud",
+  "vehicles",
   "vfx",
 ];
 const clientFeatures = new Map([
@@ -69,13 +75,18 @@ const clientFeatures = new Map([
   ["animation", { factory: "createAnimationFeature", subpath: "animation", source: "packages/client/src/animation.ts", example: "examples/standard-features/main.ts" }],
   ["asset-manager", { factory: "createAssetManagerFeature", subpath: "asset-manager", source: "packages/client/src/asset-manager.ts", example: "examples/standard-features/main.ts" }],
   ["audio", { factory: "createAudioFeature", subpath: "audio", source: "packages/client/src/audio.ts", example: "examples/standard-features/main.ts" }],
+  ["camera-extensions", { factory: "createCameraExtensionsFeature", subpath: "advanced", source: "packages/client/src/advanced.ts", example: "examples/advanced-features/main.ts" }],
   ["character-controller", { factory: "createCharacterControllerFeature", subpath: "character-controller", source: "packages/client/src/character-controller.ts", example: "examples/standard-features/main.ts", publicImports: ["@three-game-kit/client/character-controller", "@three-game-kit/client/collision"] }],
   ["collision", { factory: "createCollisionFeature", subpath: "collision", source: "packages/client/src/collision.ts" }],
+  ["debug-devtools", { factory: "createDebugDevToolsClientFeature", featureId: "debug-devtools.client", subpath: "advanced", source: "packages/client/src/advanced.ts", example: "examples/advanced-features/main.ts" }],
+  ["dialogue", { factory: "createDialogueClientFeature", featureId: "dialogue.client", subpath: "advanced", source: "packages/client/src/advanced.ts", example: "examples/advanced-features/main.ts" }],
   ["game-flow", { factory: "createGameFlowClientFeature", featureId: "game-flow.client", subpath: "gameplay", source: "packages/client/src/gameplay.ts", example: "examples/common-gameplay/main.ts" }],
   ["general-physics", { factory: "createGeneralPhysicsClientFeature", featureId: "general-physics.client", subpath: "genre", source: "packages/client/src/genre.ts", example: "examples/genre-expansion/main.ts" }],
   ["health-damage", { factory: "createHealthClientFeature", featureId: "health-damage.client", subpath: "gameplay", source: "packages/client/src/gameplay.ts", example: "examples/common-gameplay/main.ts" }],
+  ["input-experience-extensions", { factory: "createInputExperienceFeature", subpath: "advanced", source: "packages/client/src/advanced.ts", example: "examples/advanced-features/main.ts" }],
   ["inventory", { factory: "createInventoryClientFeature", featureId: "inventory.client", subpath: "genre", source: "packages/client/src/genre.ts", example: "examples/genre-expansion/main.ts" }],
   ["movement-input", { factory: "createInputFeature", subpath: "input", source: "packages/client/src/input.ts" }],
+  ["post-processing", { factory: "createPostProcessingFeature", subpath: "advanced", source: "packages/client/src/advanced.ts", example: "examples/advanced-features/main.ts" }],
   ["projectile", { factory: "createProjectileClientFeature", featureId: "projectile.client", subpath: "genre", source: "packages/client/src/genre.ts", example: "examples/genre-expansion/main.ts" }],
   ["save-load", { factory: "createSaveLoadClientFeature", featureId: "save-load.client", subpath: "genre", source: "packages/client/src/genre.ts", example: "examples/genre-expansion/main.ts" }],
   ["simple-ai-navigation", { factory: "createSimpleAiNavigationClientFeature", featureId: "simple-ai-navigation.client", subpath: "genre", source: "packages/client/src/genre.ts", example: "examples/genre-expansion/main.ts" }],
@@ -84,6 +95,7 @@ const clientFeatures = new Map([
   ["three-rendering", { factory: "createRenderingFeature", subpath: "rendering", source: "packages/client/src/rendering.ts" }],
   ["trigger-area", { factory: "createTriggerAreaClientFeature", featureId: "trigger-area.client", subpath: "gameplay", source: "packages/client/src/gameplay.ts", example: "examples/common-gameplay/main.ts" }],
   ["ui-hud", { factory: "createHudFeature", subpath: "gameplay", source: "packages/client/src/gameplay.ts", example: "examples/common-gameplay/main.ts" }],
+  ["vehicles", { factory: "createVehiclesClientFeature", featureId: "vehicles.client", subpath: "advanced", source: "packages/client/src/advanced.ts", example: "examples/advanced-features/main.ts" }],
   ["vfx", { factory: "createVfxFeature", subpath: "vfx", source: "packages/client/src/vfx.ts", example: "showcases/core-run/src/game.ts" }],
 ]);
 const entryKeys = [
@@ -110,9 +122,9 @@ const catalog = await readJson("docs/features/foundation-catalog.json");
 assert.deepEqual(Object.keys(catalog), ["schemaVersion", "features"], "foundation catalog keys changed");
 assert.equal(catalog.schemaVersion, 1, "foundation catalog schemaVersion must be 1");
 assert.ok(Array.isArray(catalog.features), "foundation catalog features must be an array");
-assert.equal(catalog.features.length, 21, "foundation catalog must contain exactly twenty-one entries");
+assert.equal(catalog.features.length, 27, "foundation catalog must contain exactly twenty-seven entries");
 assert.deepEqual(catalog.features.map(({ catalogId }) => catalogId), expectedCatalogIds, "catalog IDs must be sorted and exact");
-assert.equal(new Set(catalog.features.map(({ catalogId }) => catalogId)).size, 21, "catalog IDs must be unique");
+assert.equal(new Set(catalog.features.map(({ catalogId }) => catalogId)).size, 27, "catalog IDs must be unique");
 for (const feature of catalog.features) {
   assert.deepEqual(Object.keys(feature), entryKeys, `${feature.catalogId} top-level keys changed`);
 }
@@ -139,8 +151,8 @@ for (const directory of packageDirectories) {
   }
 }
 publicSpecifiers.sort();
-assert.equal(publicSpecifiers.length, 27, "package manifests must expose exactly 27 public specifiers");
-assert.equal(new Set(publicSpecifiers).size, 27, "public package specifiers must be unique");
+assert.equal(publicSpecifiers.length, 30, "package manifests must expose exactly 30 public specifiers");
+assert.equal(new Set(publicSpecifiers).size, 30, "public package specifiers must be unique");
 const publicSpecifierSet = new Set(publicSpecifiers);
 
 const clientManifest = manifests.get("@three-game-kit/client");
@@ -158,7 +170,7 @@ for (const [featureId, mapping] of clientFeatures) {
   assert.match(source, new RegExp(`["']${runtimeFeatureId.replace(".", "\\.")}["']`, "u"), `${mapping.factory} Feature ID changed`);
   const feature = catalog.features.find(({ catalogId }) => catalogId === featureId);
   assert.equal(feature.clientFeatureId, runtimeFeatureId, `${featureId} clientFeatureId changed`);
-  if (!["game-flow", "health-damage", "spawn-prefab", "trigger-area", "ui-hud", "ability-skill", "general-physics", "inventory", "projectile", "save-load", "simple-ai-navigation"].includes(featureId)) {
+  if (!["game-flow", "health-damage", "spawn-prefab", "trigger-area", "ui-hud", "ability-skill", "general-physics", "inventory", "projectile", "save-load", "simple-ai-navigation", "debug-devtools", "dialogue", "vehicles"].includes(featureId)) {
     assert.deepEqual(feature.publicImports, { "@three-game-kit/client": mapping.publicImports ?? [`@three-game-kit/client/${mapping.subpath}`] });
   }
   const exampleSource = mapping.example === undefined
@@ -213,6 +225,24 @@ for (const [catalogId, sharedFactory, serverFactory, serverFeatureId] of genreMa
   assert.ok(feature.publicImports["@three-game-kit/server"].includes("@three-game-kit/server/genre"));
 }
 
+const advancedMappings = [
+  ["debug-devtools", "createDebugDevToolsRuntime", "createDebugDevToolsServerFeature", "debug-devtools.server"],
+  ["dialogue", "createDialogueRuntime", "createDialogueServerFeature", "dialogue.server"],
+  ["vehicles", "createVehicleRuntime", "createVehiclesServerFeature", "vehicles.server"],
+];
+const sharedAdvancedSource = await readFile(path.join(root, "packages/shared/src/advanced.ts"), "utf8");
+const serverAdvancedSource = await readFile(path.join(root, "packages/server/src/advanced.ts"), "utf8");
+const serverAdvancedTest = await readFile(path.join(root, "packages/server/test/advanced.test.mjs"), "utf8");
+for (const [catalogId, sharedFactory, serverFactory, serverFeatureId] of advancedMappings) {
+  const feature = catalog.features.find((entry) => entry.catalogId === catalogId);
+  assert.match(sharedAdvancedSource, new RegExp(`export function ${sharedFactory}\\b`, "u"));
+  assert.match(serverAdvancedSource, new RegExp(`export function ${serverFactory}\\b`, "u"));
+  assert.match(serverAdvancedTest, new RegExp(`\\b${serverFactory}\\s*\\(`, "u"));
+  assert.equal(feature.serverFeatureId, serverFeatureId);
+  assert.ok(feature.publicImports["@three-game-kit/shared"].includes("@three-game-kit/shared/advanced"));
+  assert.ok(feature.publicImports["@three-game-kit/server"].includes("@three-game-kit/server/advanced"));
+}
+
 for (const feature of catalog.features) {
   assertNonemptyString(feature.purpose, `${feature.catalogId} purpose`);
   assertNonemptyString(feature.ownership, `${feature.catalogId} ownership`);
@@ -254,7 +284,9 @@ for (const feature of catalog.features) {
     assert.ok((await stat(resolved)).isFile(), `${examplePath} must be an existing file`);
   }
 
-  const expectedCommand = ["ability-skill", "general-physics", "inventory", "projectile", "save-load", "simple-ai-navigation"].includes(feature.catalogId)
+  const expectedCommand = ["camera-extensions", "debug-devtools", "dialogue", "input-experience-extensions", "post-processing", "vehicles"].includes(feature.catalogId)
+    ? "pnpm verify:advanced-features"
+    : ["ability-skill", "general-physics", "inventory", "projectile", "save-load", "simple-ai-navigation"].includes(feature.catalogId)
     ? "pnpm verify:genre-expansion"
     : ["game-flow", "health-damage", "spawn-prefab", "trigger-area", "ui-hud"].includes(feature.catalogId)
     ? "pnpm verify:common-gameplay"
@@ -265,7 +297,7 @@ for (const feature of catalog.features) {
       : "pnpm verify:m2";
   assert.equal(feature.verificationCommand, expectedCommand, `${feature.catalogId} verificationCommand changed`);
 
-  if (!["interaction", "game-flow", "health-damage", "spawn-prefab", "trigger-area", "ability-skill", "general-physics", "inventory", "projectile", "save-load", "simple-ai-navigation"].includes(feature.catalogId)) {
+  if (!["interaction", "game-flow", "health-damage", "spawn-prefab", "trigger-area", "ability-skill", "general-physics", "inventory", "projectile", "save-load", "simple-ai-navigation", "debug-devtools", "dialogue", "vehicles"].includes(feature.catalogId)) {
     assert.deepEqual(feature.runtimes, ["client"], `${feature.catalogId} must be client-only`);
     assert.equal(feature.serverFeatureId, "not-applicable", `${feature.catalogId} serverFeatureId must be explicit`);
     assert.deepEqual(feature.requires.server, [], `${feature.catalogId} server requirements must be empty`);
@@ -295,7 +327,7 @@ const listedFeatureIds = catalog.features.flatMap((feature) =>
 );
 assert.deepEqual(
   [...listedFeatureIds].sort(),
-  ["ability-skill.client", "ability-skill.server", "animation", "asset-manager", "audio", "character-controller", "collision", "external.interaction.client", "external.interaction.server", "game-flow.client", "game-flow.server", "general-physics.client", "general-physics.server", "health-damage.client", "health-damage.server", "inventory.client", "inventory.server", "movement-input", "projectile.client", "projectile.server", "save-load.client", "save-load.server", "simple-ai-navigation.client", "simple-ai-navigation.server", "spawn-prefab.client", "spawn-prefab.server", "third-person-camera", "three-rendering", "trigger-area.client", "trigger-area.server", "ui-hud", "vfx"],
+  ["ability-skill.client", "ability-skill.server", "animation", "asset-manager", "audio", "camera-extensions", "character-controller", "collision", "debug-devtools.client", "debug-devtools.server", "dialogue.client", "dialogue.server", "external.interaction.client", "external.interaction.server", "game-flow.client", "game-flow.server", "general-physics.client", "general-physics.server", "health-damage.client", "health-damage.server", "input-experience-extensions", "inventory.client", "inventory.server", "movement-input", "post-processing", "projectile.client", "projectile.server", "save-load.client", "save-load.server", "simple-ai-navigation.client", "simple-ai-navigation.server", "spawn-prefab.client", "spawn-prefab.server", "third-person-camera", "three-rendering", "trigger-area.client", "trigger-area.server", "ui-hud", "vehicles.client", "vehicles.server", "vfx"],
   "all public Feature IDs must be covered exactly once",
 );
 assert.equal(new Set(listedFeatureIds).size, listedFeatureIds.length, "public Feature IDs must not be duplicated");

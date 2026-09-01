@@ -78,9 +78,9 @@ are intentionally removed and are not release artifacts.
 
 ## M5 catalog and archive audits
 
-`test:m5-catalog` requires exactly twenty-one sorted Feature catalog entries, including
-the five Priority A and six Priority B entries. It checks their complete discovery metadata,
-all thirty-two public Feature IDs, all 27 public
+`test:m5-catalog` requires exactly twenty-seven sorted Feature catalog entries, including
+the five Priority A, six Priority B, and six Priority C entries. It checks their complete discovery metadata,
+all forty-one public Feature IDs, all 30 public
 package specifiers, example paths, first-party factories, and the consumer ownership
 of Interaction. The normative prose for the original client-only Features is
 [`client-features.md`](./features/client-features.md), Priority S is documented in
@@ -89,6 +89,8 @@ in [`interaction.md`](./features/interaction.md).
 Priority A is documented in [`common-gameplay.md`](./features/common-gameplay.md).
 Priority B is documented in [`genre-expansion.md`](./features/genre-expansion.md), with
 its public-import-only browser acceptance included in `pnpm verify:m5`.
+Priority C is documented in [`advanced-features.md`](./features/advanced-features.md), with
+independent optional adoption and structured automation evidence in the same gate.
 
 `test:m5-release` builds five temporary package archives for Client, Core, Protocol,
 Server, and Shared. It requires exactly five tarballs and audits each archive's

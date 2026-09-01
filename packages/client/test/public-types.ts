@@ -633,3 +633,14 @@ const typedGenreClientFeatures: readonly ClientFeatureDescriptor<unknown>[] = [
   createSaveLoadClientFeature(createGenreSave({ currentVersion: 1, capture: () => null, restore() {}, adapter: createBrowserStorageSaveAdapter(typedBrowserStorage) })),
 ];
 void typedGenreClientFeatures;
+
+import { createCameraEffectsRuntime, createCameraExtensionsFeature, createDebugDevToolsClientFeature, createDialogueClientFeature, createInputExperienceFeature, createInputExperienceRuntime, createPostProcessingFeature, createPostProcessingRuntime, createVehiclesClientFeature } from "@three-game-kit/client/advanced";
+import { createDebugDevToolsRuntime as createAdvancedDebug, createDialogueRuntime as createAdvancedDialogue, createVehicleRuntime as createAdvancedVehicle } from "@three-game-kit/shared/advanced";
+const advancedDialogue = createAdvancedDialogue([{ id: "d", startNodeId: "n", nodes: [{ id: "n", lineId: "line" }] }]);
+const advancedVehicle = createAdvancedVehicle([{ id: "v", seats: [{ id: "driver", role: "driver" }], acceleration: 1, braking: 1, steering: 1 }]);
+const advancedDebug = createAdvancedDebug();
+const advancedInput = createInputExperienceRuntime({ contexts: { gameplay: { jump: ["A"] } }, initialContext: "gameplay" });
+const advancedPost = createPostProcessingRuntime({ addPass() {}, removePass() {}, setPassEnabled() {}, resize() {}, render() {}, dispose() {} });
+const advancedCamera = createCameraEffectsRuntime({ kind: "first-person", eyeHeight: 1, lookDistance: 1 });
+const typedAdvancedClientFeatures: readonly ClientFeatureDescriptor<unknown>[] = [createDialogueClientFeature(advancedDialogue), createVehiclesClientFeature(advancedVehicle), createDebugDevToolsClientFeature(advancedDebug), createInputExperienceFeature({ runtime: advancedInput, publishMovement() {}, publishAction() {} }), createPostProcessingFeature(advancedPost), createCameraExtensionsFeature({ runtime: advancedCamera, readTarget: () => ({ x: 0, y: 0, z: 0 }), readTick: () => 0, publish() {} })];
+void typedAdvancedClientFeatures;

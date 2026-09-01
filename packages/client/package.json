@@ -69,6 +69,10 @@
       "types": "./dist/genre.d.ts",
       "import": "./dist/genre.js"
     },
+    "./advanced": {
+      "types": "./dist/advanced.d.ts",
+      "import": "./dist/advanced.js"
+    },
     "./networking": {
       "types": "./dist/networking.d.ts",
       "import": "./dist/networking.js"

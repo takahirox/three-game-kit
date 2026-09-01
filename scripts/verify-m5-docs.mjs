@@ -106,6 +106,7 @@ const requiredFiles = [
   "docs/features/standard-features.md",
   "docs/features/common-gameplay.md",
   "docs/features/genre-expansion.md",
+  "docs/features/advanced-features.md",
   "docs/authoring/client-only-feature.md",
   "docs/authoring/server-only-feature.md",
   "docs/authoring/cross-runtime-interaction.md",
@@ -197,6 +198,7 @@ const publicSpecifiers = [
   "@three-game-kit/shared/gameplay",
   "@three-game-kit/shared/movement",
   "@three-game-kit/shared/genre",
+  "@three-game-kit/shared/advanced",
   "@three-game-kit/protocol",
   "@three-game-kit/client",
   "@three-game-kit/client/rendering",
@@ -211,6 +213,7 @@ const publicSpecifiers = [
   "@three-game-kit/client/character-controller",
   "@three-game-kit/client/gameplay",
   "@three-game-kit/client/genre",
+  "@three-game-kit/client/advanced",
   "@three-game-kit/client/networking",
   "@three-game-kit/client/replication",
   "@three-game-kit/server",
@@ -218,6 +221,7 @@ const publicSpecifiers = [
   "@three-game-kit/server/authoritative",
   "@three-game-kit/server/gameplay",
   "@three-game-kit/server/genre",
+  "@three-game-kit/server/advanced",
   "@three-game-kit/server/networking"
 ];
 requireAll(packageMap, publicSpecifiers, "package map missing public specifier");
@@ -225,8 +229,8 @@ for (const packageName of ["client", "core", "protocol", "server", "shared"]) {
   if (!await exists(resolve(root, `packages/${packageName}/README.md`))) fail(`missing packages/${packageName}/README.md`);
 }
 
-const featureDocs = `${documents.get("docs/features/client-features.md") ?? ""}\n${documents.get("docs/features/standard-features.md") ?? ""}\n${documents.get("docs/features/common-gameplay.md") ?? ""}\n${documents.get("docs/features/genre-expansion.md") ?? ""}\n${documents.get("docs/features/interaction.md") ?? ""}`;
-requireAll(featureDocs, ["createInputFeature", "createCameraFeature", "createRenderingFeature", "createVfxFeature", "createCollisionFeature", "createAudioFeature", "createCharacterControllerFeature", "createAnimationFeature", "createAssetManagerFeature", "createHudFeature", "createTriggerAreaClientFeature", "createHealthServerFeature", "createSpawnPrefabClientFeature", "createGameFlowServerFeature", "createGeneralPhysicsRuntime", "createProjectileRuntime", "createInventoryRuntime", "createAbilityRuntime", "createSimpleAiRuntime", "createSaveLoadRuntime", "Interaction"], "missing documented Feature");
+const featureDocs = `${documents.get("docs/features/client-features.md") ?? ""}\n${documents.get("docs/features/standard-features.md") ?? ""}\n${documents.get("docs/features/common-gameplay.md") ?? ""}\n${documents.get("docs/features/genre-expansion.md") ?? ""}\n${documents.get("docs/features/advanced-features.md") ?? ""}\n${documents.get("docs/features/interaction.md") ?? ""}`;
+requireAll(featureDocs, ["createInputFeature", "createCameraFeature", "createRenderingFeature", "createVfxFeature", "createCollisionFeature", "createAudioFeature", "createCharacterControllerFeature", "createAnimationFeature", "createAssetManagerFeature", "createHudFeature", "createTriggerAreaClientFeature", "createHealthServerFeature", "createSpawnPrefabClientFeature", "createGameFlowServerFeature", "createGeneralPhysicsRuntime", "createProjectileRuntime", "createInventoryRuntime", "createAbilityRuntime", "createSimpleAiRuntime", "createSaveLoadRuntime", "createDialogueRuntime", "createVehicleRuntime", "createPostProcessingRuntime", "createCameraEffectsRuntime", "createInputExperienceRuntime", "createDebugDevToolsRuntime", "Interaction"], "missing documented Feature");
 
 const narrative = documents.get("docs/architecture/cross-runtime-narrative.md") ?? "";
 const narrativeTerms = [
@@ -249,6 +253,8 @@ requireAll(verifyM5, [
   "test:common-gameplay"
   ,"typecheck:genre-expansion"
   ,"test:genre-expansion"
+  ,"typecheck:advanced-features"
+  ,"test:advanced-features"
 ], "verify:m5 missing required gate");
 
 const ci = await readFile(resolve(root, ".github/workflows/ci.yml"), "utf8");
@@ -293,7 +299,7 @@ if (failures.length) {
     links: checkedLinks.length,
     requiredDocuments: requiredFiles.length,
     publicSpecifiers: publicSpecifiers.length,
-    features: 21,
+    features: 27,
     failures: 0
   }));
 }

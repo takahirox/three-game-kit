@@ -17,6 +17,7 @@ Client provides the browser runtime plus rendering, deterministic VFX, semantic 
 - `@three-game-kit/client/character-controller`
 - `@three-game-kit/client/gameplay`
 - `@three-game-kit/client/genre`
+- `@three-game-kit/client/advanced`
 - `@three-game-kit/client/networking`
 - `@three-game-kit/client/replication`
 
@@ -27,6 +28,8 @@ Priority A gameplay wrappers and the DOM HUD adapter are documented in
 [`docs/features/common-gameplay.md`](../../docs/features/common-gameplay.md).
 Priority B predictive wrappers and the browser Storage save adapter are documented in
 [`docs/features/genre-expansion.md`](../../docs/features/genre-expansion.md).
+Priority C Dialogue, Vehicles, Post-processing, Camera, Input, and Debug wrappers are documented in
+[`docs/features/advanced-features.md`](../../docs/features/advanced-features.md).
 
 ```js
 import {
