@@ -2,6 +2,124 @@
   "schemaVersion": 1,
   "features": [
     {
+      "catalogId": "animation",
+      "serverFeatureId": "not-applicable",
+      "clientFeatureId": "animation",
+      "purpose": "Drive registered Three.js clips from semantic states on deterministic client ticks, including crossfades and one-shot completion events.",
+      "ownership": "The Animation runtime owns its mixer/actions and borrows the caller's Object3D and AnimationClip objects; the Feature owns the injected runtime after successful setup.",
+      "runtimes": ["client"],
+      "requires": { "server": [], "client": [] },
+      "conflicts": [],
+      "configuration": {
+        "runtime": { "type": "object", "default": {}, "bounds": { "additionalProperties": false } },
+        "factoryInputs": {
+          "root": { "type": "Three Object3D supplied as unknown", "default": "not-applicable", "bounds": "Must be a live Object3D." },
+          "clips": { "type": "unique ID and AnimationClip registrations", "default": "not-applicable", "bounds": "At least one clip; IDs are trimmed and at most 128 characters." },
+          "states": { "type": "semantic-state to clip-ID map", "default": {}, "bounds": "Every mapped clip must exist." }
+        }
+      },
+      "phases": { "server": [], "clientSimulation": ["presentation-publish: animation-update (priority 0)"], "clientPresentation": [] },
+      "authority": { "owner": "not-applicable", "intent": "Animation is non-authoritative presentation and cannot change trusted gameplay state.", "validation": ["not-applicable"], "rejectionReasons": ["not-applicable"] },
+      "lifecycle": {
+        "setup": "Setup activates animation-update; activation failure leaves the runtime caller-owned for explicit cleanup.",
+        "dispose": "Shutdown or rollback removes completion listeners, stops and uncaches every action/root, clears retained references, and is idempotent.",
+        "borrowedResources": ["The Object3D and clip objects remain caller-owned; their geometry, material, texture, and asset disposal belongs to the Asset Manager or caller."]
+      },
+      "limitations": ["Animation is client-only and advances at the fixed simulation rate.", "Root motion is deliberately ignored; authoritative motion must come from gameplay/Character Controller state.", "State transitions use one active action and do not provide blend trees, masks, or inverse kinematics."],
+      "compatibilityRange": "^0.1.0",
+      "publicImports": { "@three-game-kit/client": ["@three-game-kit/client/animation"] },
+      "examplePaths": ["examples/standard-features/main.ts", "examples/standard-features/README.md", "packages/client/test/animation.test.mjs"],
+      "verificationCommand": "pnpm verify:standard-features"
+    },
+    {
+      "catalogId": "asset-manager",
+      "serverFeatureId": "not-applicable",
+      "clientFeatureId": "asset-manager",
+      "purpose": "Load glTF, texture, and audio assets from manifests with groups, cache deduplication, progress, structured failures, and deterministic disposal.",
+      "ownership": "The manager owns successful backend load results until disposal; the backend owns its loader internals, while manifest values and progress callbacks remain caller-owned.",
+      "runtimes": ["client"],
+      "requires": { "server": [], "client": [] },
+      "conflicts": [],
+      "configuration": {
+        "runtime": { "type": "object", "default": {}, "bounds": { "additionalProperties": false } },
+        "factoryInputs": {
+          "manifest": { "type": "array of AssetManifestEntry", "default": "not-applicable", "bounds": "Unique IDs; gltf, texture, or audio kind; bounded sources; unique groups." },
+          "backend": { "type": "AssetBackend", "default": "createThreeAssetBackend()", "bounds": "Must load, disposeAsset, and dispose; audio requires a caller-supplied loadAudio adapter." }
+        }
+      },
+      "phases": { "server": [], "clientSimulation": [], "clientPresentation": [] },
+      "authority": { "owner": "not-applicable", "intent": "Asset loading is a local client capability and conveys no gameplay authority.", "validation": ["not-applicable"], "rejectionReasons": ["not-applicable"] },
+      "lifecycle": {
+        "setup": "The manager is created before boot; Feature setup establishes ownership and has no scheduled system.",
+        "dispose": "Shutdown/rollback releases cached assets once, fences in-flight results so late values are immediately disposed, clears listeners/references, then disposes the backend.",
+        "borrowedResources": ["Manifest records and progress callback functions remain caller-owned; the manager stores validated immutable copies of manifest records."]
+      },
+      "limitations": ["The default Three backend needs browser loader facilities and a loadAudio adapter for audio decoding.", "Cache entries remain resident until manager disposal; per-asset reference counting and eviction are not implemented.", "Cancellation cannot abort vendor network I/O, but late results are fenced and disposed."],
+      "compatibilityRange": "^0.1.0",
+      "publicImports": { "@three-game-kit/client": ["@three-game-kit/client/asset-manager"] },
+      "examplePaths": ["examples/standard-features/main.ts", "examples/standard-features/README.md", "packages/client/test/asset-manager.test.mjs"],
+      "verificationCommand": "pnpm verify:standard-features"
+    },
+    {
+      "catalogId": "audio",
+      "serverFeatureId": "not-applicable",
+      "clientFeatureId": "audio",
+      "purpose": "Provide sound effects, looping music, buses, mute/volume controls, optional positional playback, browser unlock, and a silent fallback.",
+      "ownership": "The Audio runtime owns registered buffer references, live voices, and its injected driver after successful Feature setup.",
+      "runtimes": ["client"],
+      "requires": { "server": [], "client": [] },
+      "conflicts": [],
+      "configuration": {
+        "runtime": { "type": "object", "default": {}, "bounds": { "additionalProperties": false } },
+        "factoryInputs": {
+          "driver": { "type": "AudioDriver", "default": "silent no-audio driver", "bounds": "Use createWebAudioDriver with a valid Web Audio context for playback." },
+          "clips": { "type": "registered opaque audio buffers", "default": [], "bounds": "Unique trimmed IDs at most 128 characters." }
+        }
+      },
+      "phases": { "server": [], "clientSimulation": [], "clientPresentation": [] },
+      "authority": { "owner": "not-applicable", "intent": "Audio is non-authoritative presentation and cannot affect simulation state.", "validation": ["not-applicable"], "rejectionReasons": ["not-applicable"] },
+      "lifecycle": {
+        "setup": "The Audio runtime is constructed before boot; Feature setup establishes ownership and has no scheduled system. Call unlock from a browser user gesture.",
+        "dispose": "Shutdown/rollback stops every voice, disconnects owned Web Audio nodes, clears clip references, and disposes the driver exactly once.",
+        "borrowedResources": ["The browser AudioContext is caller-owned and is not closed by createWebAudioDriver; the caller decides when to close it."]
+      },
+      "limitations": ["The built-in buses apply scalar gain to voices and do not expose arbitrary Web Audio graphs.", "Positional playback configures a PannerNode position but leaves listener orientation and distance-model policy to the host.", "The silent fallback validates calls but intentionally produces no sound."],
+      "compatibilityRange": "^0.1.0",
+      "publicImports": { "@three-game-kit/client": ["@three-game-kit/client/audio"] },
+      "examplePaths": ["examples/standard-features/main.ts", "examples/standard-features/README.md", "packages/client/test/audio.test.mjs"],
+      "verificationCommand": "pnpm verify:standard-features"
+    },
+    {
+      "catalogId": "character-controller",
+      "serverFeatureId": "not-applicable",
+      "clientFeatureId": "character-controller",
+      "purpose": "Apply deterministic walk/run, gravity, grounded jump, platform velocity, and external impulses above the public collision adapter.",
+      "ownership": "The controller owns the injected ClientCollisionAdapter; the Feature owns the controller after successful setup while input and publish callbacks remain caller-owned.",
+      "runtimes": ["client"],
+      "requires": { "server": [], "client": [] },
+      "conflicts": ["collision"],
+      "configuration": {
+        "runtime": { "type": "object", "default": {}, "bounds": { "additionalProperties": false } },
+        "factoryInputs": {
+          "collision": { "type": "ClientCollisionAdapter", "default": "not-applicable", "bounds": "Must provide move and dispose; use createRapierCollisionAdapter for the bundled implementation." },
+          "locomotion": { "type": "CharacterControllerConfiguration", "default": "not-applicable", "bounds": "Positive finite walk/run/gravity/jump/fall values; run speed cannot be below walk speed." },
+          "input": { "type": "CharacterControllerInput", "default": "not-applicable", "bounds": "Finite x/z in [-1,1], run/jump booleans, optional finite platform velocity." }
+        }
+      },
+      "phases": { "server": [], "clientSimulation": ["predictive-collision: character-controller-predict (priority 0)"], "clientPresentation": [] },
+      "authority": { "owner": "not-applicable", "intent": "The Feature produces local prediction only; an authoritative server must validate movement, grounded/jump state, and impulses independently.", "validation": ["not-applicable"], "rejectionReasons": ["not-applicable"] },
+      "lifecycle": {
+        "setup": "Setup activates character-controller-predict; an activation failure leaves the controller caller-owned for explicit cleanup.",
+        "dispose": "Shutdown/rollback fences ticks and disposes the controller and its collision adapter exactly once.",
+        "borrowedResources": ["readInput and publish callbacks remain caller-owned."]
+      },
+      "limitations": ["Slopes, steps, sliding, and contact precision are limited by the selected ClientCollisionAdapter.", "Moving platforms are supplied as a caller-computed velocity hook; platform ownership/contact discovery is outside this Feature.", "This is prediction, not authority or network reconciliation; install it instead of the lower-level collision Feature when it owns the same adapter."],
+      "compatibilityRange": "^0.1.0",
+      "publicImports": { "@three-game-kit/client": ["@three-game-kit/client/character-controller", "@three-game-kit/client/collision"] },
+      "examplePaths": ["examples/standard-features/main.ts", "examples/standard-features/README.md", "packages/client/test/character-controller.test.mjs"],
+      "verificationCommand": "pnpm verify:standard-features"
+    },
+    {
       "catalogId": "collision",
       "serverFeatureId": "not-applicable",
       "clientFeatureId": "collision",

@@ -42,6 +42,10 @@ async function sourceFilesBelow(directory) {
 }
 
 const expectedCatalogIds = [
+  "animation",
+  "asset-manager",
+  "audio",
+  "character-controller",
   "collision",
   "interaction",
   "movement-input",
@@ -50,6 +54,10 @@ const expectedCatalogIds = [
   "vfx",
 ];
 const clientFeatures = new Map([
+  ["animation", { factory: "createAnimationFeature", subpath: "animation", source: "packages/client/src/animation.ts", example: "examples/standard-features/main.ts" }],
+  ["asset-manager", { factory: "createAssetManagerFeature", subpath: "asset-manager", source: "packages/client/src/asset-manager.ts", example: "examples/standard-features/main.ts" }],
+  ["audio", { factory: "createAudioFeature", subpath: "audio", source: "packages/client/src/audio.ts", example: "examples/standard-features/main.ts" }],
+  ["character-controller", { factory: "createCharacterControllerFeature", subpath: "character-controller", source: "packages/client/src/character-controller.ts", example: "examples/standard-features/main.ts", publicImports: ["@three-game-kit/client/character-controller", "@three-game-kit/client/collision"] }],
   ["collision", { factory: "createCollisionFeature", subpath: "collision", source: "packages/client/src/collision.ts" }],
   ["movement-input", { factory: "createInputFeature", subpath: "input", source: "packages/client/src/input.ts" }],
   ["third-person-camera", { factory: "createCameraFeature", subpath: "camera", source: "packages/client/src/camera.ts" }],
@@ -80,9 +88,9 @@ const catalog = await readJson("docs/features/foundation-catalog.json");
 assert.deepEqual(Object.keys(catalog), ["schemaVersion", "features"], "foundation catalog keys changed");
 assert.equal(catalog.schemaVersion, 1, "foundation catalog schemaVersion must be 1");
 assert.ok(Array.isArray(catalog.features), "foundation catalog features must be an array");
-assert.equal(catalog.features.length, 6, "foundation catalog must contain exactly six entries");
+assert.equal(catalog.features.length, 10, "foundation catalog must contain exactly ten entries");
 assert.deepEqual(catalog.features.map(({ catalogId }) => catalogId), expectedCatalogIds, "catalog IDs must be sorted and exact");
-assert.equal(new Set(catalog.features.map(({ catalogId }) => catalogId)).size, 6, "catalog IDs must be unique");
+assert.equal(new Set(catalog.features.map(({ catalogId }) => catalogId)).size, 10, "catalog IDs must be unique");
 for (const feature of catalog.features) {
   assert.deepEqual(Object.keys(feature), entryKeys, `${feature.catalogId} top-level keys changed`);
 }
@@ -109,8 +117,8 @@ for (const directory of packageDirectories) {
   }
 }
 publicSpecifiers.sort();
-assert.equal(publicSpecifiers.length, 17, "package manifests must expose exactly 17 public specifiers");
-assert.equal(new Set(publicSpecifiers).size, 17, "public package specifiers must be unique");
+assert.equal(publicSpecifiers.length, 21, "package manifests must expose exactly 21 public specifiers");
+assert.equal(new Set(publicSpecifiers).size, 21, "public package specifiers must be unique");
 const publicSpecifierSet = new Set(publicSpecifiers);
 
 const clientManifest = manifests.get("@three-game-kit/client");
@@ -127,7 +135,7 @@ for (const [featureId, mapping] of clientFeatures) {
   assert.match(source, new RegExp(`id:\\s*["']${featureId}["']`, "u"), `${mapping.factory} Feature ID changed`);
   const feature = catalog.features.find(({ catalogId }) => catalogId === featureId);
   assert.equal(feature.clientFeatureId, featureId, `${featureId} clientFeatureId changed`);
-  assert.deepEqual(feature.publicImports, { "@three-game-kit/client": [`@three-game-kit/client/${mapping.subpath}`] });
+  assert.deepEqual(feature.publicImports, { "@three-game-kit/client": mapping.publicImports ?? [`@three-game-kit/client/${mapping.subpath}`] });
   const exampleSource = mapping.example === undefined
     ? localBrowserSource
     : await readFile(path.join(root, mapping.example), "utf8");
@@ -176,7 +184,11 @@ for (const feature of catalog.features) {
     assert.ok((await stat(resolved)).isFile(), `${examplePath} must be an existing file`);
   }
 
-  const expectedCommand = feature.catalogId === "interaction" ? "pnpm test:m4-packed-consumer" : "pnpm verify:m2";
+  const expectedCommand = feature.catalogId === "interaction"
+    ? "pnpm test:m4-packed-consumer"
+    : ["animation", "asset-manager", "audio", "character-controller"].includes(feature.catalogId)
+      ? "pnpm verify:standard-features"
+      : "pnpm verify:m2";
   assert.equal(feature.verificationCommand, expectedCommand, `${feature.catalogId} verificationCommand changed`);
 
   if (feature.catalogId !== "interaction") {
@@ -209,7 +221,7 @@ const listedFeatureIds = catalog.features.flatMap((feature) =>
 );
 assert.deepEqual(
   [...listedFeatureIds].sort(),
-  ["collision", "external.interaction.client", "external.interaction.server", "movement-input", "third-person-camera", "three-rendering", "vfx"],
+  ["animation", "asset-manager", "audio", "character-controller", "collision", "external.interaction.client", "external.interaction.server", "movement-input", "third-person-camera", "three-rendering", "vfx"],
   "all public Feature IDs must be covered exactly once",
 );
 assert.equal(new Set(listedFeatureIds).size, listedFeatureIds.length, "public Feature IDs must not be duplicated");

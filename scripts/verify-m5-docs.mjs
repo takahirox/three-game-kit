@@ -103,6 +103,7 @@ const requiredFiles = [
   "docs/release-checklist.md",
   "docs/features/foundation-catalog.json",
   "docs/features/client-features.md",
+  "docs/features/standard-features.md",
   "docs/authoring/client-only-feature.md",
   "docs/authoring/server-only-feature.md",
   "docs/authoring/cross-runtime-interaction.md",
@@ -166,7 +167,6 @@ for (const heading of limitationSections) {
 }
 const negativeBoundaries = [
   [/(?:no|not|unsupported|deferred|outside)[^.\n]{0,100}(?:WebXR|\bXR\b)|(?:WebXR|\bXR\b)[^.\n]{0,100}(?:no|not|unsupported|deferred|outside)/i, "negative XR claim"],
-  [/(?:no|not|unsupported|deferred|outside)[^.\n]{0,100}audio|audio[^.\n]{0,100}(?:no|not|unsupported|deferred|outside)/i, "negative audio claim"],
   [/(?:no|not|unsupported|absent)[^.\n]{0,100}reconnect|reconnect[^.\n]{0,100}(?:no|not|unsupported|absent)/i, "negative reconnect claim"],
   [/(?:no|not|unsupported|absent)[^.\n]{0,100}(?:production )?auth|(?:production )?auth[^.\n]{0,100}(?:no|not|unsupported|absent)/i, "negative authentication claim"],
   [/(?:no|not|unsupported|absent)[^.\n]{0,100}lockstep|lockstep[^.\n]{0,100}(?:no|not|unsupported|absent)/i, "negative lockstep claim"],
@@ -176,7 +176,7 @@ const negativeBoundaries = [
 ];
 for (const [pattern, label] of negativeBoundaries) requireMatch(limitations, pattern, label);
 
-const deferredCapability = /\b(WebXR|\bXR\b|audio|reconnect|resume|production authentication|lockstep|packet loss|registry publication|hosted deployment|production operations)\b/i;
+const deferredCapability = /\b(WebXR|\bXR\b|reconnect|resume|production authentication|lockstep|packet loss|registry publication|hosted deployment|production operations)\b/i;
 const positiveClaim = /\b(?:supports?|provides?|implements?|includes?|ships?|offers?|guarantees?)\b/i;
 const negativeClaim = /\b(?:no|not|never|unsupported|exclusion|excluded|absent|deferred|outside|doesn't|does not|without|consumer responsibilit)/i;
 for (const [name, text] of documents) {
@@ -201,6 +201,10 @@ const publicSpecifiers = [
   "@three-game-kit/client/vfx",
   "@three-game-kit/client/collision",
   "@three-game-kit/client/assets",
+  "@three-game-kit/client/asset-manager",
+  "@three-game-kit/client/audio",
+  "@three-game-kit/client/animation",
+  "@three-game-kit/client/character-controller",
   "@three-game-kit/client/networking",
   "@three-game-kit/client/replication",
   "@three-game-kit/server",
@@ -213,8 +217,8 @@ for (const packageName of ["client", "core", "protocol", "server", "shared"]) {
   if (!await exists(resolve(root, `packages/${packageName}/README.md`))) fail(`missing packages/${packageName}/README.md`);
 }
 
-const featureDocs = `${documents.get("docs/features/client-features.md") ?? ""}\n${documents.get("docs/features/interaction.md") ?? ""}`;
-requireAll(featureDocs, ["createInputFeature", "createCameraFeature", "createRenderingFeature", "createVfxFeature", "createCollisionFeature", "Interaction"], "missing documented Feature");
+const featureDocs = `${documents.get("docs/features/client-features.md") ?? ""}\n${documents.get("docs/features/standard-features.md") ?? ""}\n${documents.get("docs/features/interaction.md") ?? ""}`;
+requireAll(featureDocs, ["createInputFeature", "createCameraFeature", "createRenderingFeature", "createVfxFeature", "createCollisionFeature", "createAudioFeature", "createCharacterControllerFeature", "createAnimationFeature", "createAssetManagerFeature", "Interaction"], "missing documented Feature");
 
 const narrative = documents.get("docs/architecture/cross-runtime-narrative.md") ?? "";
 const narrativeTerms = [
@@ -277,7 +281,7 @@ if (failures.length) {
     links: checkedLinks.length,
     requiredDocuments: requiredFiles.length,
     publicSpecifiers: publicSpecifiers.length,
-    features: 6,
+    features: 10,
     failures: 0
   }));
 }

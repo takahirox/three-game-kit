@@ -45,6 +45,22 @@
       "types": "./dist/assets.d.ts",
       "import": "./dist/assets.js"
     },
+    "./asset-manager": {
+      "types": "./dist/asset-manager.d.ts",
+      "import": "./dist/asset-manager.js"
+    },
+    "./audio": {
+      "types": "./dist/audio.d.ts",
+      "import": "./dist/audio.js"
+    },
+    "./animation": {
+      "types": "./dist/animation.d.ts",
+      "import": "./dist/animation.js"
+    },
+    "./character-controller": {
+      "types": "./dist/character-controller.d.ts",
+      "import": "./dist/character-controller.js"
+    },
     "./networking": {
       "types": "./dist/networking.d.ts",
       "import": "./dist/networking.js"
