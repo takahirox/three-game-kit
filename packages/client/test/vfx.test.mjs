@@ -7,9 +7,9 @@ import { createVfxFeature, createVfxRuntime } from "../dist/vfx.js";
 const burst = Object.freeze({ kind: "burst", position: Object.freeze({ x: 1, y: 2, z: 3 }), count: 4, color: 0x12abef, speed: 2, lifetimeMs: 500, seed: 4294967295 });
 const trail = Object.freeze({ kind: "trail", start: Object.freeze({ x: 0, y: 0, z: 0 }), end: Object.freeze({ x: 1, y: 2, z: 3 }), color: 0xabcdef, width: 2, lifetimeMs: 300, seed: 7 });
 const popup = Object.freeze({ kind: "popup", position: Object.freeze({ x: 2, y: 3, z: 4 }), color: 0xff00ff, size: 0.5, lifetimeMs: 200, seed: 9 });
-function renderedBurst(seed) { const scene = new THREE.Scene(); const runtime = createVfxRuntime(scene); runtime.enqueue({ ...burst, seed }); runtime.present(10); runtime.present(110); const points = scene.getObjectByProperty("isPoints", true); assert.ok(points); const values = Array.from(points.geometry.getAttribute("position").array.slice(0, burst.count * 3)); runtime.dispose(); return values; }
+function renderedBurst(seed) { const scene = new THREE.Scene(); const runtime = createVfxRuntime(scene); runtime.enqueue({ ...burst, seed }); runtime.present(10); runtime.present(110); const points = scene.getObjectByName("three-game-kit-particles"); assert.ok(points); const values = Array.from(points.geometry.getAttribute("particleCenter").array.slice(0, burst.count * 3)); runtime.dispose(); return values; }
 test("burst output is deterministic from explicit unsigned seeds", () => { assert.deepEqual(renderedBurst(42), renderedBurst(42)); assert.notDeepEqual(renderedBurst(42), renderedBurst(43)); });
-test("burst, trail, and popup commands are copied, validated, and advanced by monotonic presentation time", () => { const scene = new THREE.Scene(); const runtime = createVfxRuntime(scene); const mutablePosition = { x: 1, y: 2, z: 3 }; runtime.enqueue({ ...burst, position: mutablePosition }); runtime.enqueue(trail); runtime.enqueue(popup); mutablePosition.x = 99; runtime.present(100); assert.deepEqual(runtime.inspect(), { disposed: false, presentationTimeMs: 100, queuedCommandCount: 0, activeBurstCount: 1, activeTrailCount: 1, activePopupCount: 1, counters: { submittedCommandCount: 3, presentedCommandCount: 3, commandOverflowCount: 0, effectOverflowCount: 0, expiredEffectCount: 0 }, liveResourceCounts: { groups: 1, objects: 32, geometries: 24, materials: 32, retainedReferences: 89 } }); const points = scene.getObjectByProperty("isPoints", true); assert.ok(points); assert.equal(points.geometry.getAttribute("position").getX(0), 1); assert.throws(() => runtime.present(99), /monotonic/); assert.throws(() => runtime.present(Number.NaN), /presentation time/); runtime.present(600); assert.equal(runtime.inspect().activeBurstCount, 0); assert.equal(runtime.inspect().activeTrailCount, 0); assert.equal(runtime.inspect().activePopupCount, 0); assert.equal(runtime.inspect().counters.expiredEffectCount, 3); runtime.dispose(); });
+test("burst, trail, and popup commands are copied, validated, and advanced by monotonic presentation time", () => { const scene = new THREE.Scene(); const runtime = createVfxRuntime(scene); const mutablePosition = { x: 1, y: 2, z: 3 }; runtime.enqueue({ ...burst, position: mutablePosition }); runtime.enqueue(trail); runtime.enqueue(popup); mutablePosition.x = 99; runtime.present(100); assert.deepEqual(runtime.inspect(), { disposed: false, presentationTimeMs: 100, queuedCommandCount: 0, activeBurstCount: 1, activeTrailCount: 1, activePopupCount: 1, counters: { submittedCommandCount: 3, presentedCommandCount: 3, commandOverflowCount: 0, effectOverflowCount: 0, expiredEffectCount: 0 }, liveResourceCounts: { groups: 1, objects: 32, geometries: 24, materials: 32, retainedReferences: 89 } }); const points = scene.getObjectByName("three-game-kit-particles"); assert.ok(points); assert.equal(points.geometry.getAttribute("particleCenter").getX(0), 1); assert.throws(() => runtime.present(99), /monotonic/); assert.throws(() => runtime.present(Number.NaN), /presentation time/); runtime.present(600); assert.equal(runtime.inspect().activeBurstCount, 0); assert.equal(runtime.inspect().activeTrailCount, 0); assert.equal(runtime.inspect().activePopupCount, 0); assert.equal(runtime.inspect().counters.expiredEffectCount, 3); runtime.dispose(); });
 test("commands reject malformed vectors, colors, counts, dimensions, lifetimes, seeds, and extra fields", () => { const runtime = createVfxRuntime(new THREE.Scene(), { maxBurstParticles: 4 }); for (const command of [{ ...burst, position: { x: 0, y: 0 } }, { ...burst, color: 16777216 }, { ...burst, count: 5 }, { ...burst, speed: 0 }, { ...burst, lifetimeMs: Infinity }, { ...burst, seed: -1 }, { ...trail, width: Number.NaN }, { ...popup, size: -1 }, { ...popup, extra: true }, { kind: "unknown" }])
     assert.throws(() => runtime.enqueue(command), TypeError); runtime.dispose(); });
 test("command and effect pools use deterministic drop-oldest and ring overflow", () => { const runtime = createVfxRuntime(new THREE.Scene(), { commandCapacity: 2, burstEffectCapacity: 1, trailEffectCapacity: 1, popupEffectCapacity: 1, maxBurstParticles: 4 }); runtime.enqueue({ ...burst, color: 1 }); runtime.enqueue({ ...burst, color: 2 }); runtime.enqueue({ ...burst, color: 3 }); assert.equal(runtime.inspect().counters.commandOverflowCount, 1); runtime.present(0); const inspection = runtime.inspect(); assert.equal(inspection.activeBurstCount, 1); assert.equal(inspection.counters.presentedCommandCount, 2); assert.equal(inspection.counters.effectOverflowCount, 1); runtime.dispose(); });
@@ -54,4 +54,24 @@ test("VFX Feature presents and releases its owned runtime", async () => {
         materials: 0,
         retainedReferences: 0,
     });
+});
+
+test("VFX burst expiry precedes pool reuse and resets opacity without false overflow", () => {
+    const scene = new THREE.Scene();
+    const runtime = createVfxRuntime(scene, { burstEffectCapacity: 1, trailEffectCapacity: 1, popupEffectCapacity: 1 });
+    runtime.enqueue(burst); runtime.enqueue(trail); runtime.enqueue(popup); runtime.present(0);
+    runtime.enqueue(burst); runtime.enqueue(trail); runtime.enqueue(popup); runtime.present(500);
+    assert.equal(runtime.inspect().counters.effectOverflowCount, 0);
+    assert.equal(runtime.inspect().counters.expiredEffectCount, 3);
+    assert.equal(scene.getObjectByProperty("isLine", true).material.opacity, 1);
+    assert.equal(scene.getObjectByProperty("isSprite", true).material.opacity, 1);
+    runtime.dispose();
+});
+
+test("burst particle limits reject at enqueue without corrupting the queue", () => {
+    const runtime = createVfxRuntime(new THREE.Scene());
+    for (const command of [{ ...burst, speed: 1e7 }, { ...burst, lifetimeMs: 1e7 }, { ...burst, lifetimeMs: 0.00001 }, { ...burst, position: { x: 1e7, y: 0, z: 0 } }]) assert.throws(() => runtime.enqueue(command), TypeError);
+    assert.equal(runtime.inspect().queuedCommandCount, 0);
+    runtime.enqueue(burst); runtime.present(1_800_000_000_000);
+    assert.equal(runtime.inspect().activeBurstCount, 1); runtime.dispose();
 });

@@ -58,6 +58,7 @@ const expectedCatalogIds = [
   "interaction",
   "inventory",
   "movement-input",
+  "particles",
   "post-processing",
   "projectile",
   "save-load",
@@ -86,6 +87,7 @@ const clientFeatures = new Map([
   ["input-experience-extensions", { factory: "createInputExperienceFeature", subpath: "advanced", source: "packages/client/src/advanced.ts", example: "examples/advanced-features/main.ts" }],
   ["inventory", { factory: "createInventoryClientFeature", featureId: "inventory.client", subpath: "genre", source: "packages/client/src/genre.ts", example: "examples/genre-expansion/main.ts" }],
   ["movement-input", { factory: "createInputFeature", subpath: "input", source: "packages/client/src/input.ts" }],
+  ["particles", { factory: "createParticleFeature", subpath: "particles", source: "packages/client/src/particles.ts", example: "examples/particles/feature.ts" }],
   ["post-processing", { factory: "createPostProcessingFeature", subpath: "advanced", source: "packages/client/src/advanced.ts", example: "examples/advanced-features/main.ts" }],
   ["projectile", { factory: "createProjectileClientFeature", featureId: "projectile.client", subpath: "genre", source: "packages/client/src/genre.ts", example: "examples/genre-expansion/main.ts" }],
   ["save-load", { factory: "createSaveLoadClientFeature", featureId: "save-load.client", subpath: "genre", source: "packages/client/src/genre.ts", example: "examples/genre-expansion/main.ts" }],
@@ -122,9 +124,9 @@ const catalog = await readJson("docs/features/foundation-catalog.json");
 assert.deepEqual(Object.keys(catalog), ["schemaVersion", "features"], "foundation catalog keys changed");
 assert.equal(catalog.schemaVersion, 1, "foundation catalog schemaVersion must be 1");
 assert.ok(Array.isArray(catalog.features), "foundation catalog features must be an array");
-assert.equal(catalog.features.length, 27, "foundation catalog must contain exactly twenty-seven entries");
+assert.equal(catalog.features.length, 28, "foundation catalog must contain exactly twenty-eight entries");
 assert.deepEqual(catalog.features.map(({ catalogId }) => catalogId), expectedCatalogIds, "catalog IDs must be sorted and exact");
-assert.equal(new Set(catalog.features.map(({ catalogId }) => catalogId)).size, 27, "catalog IDs must be unique");
+assert.equal(new Set(catalog.features.map(({ catalogId }) => catalogId)).size, 28, "catalog IDs must be unique");
 for (const feature of catalog.features) {
   assert.deepEqual(Object.keys(feature), entryKeys, `${feature.catalogId} top-level keys changed`);
 }
@@ -151,8 +153,8 @@ for (const directory of packageDirectories) {
   }
 }
 publicSpecifiers.sort();
-assert.equal(publicSpecifiers.length, 30, "package manifests must expose exactly 30 public specifiers");
-assert.equal(new Set(publicSpecifiers).size, 30, "public package specifiers must be unique");
+assert.equal(publicSpecifiers.length, 31, "package manifests must expose exactly 31 public specifiers");
+assert.equal(new Set(publicSpecifiers).size, 31, "public package specifiers must be unique");
 const publicSpecifierSet = new Set(publicSpecifiers);
 
 const clientManifest = manifests.get("@three-game-kit/client");
@@ -284,7 +286,9 @@ for (const feature of catalog.features) {
     assert.ok((await stat(resolved)).isFile(), `${examplePath} must be an existing file`);
   }
 
-  const expectedCommand = ["camera-extensions", "debug-devtools", "dialogue", "input-experience-extensions", "post-processing", "vehicles"].includes(feature.catalogId)
+  const expectedCommand = feature.catalogId === "particles"
+    ? "pnpm verify:particles"
+    : ["camera-extensions", "debug-devtools", "dialogue", "input-experience-extensions", "post-processing", "vehicles"].includes(feature.catalogId)
     ? "pnpm verify:advanced-features"
     : ["ability-skill", "general-physics", "inventory", "projectile", "save-load", "simple-ai-navigation"].includes(feature.catalogId)
     ? "pnpm verify:genre-expansion"
@@ -327,7 +331,7 @@ const listedFeatureIds = catalog.features.flatMap((feature) =>
 );
 assert.deepEqual(
   [...listedFeatureIds].sort(),
-  ["ability-skill.client", "ability-skill.server", "animation", "asset-manager", "audio", "camera-extensions", "character-controller", "collision", "debug-devtools.client", "debug-devtools.server", "dialogue.client", "dialogue.server", "external.interaction.client", "external.interaction.server", "game-flow.client", "game-flow.server", "general-physics.client", "general-physics.server", "health-damage.client", "health-damage.server", "input-experience-extensions", "inventory.client", "inventory.server", "movement-input", "post-processing", "projectile.client", "projectile.server", "save-load.client", "save-load.server", "simple-ai-navigation.client", "simple-ai-navigation.server", "spawn-prefab.client", "spawn-prefab.server", "third-person-camera", "three-rendering", "trigger-area.client", "trigger-area.server", "ui-hud", "vehicles.client", "vehicles.server", "vfx"],
+  ["ability-skill.client", "ability-skill.server", "animation", "asset-manager", "audio", "camera-extensions", "character-controller", "collision", "debug-devtools.client", "debug-devtools.server", "dialogue.client", "dialogue.server", "external.interaction.client", "external.interaction.server", "game-flow.client", "game-flow.server", "general-physics.client", "general-physics.server", "health-damage.client", "health-damage.server", "input-experience-extensions", "inventory.client", "inventory.server", "movement-input", "particles", "post-processing", "projectile.client", "projectile.server", "save-load.client", "save-load.server", "simple-ai-navigation.client", "simple-ai-navigation.server", "spawn-prefab.client", "spawn-prefab.server", "third-person-camera", "three-rendering", "trigger-area.client", "trigger-area.server", "ui-hud", "vehicles.client", "vehicles.server", "vfx"],
   "all public Feature IDs must be covered exactly once",
 );
 assert.equal(new Set(listedFeatureIds).size, listedFeatureIds.length, "public Feature IDs must not be duplicated");

@@ -80,6 +80,10 @@
     "./replication": {
       "types": "./dist/replication.d.ts",
       "import": "./dist/replication.js"
+    },
+    "./particles": {
+      "types": "./dist/particles.d.ts",
+      "import": "./dist/particles.js"
     }
   },
   "dependencies": {

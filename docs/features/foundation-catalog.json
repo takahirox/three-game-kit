@@ -993,6 +993,77 @@
       "verificationCommand": "pnpm verify:m2"
     },
     {
+      "catalogId": "particles",
+      "serverFeatureId": "not-applicable",
+      "clientFeatureId": "particles",
+      "purpose": "Present reusable seeded, bounded particle emitters with instanced billboards and optional alpha sorting.",
+      "ownership": "The Feature owns the injected emitters after setup. Scene parents, cameras, and textures remain borrowed.",
+      "runtimes": [
+        "client"
+      ],
+      "requires": {
+        "server": [],
+        "client": []
+      },
+      "conflicts": [],
+      "configuration": {
+        "runtime": {
+          "type": "object",
+          "default": {},
+          "bounds": {
+            "additionalProperties": false
+          }
+        },
+        "factoryInputs": {
+          "emitters": {
+            "type": "readonly ParticleEmitter[]",
+            "default": "not-applicable",
+            "bounds": "A fixed array of unique emitters; each emitter has capacity 1–65536. Authoring options and numerical limits are documented in particles.md."
+          }
+        }
+      },
+      "phases": {
+        "server": [],
+        "clientSimulation": [],
+        "clientPresentation": [
+          "render: particles-present (priority -100)"
+        ]
+      },
+      "authority": {
+        "owner": "not-applicable",
+        "intent": "Particles are client-only presentation and do not change authority or simulation.",
+        "validation": [
+          "not-applicable"
+        ],
+        "rejectionReasons": [
+          "not-applicable"
+        ]
+      },
+      "lifecycle": {
+        "setup": "Acquires each emitter as renderResources and activates particles-present. The ledger releases acquired emitters on rollback.",
+        "dispose": "Idempotently disposes emitters, detaches meshes, and releases owned geometry/material GPU resources. Drop disposed handles to release CPU storage.",
+        "borrowedResources": [
+          "Parent scenes, cameras, and textures remain caller-owned."
+        ]
+      },
+      "limitations": [
+        "CPU simulation with one draw call per visible emitter; no cross-emitter batching or global sorting.",
+        "Bounded catch-up and full pools drop births; collisions, mesh particles and soft depth intersections are not provided.",
+        "Explicit monotonic timestamps and unsigned seeds are required; runtime configuration is an empty object."
+      ],
+      "compatibilityRange": "^0.1.0",
+      "publicImports": {
+        "@three-game-kit/client": [
+          "@three-game-kit/client/particles"
+        ]
+      },
+      "examplePaths": [
+        "examples/particles/main.ts",
+        "examples/particles/feature.ts"
+      ],
+      "verificationCommand": "pnpm verify:particles"
+    },
+    {
       "catalogId": "post-processing",
       "serverFeatureId": "not-applicable",
       "clientFeatureId": "post-processing",
@@ -1640,13 +1711,13 @@
       },
       "lifecycle": {
         "setup": "Setup acquires vfx-runtime as a renderResources ledger record and activates vfx-present. Failed setup rolls back the owned runtime.",
-        "dispose": "Disposal is idempotent, removes the owned group, disposes every owned geometry and material, clears queued commands, and releases retained references.",
+        "dispose": "Disposal is idempotent, removes the owned group, disposes owned geometries and materials, and clears commands. Drop disposed runtime handles to release CPU storage.",
         "borrowedResources": [
           "The parent Three.js Object3D remains caller-owned. Command objects are copied at enqueue and are not retained by reference."
         ]
       },
       "limitations": [
-        "The runtime provides burst points, line trails, and billboard popup sprites only.",
+        "Burst commands use instanced particle billboards; line trails and billboard popup sprites retain their existing implementations.",
         "It does not provide audio, post-processing, camera shake, multiplayer replication, dynamic plugin discovery, or text layout.",
         "Presentation requires explicit finite monotonic timestamps and deterministic unsigned 32-bit seeds.",
         "Runtime configuration accepts only an empty object."
