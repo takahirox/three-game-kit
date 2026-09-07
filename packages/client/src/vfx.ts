@@ -1,4 +1,5 @@
 import * as THREE from "three";
+import { createParticleEmitter, type ParticleEmitter } from "./particles.js";
 import {
     defineFeatureConfiguration,
     type ClientFeatureDescriptor,
@@ -80,9 +81,7 @@ export interface VfxRuntime {
 interface BurstSlot {
     command: VfxBurstCommand | null;
     bornMs: number;
-    readonly geometry: THREE.BufferGeometry;
-    readonly material: THREE.PointsMaterial;
-    readonly object: THREE.Points;
+    readonly emitter: ParticleEmitter;
 }
 interface TrailSlot {
     command: VfxTrailCommand | null;
@@ -108,7 +107,6 @@ const MAX_BURST_PARTICLES = 512;
 const MAX_COUNTER = Number.MAX_SAFE_INTEGER;
 const UINT32_MAX = 4294967295;
 const RGB_MAX = 16777215;
-const BURST_MATERIAL_COLOR = 16777215;
 const TRAIL_MATERIAL_COLOR = 16777215;
 const POPUP_MATERIAL_COLOR = 16777215;
 function hasExactlyKeys(value: object, expected: readonly string[]): boolean { const keys = Reflect.ownKeys(value); return keys.length === expected.length && expected.every((key) => keys.includes(key)); }
@@ -130,7 +128,11 @@ function copyCommand(command: VfxCommand, maxBurstParticles: number): VfxCommand
             throw new TypeError("Burst command fields are invalid");
         if (!Number.isSafeInteger(command.count) || command.count <= 0 || command.count > maxBurstParticles)
             throw new TypeError(`Burst count must be between 1 and ${maxBurstParticles}`);
-        return Object.freeze({ kind: "burst", position: copyVector(command.position, "Burst position"), count: command.count, color: requireColor(command.color), speed: requirePositive(command.speed, "Burst speed"), lifetimeMs: requirePositive(command.lifetimeMs, "Burst lifetimeMs"), seed: requireSeed(command.seed) });
+        const position = copyVector(command.position, "Burst position");
+        if (Math.max(Math.abs(position.x), Math.abs(position.y), Math.abs(position.z)) > 1e6 ||
+            command.speed > 1e6 || command.lifetimeMs < 0.001 || command.lifetimeMs > 1e6)
+            throw new TypeError("Burst position, speed, and lifetimeMs exceed particle limits");
+        return Object.freeze({ kind: "burst", position, count: command.count, color: requireColor(command.color), speed: requirePositive(command.speed, "Burst speed"), lifetimeMs: requirePositive(command.lifetimeMs, "Burst lifetimeMs"), seed: requireSeed(command.seed) });
     case "trail":
         if (!hasExactlyKeys(command, ["kind", "start", "end", "color", "width", "lifetimeMs", "seed"]))
             throw new TypeError("Trail command fields are invalid");
@@ -142,18 +144,16 @@ function copyCommand(command: VfxCommand, maxBurstParticles: number): VfxCommand
     default: throw new TypeError("VFX command kind must be burst, trail, or popup");
 } }
 function increment(value: number): number { return value === MAX_COUNTER ? value : value + 1; }
-function createRandom(seed: number): () => number { let state = seed >>> 0; return () => { state = (Math.imul(state, 1664525) + 1013904223) >>> 0; return state / 4294967296; }; }
 export function createVfxRuntime(scene: VfxSceneParent, options?: VfxRuntimeOptions): VfxRuntime { if (!(scene instanceof THREE.Object3D))
     throw new TypeError("VFX scene must be a Three.js Object3D"); if (options !== undefined && (typeof options !== "object" || options === null || Array.isArray(options) || !Reflect.ownKeys(options).every((key) => typeof key === "string" && ["commandCapacity", "burstEffectCapacity", "trailEffectCapacity", "popupEffectCapacity", "maxBurstParticles"].includes(key))))
     throw new TypeError("VFX runtime options are invalid"); const commandCapacity = requireCapacity(options?.commandCapacity, DEFAULT_COMMAND_CAPACITY, MAX_COMMAND_CAPACITY, "Command capacity"); const burstCapacity = requireCapacity(options?.burstEffectCapacity, DEFAULT_BURST_EFFECT_CAPACITY, MAX_EFFECT_CAPACITY, "Burst effect capacity"); const trailCapacity = requireCapacity(options?.trailEffectCapacity, DEFAULT_TRAIL_EFFECT_CAPACITY, MAX_EFFECT_CAPACITY, "Trail effect capacity"); const popupCapacity = requireCapacity(options?.popupEffectCapacity, DEFAULT_POPUP_EFFECT_CAPACITY, MAX_EFFECT_CAPACITY, "Popup effect capacity"); const maxBurstParticles = requireCapacity(options?.maxBurstParticles, DEFAULT_MAX_BURST_PARTICLES, MAX_BURST_PARTICLES, "Maximum burst particles"); const parent = scene as THREE.Object3D; const root = new THREE.Group(); root.name = "three-game-kit-vfx"; parent.add(root); const bursts: BurstSlot[] = []; const trails: TrailSlot[] = []; const popups: PopupSlot[] = []; for (let index = 0; index < burstCapacity; index += 1) {
-    const geometry = new THREE.BufferGeometry();
-    geometry.setAttribute("position", new THREE.BufferAttribute(new Float32Array(maxBurstParticles * 3), 3));
-    geometry.setDrawRange(0, 0);
-    const material = new THREE.PointsMaterial({ color: BURST_MATERIAL_COLOR, size: 0.09, transparent: true, depthWrite: false });
-    const object = new THREE.Points(geometry, material);
-    object.visible = false;
-    root.add(object);
-    bursts.push({ command: null, bornMs: 0, geometry, material, object });
+    const emitter = createParticleEmitter(root, {
+        capacity: maxBurstParticles,
+        shape: { kind: "cone", radius: 0, angle: Math.PI / 2.5 },
+        acceleration: { x: 0, y: -9.8, z: 0 },
+        size: 0.09,
+    });
+    bursts.push({ command: null, bornMs: 0, emitter });
 } for (let index = 0; index < trailCapacity; index += 1) {
     const geometry = new THREE.BufferGeometry();
     geometry.setAttribute("position", new THREE.BufferAttribute(new Float32Array(6), 3));
@@ -168,8 +168,8 @@ export function createVfxRuntime(scene: VfxSceneParent, options?: VfxRuntimeOpti
     object.visible = false;
     root.add(object);
     popups.push({ command: null, bornMs: 0, material, object });
-} const queued: VfxCommand[] = []; let disposed = false; let presentationTimeMs: number | null = null; let burstCursor = 0; let trailCursor = 0; let popupCursor = 0; let submittedCommandCount = 0; let presentedCommandCount = 0; let commandOverflowCount = 0; let effectOverflowCount = 0; let expiredEffectCount = 0; function expire(slot: BurstSlot | TrailSlot | PopupSlot): void { if (slot.command !== null)
-    expiredEffectCount = increment(expiredEffectCount); slot.command = null; slot.object.visible = false; } function spawn(command: VfxCommand, nowMs: number): void { presentedCommandCount = increment(presentedCommandCount); if (command.kind === "burst") {
+} const queued: (VfxCommand | undefined)[] = new Array(commandCapacity); let queueHead = 0; let queueSize = 0; let disposed = false; let presentationTimeMs: number | null = null; let burstCursor = 0; let trailCursor = 0; let popupCursor = 0; let submittedCommandCount = 0; let presentedCommandCount = 0; let commandOverflowCount = 0; let effectOverflowCount = 0; let expiredEffectCount = 0; function expire(slot: BurstSlot | TrailSlot | PopupSlot): void { if (slot.command !== null)
+    expiredEffectCount = increment(expiredEffectCount); slot.command = null; if ("emitter" in slot) slot.emitter.clear(); else slot.object.visible = false; } function spawn(command: VfxCommand, nowMs: number): void { presentedCommandCount = increment(presentedCommandCount); if (command.kind === "burst") {
     const slot = bursts[burstCursor];
     burstCursor = (burstCursor + 1) % bursts.length;
     if (slot === undefined)
@@ -178,10 +178,13 @@ export function createVfxRuntime(scene: VfxSceneParent, options?: VfxRuntimeOpti
         effectOverflowCount = increment(effectOverflowCount);
     slot.command = command;
     slot.bornMs = nowMs;
-    slot.material.color.setHex(command.color);
-    slot.material.opacity = 1;
-    slot.geometry.setDrawRange(0, command.count);
-    slot.object.visible = true;
+    slot.emitter.clear();
+    slot.emitter.present(nowMs);
+    slot.emitter.emit(command.count, {
+        position: command.position, color: command.color,
+        speed: [command.speed * 0.4, command.speed],
+        lifetimeMs: command.lifetimeMs, seed: command.seed,
+    });
     return;
 } if (command.kind === "trail") {
     const slot = trails[trailCursor];
@@ -194,6 +197,7 @@ export function createVfxRuntime(scene: VfxSceneParent, options?: VfxRuntimeOpti
     slot.bornMs = nowMs;
     slot.material.color.setHex(command.color);
     slot.material.linewidth = command.width;
+    slot.material.opacity = 1;
     const position = slot.geometry.getAttribute("position");
     position.setXYZ(0, command.start.x, command.start.y, command.start.z);
     position.setXYZ(1, command.end.x, command.end.y, command.end.z);
@@ -202,16 +206,11 @@ export function createVfxRuntime(scene: VfxSceneParent, options?: VfxRuntimeOpti
     return;
 } const slot = popups[popupCursor]; popupCursor = (popupCursor + 1) % popups.length; if (slot === undefined)
     return; if (slot.command !== null)
-    effectOverflowCount = increment(effectOverflowCount); slot.command = command; slot.bornMs = nowMs; slot.material.color.setHex(command.color); slot.object.position.set(command.position.x, command.position.y, command.position.z); slot.object.scale.set(command.size, command.size, 1); slot.object.visible = true; } function updateBurst(slot: BurstSlot, nowMs: number): void { const command = slot.command; if (command === null)
+    effectOverflowCount = increment(effectOverflowCount); slot.command = command; slot.bornMs = nowMs; slot.material.color.setHex(command.color); slot.material.opacity = 1; slot.object.position.set(command.position.x, command.position.y, command.position.z); slot.object.scale.set(command.size, command.size, 1); slot.object.visible = true; } function updateBurst(slot: BurstSlot, nowMs: number): void { const command = slot.command; if (command === null)
     return; const elapsedMs = nowMs - slot.bornMs; if (elapsedMs >= command.lifetimeMs) {
     expire(slot);
     return;
-} const elapsedSeconds = elapsedMs / 1000; const random = createRandom(command.seed); const position = slot.geometry.getAttribute("position"); for (let index = 0; index < command.count; index += 1) {
-    const angle = random() * Math.PI * 2;
-    const vertical = 0.35 + random() * 0.9;
-    const magnitude = command.speed * (0.4 + random() * 0.6);
-    position.setXYZ(index, command.position.x + Math.cos(angle) * magnitude * elapsedSeconds, command.position.y + vertical * magnitude * elapsedSeconds - 4.9 * elapsedSeconds * elapsedSeconds, command.position.z + Math.sin(angle) * magnitude * elapsedSeconds);
-} position.needsUpdate = true; slot.material.opacity = 1 - elapsedMs / command.lifetimeMs; } function updateTrail(slot: TrailSlot, nowMs: number): void { const command = slot.command; if (command === null)
+} slot.emitter.present(nowMs); } function updateTrail(slot: TrailSlot, nowMs: number): void { const command = slot.command; if (command === null)
     return; const elapsedMs = nowMs - slot.bornMs; if (elapsedMs >= command.lifetimeMs) {
     expire(slot);
     return;
@@ -220,24 +219,24 @@ export function createVfxRuntime(scene: VfxSceneParent, options?: VfxRuntimeOpti
     expire(slot);
     return;
 } const progress = elapsedMs / command.lifetimeMs; slot.object.position.set(command.position.x, command.position.y + progress * command.size, command.position.z); slot.material.opacity = 1 - progress; } return Object.freeze({ enqueue(command: VfxCommand): void { if (disposed)
-        throw new Error("VFX runtime has been disposed"); const copied = copyCommand(command, maxBurstParticles); submittedCommandCount = increment(submittedCommandCount); if (queued.length === commandCapacity) {
-        queued.shift();
+        throw new Error("VFX runtime has been disposed"); const copied = copyCommand(command, maxBurstParticles); submittedCommandCount = increment(submittedCommandCount); if (queueSize === commandCapacity) {
+        queued[queueHead] = undefined;
+        queueHead = (queueHead + 1) % commandCapacity;
+        queueSize--;
         commandOverflowCount = increment(commandOverflowCount);
-    } queued.push(copied); }, present(nowMs: number): void { if (disposed)
-        throw new Error("VFX runtime has been disposed"); if (typeof nowMs !== "number" || !Number.isFinite(nowMs) || nowMs < 0 || (presentationTimeMs !== null && nowMs < presentationTimeMs))
-        throw new TypeError("VFX presentation time must be finite, non-negative, and monotonic"); presentationTimeMs = nowMs; while (queued.length > 0) {
-        const command = queued.shift();
+    } queued[(queueHead + queueSize) % commandCapacity] = copied; queueSize++; }, present(nowMs: number): void { if (disposed)
+        throw new Error("VFX runtime has been disposed"); if (typeof nowMs !== "number" || !Number.isFinite(nowMs) || nowMs < 0 || nowMs > Number.MAX_SAFE_INTEGER || (presentationTimeMs !== null && nowMs < presentationTimeMs))
+        throw new TypeError("VFX presentation time must be finite, non-negative, and monotonic"); presentationTimeMs = nowMs; for (const slot of bursts) updateBurst(slot, nowMs); for (const slot of trails) updateTrail(slot, nowMs); for (const slot of popups) updatePopup(slot, nowMs); while (queueSize > 0) {
+        const command = queued[queueHead];
+        queued[queueHead] = undefined;
+        queueHead = (queueHead + 1) % commandCapacity;
+        queueSize--;
         if (command !== undefined)
             spawn(command, nowMs);
-    } for (const slot of bursts)
-        updateBurst(slot, nowMs); for (const slot of trails)
-        updateTrail(slot, nowMs); for (const slot of popups)
-        updatePopup(slot, nowMs); }, inspect(): VfxInspection { const activeBurstCount = bursts.reduce((count, slot) => count + (slot.command === null ? 0 : 1), 0); const activeTrailCount = trails.reduce((count, slot) => count + (slot.command === null ? 0 : 1), 0); const activePopupCount = popups.reduce((count, slot) => count + (slot.command === null ? 0 : 1), 0); const objectCount = disposed ? 0 : bursts.length + trails.length + popups.length; const geometryCount = disposed ? 0 : bursts.length + trails.length; const materialCount = disposed ? 0 : objectCount; return Object.freeze({ disposed, presentationTimeMs, queuedCommandCount: queued.length, activeBurstCount, activeTrailCount, activePopupCount, counters: Object.freeze({ submittedCommandCount, presentedCommandCount, commandOverflowCount, effectOverflowCount, expiredEffectCount }), liveResourceCounts: Object.freeze({ groups: disposed ? 0 : 1, objects: objectCount, geometries: geometryCount, materials: materialCount, retainedReferences: disposed ? 0 : 1 + objectCount + geometryCount + materialCount + queued.length }) }); }, dispose(): void { if (disposed)
-        return; disposed = true; queued.length = 0; for (const slot of bursts) {
+    } }, inspect(): VfxInspection { const activeBurstCount = bursts.reduce((count, slot) => count + (slot.command === null ? 0 : 1), 0); const activeTrailCount = trails.reduce((count, slot) => count + (slot.command === null ? 0 : 1), 0); const activePopupCount = popups.reduce((count, slot) => count + (slot.command === null ? 0 : 1), 0); const objectCount = disposed ? 0 : bursts.length + trails.length + popups.length; const geometryCount = disposed ? 0 : bursts.length + trails.length; const materialCount = disposed ? 0 : objectCount; return Object.freeze({ disposed, presentationTimeMs, queuedCommandCount: queueSize, activeBurstCount, activeTrailCount, activePopupCount, counters: Object.freeze({ submittedCommandCount, presentedCommandCount, commandOverflowCount, effectOverflowCount, expiredEffectCount }), liveResourceCounts: Object.freeze({ groups: disposed ? 0 : 1, objects: objectCount, geometries: geometryCount, materials: materialCount, retainedReferences: disposed ? 0 : 1 + objectCount + geometryCount + materialCount + queueSize }) }); }, dispose(): void { if (disposed)
+        return; disposed = true; queued.fill(undefined); queueSize = 0; for (const slot of bursts) {
         slot.command = null;
-        slot.object.visible = false;
-        slot.geometry.dispose();
-        slot.material.dispose();
+        slot.emitter.dispose();
     } for (const slot of trails) {
         slot.command = null;
         slot.object.visible = false;

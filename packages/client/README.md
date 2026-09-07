@@ -9,6 +9,7 @@ Client provides the browser runtime plus rendering, deterministic VFX, semantic 
 - `@three-game-kit/client/input`
 - `@three-game-kit/client/camera`
 - `@three-game-kit/client/vfx`
+- `@three-game-kit/client/particles`
 - `@three-game-kit/client/collision`
 - `@three-game-kit/client/assets`
 - `@three-game-kit/client/asset-manager`
@@ -50,9 +51,17 @@ each queued one-shot action once; `reset()` clears queued actions, and
 `dispose()` is idempotent.
 
 `@three-game-kit/client/vfx` provides fixed-capacity burst, trail, and floating
-popup pools. Callers submit copied commands with explicit unsigned seeds; the
+popup pools, with bursts backed by the particle engine. Callers submit copied commands with explicit unsigned seeds; the
 presentation scheduler supplies monotonic timestamps through `createVfxFeature`.
 Inspection reports queue/effect overflow, active effects, and live resources.
+
+`@three-game-kit/client/particles` provides seeded continuous and burst emitters,
+point/sphere/box/cone shapes, analytic forces and drag, lifetime appearance curves,
+local/world simulation, optional alpha sorting, and textured animated billboards.
+Fixed-capacity typed arrays and one instanced draw per emitter bound costs.
+`createParticleFeature({ emitters })` owns presentation and disposal. See
+[particle documentation](https://github.com/takahirox/three-game-kit/blob/main/docs/features/particles.md)
+and the particle workshop for usage, limits, and lifecycle semantics.
 
 ## Ownership and disposal
 

@@ -1,7 +1,8 @@
 # Deterministic VFX
 
 `@three-game-kit/client/vfx` is the reusable client presentation boundary for
-small Three.js effects. It contains no Core Run types and does not advance
+convenience Three.js effects. Bursts use the independent
+[particle emitter engine](./particles.md); use that API for custom emitters. It contains no Core Run types and does not advance
 simulation or participate in authority.
 
 ## Commands and time
@@ -14,15 +15,21 @@ The runtime accepts three copied command variants:
 
 Vectors and numeric fields are validated before enqueue. Seeds must be unsigned
 32-bit integers and colors unsigned 24-bit integers. `present(timestampMs)`
-requires explicit finite, non-negative, monotonic time. Randomized burst motion
-uses a local deterministic generator initialized from the command seed; the
+requires explicit finite, non-negative, monotonic time. Burst position components and speed are bounded to magnitude 1,000,000, and
+burst lifetime is 0.001–1,000,000 ms; these limits are checked at enqueue.
+Randomized burst motion uses the particle engine
+initialized from the command seed; the
 runtime never reads a wall clock or calls `Math.random`.
 
 ## Bounds and inspection
 
 `createVfxRuntime(parent, options)` allocates fixed command and effect
 capacities. Full command queues drop the oldest pending command. Full effect
-pools overwrite the next ring slot. Both cases increment inspection counters.
+pools overwrite the next ring slot. Both cases increment inspection counters. Expiry is processed before reuse, and
+the fixed command queue uses O(1) ring operations. Burst slots reuse instanced
+billboards with seeded cone emission, gravity, and fading. Burst appearance
+changes from hardware point sprites to soft billboards; the command shape and
+effect capacity behavior remain the same.
 `inspect()` returns queue depth, active effect counts, overflow and expiry
 counters, disposal state, presentation time, and live groups, objects,
 geometries, materials, and retained references.
@@ -32,8 +39,8 @@ geometries, materials, and retained references.
 `createVfxFeature({ runtime })` installs `vfx-present` in the `render` phase at
 priority `-100`, before `three-render-frame`. Setup acquires the runtime through
 the Feature ownership ledger as `renderResources`. Shutdown is idempotent: it
-clears commands, detaches the owned group, disposes all owned geometries and
-materials, and drops retained references. The parent scene remains borrowed.
+clears commands, detaches the owned group, and disposes all owned geometries and
+materials. Drop disposed runtime handles to release their CPU storage. The parent scene remains borrowed.
 
 ## Core Run mapping
 

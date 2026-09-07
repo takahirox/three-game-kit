@@ -151,8 +151,8 @@ for (const directory of packageDirectories) {
   }
 }
 publicSpecifiers.sort();
-assert.equal(publicSpecifiers.length, 30, "package manifests must expose exactly 30 public specifiers");
-assert.equal(new Set(publicSpecifiers).size, 30, "public package specifiers must be unique");
+assert.equal(publicSpecifiers.length, 31, "package manifests must expose exactly 31 public specifiers");
+assert.equal(new Set(publicSpecifiers).size, 31, "public package specifiers must be unique");
 const publicSpecifierSet = new Set(publicSpecifiers);
 
 const clientManifest = manifests.get("@three-game-kit/client");

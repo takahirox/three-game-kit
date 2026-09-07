@@ -41,6 +41,7 @@ const packageContract = {
       "./advanced",
       "./networking",
       "./replication",
+      "./particles",
     ],
     dependencies: [
       "@dimforge/rapier3d-compat",

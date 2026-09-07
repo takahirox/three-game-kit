@@ -80,7 +80,7 @@ are intentionally removed and are not release artifacts.
 
 `test:m5-catalog` requires exactly twenty-seven sorted Feature catalog entries, including
 the five Priority A, six Priority B, and six Priority C entries. It checks their complete discovery metadata,
-all forty-one public Feature IDs, all 30 public
+all forty-one public Feature IDs, all 31 public
 package specifiers, example paths, first-party factories, and the consumer ownership
 of Interaction. The normative prose for the original client-only Features is
 [`client-features.md`](./features/client-features.md), Priority S is documented in

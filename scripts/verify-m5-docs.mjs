@@ -205,6 +205,7 @@ const publicSpecifiers = [
   "@three-game-kit/client/input",
   "@three-game-kit/client/camera",
   "@three-game-kit/client/vfx",
+  "@three-game-kit/client/particles",
   "@three-game-kit/client/collision",
   "@three-game-kit/client/assets",
   "@three-game-kit/client/asset-manager",

@@ -84,3 +84,10 @@ Client/Server authority wrappers.
 - [MVP protocol](./docs/protocol/mvp.md)
 - [Two-client acceptance](./docs/testing/two-client-acceptance.md)
 - [Architecture decision record index](./docs/adr/README.md)
+
+### Particle workshop
+
+The [particle workshop](./examples/particles/README.md) demonstrates the reusable
+[particle emitter API](./docs/features/particles.md): seeded shapes, continuous
+and burst emission, lifetime curves, alpha sorting, and instanced textured
+billboards. Existing VFX burst commands use the same engine.
