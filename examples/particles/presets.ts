@@ -1,5 +1,5 @@
 import * as THREE from "three";
-import { createParticleEmitter, type ParticleEmitter, type ParticleEmitterOptions } from "@three-game-kit/client/particles";
+import { createParticleEmitter, type ParticleEmitter, type ParticleEmitterOptions, type ParticleEmission } from "@three-game-kit/client/particles";
 import type { TextureName } from "./textures.js";
 
 export const PRESETS = [
@@ -44,6 +44,8 @@ export function createEffect(id: PresetId, textures: Record<TextureName, THREE.D
     const root = new THREE.Group(); scene.add(root);
     const emitters: ParticleEmitter[] = [];
     const alpha: ParticleEmitter[] = [];
+    const formations: { emitter: ParticleEmitter; commands: { count: number; overrides?: ParticleEmission }[]; refreshedAt: number }[] = [];
+    let recording = true;
     const motions: ((seconds: number) => void)[] = [];
     const pulses: { emitter: ParticleEmitter; count: number; interval: number; next: number }[] = [];
     let time = 0, seed = PRESETS.findIndex(p => p.id === id) * 71 + 11;
@@ -54,9 +56,18 @@ export function createEffect(id: PresetId, textures: Record<TextureName, THREE.D
             seed: seed++, lifetimeMs: 1800, speed: 0, size: 0.12,
             blending: "additive", texture: textures[texture], opacityOverLife: fadeInOut, ...options, capacity: (options.capacity ?? 768) + 128,
         });
-        emitters.push(emitter);
+        let handle = emitter;
+        if (options.lifetimeMs === 1e6) {
+            const commands: { count: number; overrides?: ParticleEmission }[] = [];
+            formations.push({ emitter, commands, refreshedAt: 0 });
+            handle = { ...emitter, emit(count, overrides) {
+                if (recording) commands.push(overrides === undefined ? { count } : { count, overrides });
+                return emitter.emit(count, overrides);
+            } };
+        }
+        emitters.push(handle);
         if (options.blending === "normal") alpha.push(emitter);
-        return emitter;
+        return handle;
     }
     function stars(color: number, count = 100, radius = 2.5): void {
         const e = layer({ capacity: count, lifetimeMs: 1e6, color, size: [0.035, 0.09], opacityOverLife: flat }, "star");
@@ -169,9 +180,17 @@ export function createEffect(id: PresetId, textures: Record<TextureName, THREE.D
             layer({ rate: 120, position: P(0, 2.9), rotation: P(0, 0, Math.PI), shape: { kind: "cone", radius: 2, angle: 0 }, speed: [1.2, 2.5], lifetimeMs: 2600, size: [0.16, 0.23], color: 0x65ffac, spriteSheet: { columns: 4, rows: 4, cycles: 3 } }, "glyph"); break;
     }
     function advance(deltaMs: number, emitting: boolean): void {
+        recording = false;
         time += deltaMs;
         for (const motion of motions) motion(time / 1000);
         for (const e of emitters) { e.setEmitting(emitting); e.present(time); }
+        // Refresh long-lived authored formations before the engine's finite lifetime.
+        // Replay only initial layout commands; user bursts remain temporary.
+        for (const formation of formations) if (time - formation.refreshedAt >= 900_000) {
+            formation.emitter.restart();
+            for (const command of formation.commands) formation.emitter.emit(command.count, command.overrides);
+            formation.refreshedAt = time;
+        }
         for (const p of pulses) if (time >= p.next) {
             if (emitting) p.emitter.emit(p.count);
             p.next = time + p.interval;

@@ -20,7 +20,8 @@ The footer reports visible effects, particles and draw calls.
 
 One WebGL canvas uses viewport/scissor rendering for all visible cards. Effects
 are created and warmed only on first visibility; hidden cards do not advance or
-render. Initialized effects are reused when switching views. Each preset uses
+render. Authored rings and constellations replay their initial layout before the
+finite particle lifetime expires; temporary user bursts are not replayed. Initialized effects are reused when switching views. Each preset uses
 one to four emitters, fixed capacities with burst headroom, and eight shared
 procedural textures. Alpha smoke/petals use per-emitter sorting. Reduced-motion
 preferences start the gallery paused. No external images or packages are needed.

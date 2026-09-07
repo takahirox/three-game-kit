@@ -77,3 +77,28 @@ test("mobile gallery scrolls to the remaining effects and supports focus navigat
     await page.getByRole("button", { name: "All experiments" }).click();
     await expect(page.locator("#focus")).toBeHidden();
 });
+
+test("authored formations remain populated beyond their original particle lifetime", async ({ page }) => {
+    await page.goto("/examples/particles/index.html?test=1");
+    const result = await page.evaluate(async () => {
+        const presetModule = "/examples/particles/presets.ts";
+        const textureModule = "/examples/particles/textures.ts";
+        const { createEffect } = await import(presetModule);
+        const { createTextures } = await import(textureModule);
+        const textures = createTextures();
+        const effect = createEffect("singularity", textures);
+        const counts = () => effect.emitters.map((e: any) => e.inspect().activeParticleCount);
+        const before = counts();
+        effect.burst();
+        effect.advance(1_001_000, true);
+        const after = counts();
+        effect.advance(1_001_000, true);
+        const again = counts();
+        effect.dispose();
+        for (const texture of Object.values(textures) as { dispose(): void }[]) texture.dispose();
+        return { before, after, again };
+    });
+    expect(result.before).toEqual([500, 180, 120]);
+    expect(result.after).toEqual(result.before);
+    expect(result.again).toEqual(result.before);
+});
