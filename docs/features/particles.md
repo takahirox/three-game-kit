@@ -145,10 +145,13 @@ adapter for game commands and delegates burst storage, movement, and rendering
 to this engine. Generic emitters can be used without VFX; VFX trail and popup
 commands retain their existing implementations.
 
-The [particle workshop](../../examples/particles/README.md) demonstrates sparks,
-alpha-sorted smoke, and animated atlas sprites. `pnpm verify` covers seeded
+The [particle atlas](../../examples/particles/README.md) demonstrates 20 effect
+compositions, including fire, galaxies, lightning, magic seals, alpha-sorted smoke
+and petals, and animated glyph sprites. A shared canvas renders only visible
+cards; each card can be enlarged and its animation paused, sped up or restarted. `pnpm verify` covers seeded
 sampling, time, analytical motion, bounds, invalid inputs, transforms, sorting,
 restart, pool reuse, and Feature ownership. `pnpm verify:particles` additionally
-checks real Chromium shader compilation, visible pixels, exactly three draws
-for three active emitters, instance counts, stable GPU resources, and disposal.
-The CI runs both and retains the workshop screenshot with browser evidence.
+checks real Chromium shader compilation and visible pixels for all 20 presets,
+per-effect draw budgets, instance counts, stable GPU resources, controls, mobile
+navigation, and disposal. The CI runs both and retains gallery screenshots with
+browser evidence.

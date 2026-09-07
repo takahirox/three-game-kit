@@ -1,10 +1,38 @@
 <!doctype html>
-<html lang="en">
-<head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Particle workshop · Three Game Kit</title>
-<style>
-*{box-sizing:border-box}body{margin:0;background:#080d19;color:#e6edff;font:15px system-ui,sans-serif}canvas{display:block;width:100%;height:100vh}header{position:absolute;top:30px;left:36px;pointer-events:none}header p{color:#89a2c9;max-width:540px;line-height:1.6}h1{font-size:32px;letter-spacing:-1px;margin:8px 0}.eyebrow{font-size:11px;letter-spacing:3px;color:#68dfdc}footer{position:absolute;bottom:26px;left:36px;right:36px}.labels{display:grid;grid-template-columns:repeat(3,1fr);gap:20px;margin-bottom:30px}.labels p{color:#89a2c9;font-size:13px}.controls{display:flex;align-items:center;gap:12px;flex-wrap:wrap}button{background:#14253f;border:1px solid #3a587d;border-radius:6px;padding:10px 18px;color:#e6edff;cursor:pointer}button:hover{background:#253b59}output{color:#89a2c9;font:12px monospace;margin-left:auto}@media(max-width:600px){header{left:18px;top:15px}h1{font-size:24px}footer{left:18px;right:18px}.labels{gap:10px}.labels p{font-size:11px}output{margin:0}}
-</style></head>
-<body><header><span class="eyebrow">THREE GAME KIT / PARTICLES</span><h1>Particle workshop</h1><p>Three emitters. Three different materials and motions.<br>Shape, animate, and combine particles with the public API.</p></header>
-<canvas aria-label="Animated sparks, smoke, and sprite sheet particles"></canvas>
-<footer><div class="labels"><div><strong>01 / Sparks</strong><p>Cone · gravity · additive light</p></div><div><strong>02 / Smoke</strong><p>Volume · drag · size over life</p></div><div><strong>03 / Embers</strong><p>Sprite sheet · rotation · color over life</p></div></div><div class="controls"><button id="emission">Pause emission</button><button id="burst">Emit burst</button><button id="restart">Restart</button><output></output></div></footer>
-<script type="module" src="./main.ts"></script></body></html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>Particle atlas · Three Game Kit</title>
+  <link rel="stylesheet" href="./style.css">
+</head>
+<body>
+  <canvas id="renderer" aria-hidden="true"></canvas>
+  <header class="topbar">
+    <a class="brand" href="#" aria-label="Show all effects"><span class="brand-mark">✳</span> THREE GAME KIT <span class="brand-divider">/</span> <span class="brand-secondary">EXPERIMENTS</span></a>
+    <span class="live-indicator"><i></i> LIVE PARTICLES</span>
+  </header>
+  <main>
+    <section class="intro">
+      <div><p class="eyebrow">A STUDY IN LIGHT & MOTION <span>VOL. 01 — 20 EFFECTS</span></p><h1>Particle <em>atlas.</em></h1></div>
+      <p class="intro-copy">光と動きの、小さな実験室。<br>20のエフェクトを探索して、お気に入りを見つけよう。<br><span>クリックで拡大 · ← → で切り替え · Space で一時停止</span></p>
+    </section>
+    <nav class="filterbar" aria-label="Effect categories">
+      <div class="filters"><button class="filter active" data-filter="ALL" aria-pressed="true">All effects <span>20</span></button><button class="filter" data-filter="COSMIC" aria-pressed="false">Cosmic</button><button class="filter" data-filter="MAGIC" aria-pressed="false">Magic</button><button class="filter" data-filter="ENERGY" aria-pressed="false">Energy</button><button class="filter" data-filter="FIRE" aria-pressed="false">Fire</button><button class="filter" data-filter="NATURE" aria-pressed="false">Nature</button></div>
+      <span class="grid-hint">SELECT AN EXPERIMENT ↗</span>
+    </nav>
+    <section id="gallery" class="gallery" aria-label="20 animated particle effects"></section>
+    <div class="endnote"><span>BUILT WITH THE THREE GAME KIT PARTICLE SYSTEM</span><span>20 WORLDS. ONE ENGINE.</span></div>
+  </main>
+  <section id="focus" class="focus" role="dialog" aria-modal="true" aria-labelledby="focus-title" hidden>
+    <div class="focus-top"><button id="back" class="text-button">← All experiments</button><span id="focus-index"></span><button id="next" class="text-button">Next effect →</button></div>
+    <div id="focus-preview" class="focus-preview" role="img"></div>
+    <div class="focus-caption"><div><p id="focus-category" class="eyebrow"></p><h2 id="focus-title"></h2></div><p id="focus-description"></p></div>
+  </section>
+  <footer class="transport">
+    <div class="transport-buttons"><button id="pause" class="control" aria-pressed="false"><span id="pause-icon">Ⅱ</span> <span id="pause-label">Pause</span></button><button id="burst" class="control">✳ Burst</button><button id="restart" class="control">↺ Restart</button></div>
+    <label class="speed-control">SPEED <input id="speed" type="range" min="0.25" max="2" step="0.25" value="1" aria-label="Animation speed"><span id="speed-value">1×</span></label>
+    <output id="stats" aria-live="off">Preparing light…</output>
+  </footer>
+  <script type="module" src="./main.ts"></script>
+</body>
+</html>
