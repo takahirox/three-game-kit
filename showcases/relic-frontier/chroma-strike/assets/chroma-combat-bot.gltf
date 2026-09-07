@@ -1,0 +1,59 @@
+{
+  "asset": {
+    "version": "2.0",
+    "generator": "Relic Frontier hand-authored voxel glTF v1",
+    "copyright": "Original work of the three-game-kit repository, released under the repository license"
+  },
+  "scene": 0,
+  "scenes": [
+    { "name": "ChromaCombatBotScene", "nodes": [0] }
+  ],
+  "nodes": [
+    { "name": "ChromaCombatBot", "children": [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12] },
+    { "name": "Pelvis", "mesh": 0, "translation": [0, 0.62, 0], "scale": [0.34, 0.14, 0.22] },
+    { "name": "Torso", "mesh": 1, "translation": [0, 0.87, 0], "scale": [0.44, 0.36, 0.26] },
+    { "name": "ChestCore", "mesh": 2, "translation": [0, 0.89, 0.14], "scale": [0.14, 0.14, 0.06] },
+    { "name": "Head", "mesh": 3, "translation": [0, 1.16, 0], "scale": [0.26, 0.22, 0.24] },
+    { "name": "Visor", "mesh": 4, "translation": [0, 1.18, 0.13], "scale": [0.18, 0.06, 0.04] },
+    { "name": "AntennaLeft", "mesh": 5, "translation": [0.09, 1.33, 0], "scale": [0.03, 0.16, 0.03] },
+    { "name": "ArmLeft", "mesh": 6, "translation": [0.27, 0.82, 0], "scale": [0.1, 0.4, 0.12] },
+    { "name": "ArmRight", "mesh": 7, "translation": [-0.27, 0.82, 0], "scale": [0.1, 0.4, 0.12] },
+    { "name": "LegLeft", "mesh": 8, "translation": [0.1, 0.33, 0], "scale": [0.12, 0.46, 0.14] },
+    { "name": "LegRight", "mesh": 9, "translation": [-0.1, 0.33, 0], "scale": [0.12, 0.46, 0.14] },
+    { "name": "FootLeft", "mesh": 10, "translation": [0.1, 0.05, 0.03], "scale": [0.13, 0.1, 0.2] },
+    { "name": "FootRight", "mesh": 11, "translation": [-0.1, 0.05, 0.03], "scale": [0.13, 0.1, 0.2] }
+  ],
+  "meshes": [
+    { "name": "PelvisMesh", "primitives": [{ "attributes": { "POSITION": 0, "NORMAL": 1 }, "indices": 2, "material": 1 }] },
+    { "name": "TorsoMesh", "primitives": [{ "attributes": { "POSITION": 0, "NORMAL": 1 }, "indices": 2, "material": 0 }] },
+    { "name": "ChestCoreMesh", "primitives": [{ "attributes": { "POSITION": 0, "NORMAL": 1 }, "indices": 2, "material": 3 }] },
+    { "name": "HeadMesh", "primitives": [{ "attributes": { "POSITION": 0, "NORMAL": 1 }, "indices": 2, "material": 0 }] },
+    { "name": "VisorMesh", "primitives": [{ "attributes": { "POSITION": 0, "NORMAL": 1 }, "indices": 2, "material": 2 }] },
+    { "name": "AntennaLeftMesh", "primitives": [{ "attributes": { "POSITION": 0, "NORMAL": 1 }, "indices": 2, "material": 1 }] },
+    { "name": "ArmLeftMesh", "primitives": [{ "attributes": { "POSITION": 0, "NORMAL": 1 }, "indices": 2, "material": 1 }] },
+    { "name": "ArmRightMesh", "primitives": [{ "attributes": { "POSITION": 0, "NORMAL": 1 }, "indices": 2, "material": 1 }] },
+    { "name": "LegLeftMesh", "primitives": [{ "attributes": { "POSITION": 0, "NORMAL": 1 }, "indices": 2, "material": 1 }] },
+    { "name": "LegRightMesh", "primitives": [{ "attributes": { "POSITION": 0, "NORMAL": 1 }, "indices": 2, "material": 1 }] },
+    { "name": "FootLeftMesh", "primitives": [{ "attributes": { "POSITION": 0, "NORMAL": 1 }, "indices": 2, "material": 0 }] },
+    { "name": "FootRightMesh", "primitives": [{ "attributes": { "POSITION": 0, "NORMAL": 1 }, "indices": 2, "material": 0 }] }
+  ],
+  "materials": [
+    { "name": "BotArmorTeal", "pbrMetallicRoughness": { "baseColorFactor": [0.1, 0.8, 0.75, 1], "metallicFactor": 0.2, "roughnessFactor": 0.4 } },
+    { "name": "BotJointGraphite", "pbrMetallicRoughness": { "baseColorFactor": [0.15, 0.17, 0.2, 1], "metallicFactor": 0.6, "roughnessFactor": 0.5 } },
+    { "name": "VisorEmberOrange", "pbrMetallicRoughness": { "baseColorFactor": [1, 0.45, 0.08, 1], "metallicFactor": 0.1, "roughnessFactor": 0.3 }, "emissiveFactor": [0.9, 0.35, 0.05] },
+    { "name": "CorePulseViolet", "pbrMetallicRoughness": { "baseColorFactor": [0.6, 0.2, 0.95, 1], "metallicFactor": 0.1, "roughnessFactor": 0.35 }, "emissiveFactor": [0.5, 0.12, 0.85] }
+  ],
+  "accessors": [
+    { "bufferView": 0, "componentType": 5126, "count": 24, "type": "VEC3", "min": [-0.5, -0.5, -0.5], "max": [0.5, 0.5, 0.5] },
+    { "bufferView": 1, "componentType": 5126, "count": 24, "type": "VEC3" },
+    { "bufferView": 2, "componentType": 5123, "count": 36, "type": "SCALAR" }
+  ],
+  "bufferViews": [
+    { "buffer": 0, "byteOffset": 0, "byteLength": 288, "target": 34962 },
+    { "buffer": 0, "byteOffset": 288, "byteLength": 288, "target": 34962 },
+    { "buffer": 0, "byteOffset": 576, "byteLength": 72, "target": 34963 }
+  ],
+  "buffers": [
+    { "byteLength": 648, "uri": "data:application/octet-stream;base64,AAAAPwAAAL8AAAA/AAAAPwAAAL8AAAC/AAAAPwAAAD8AAAC/AAAAPwAAAD8AAAA/AAAAvwAAAL8AAAC/AAAAvwAAAL8AAAA/AAAAvwAAAD8AAAA/AAAAvwAAAD8AAAC/AAAAvwAAAD8AAAA/AAAAPwAAAD8AAAA/AAAAPwAAAD8AAAC/AAAAvwAAAD8AAAC/AAAAvwAAAL8AAAC/AAAAPwAAAL8AAAC/AAAAPwAAAL8AAAA/AAAAvwAAAL8AAAA/AAAAvwAAAL8AAAA/AAAAPwAAAL8AAAA/AAAAPwAAAD8AAAA/AAAAvwAAAD8AAAA/AAAAPwAAAL8AAAC/AAAAvwAAAL8AAAC/AAAAvwAAAD8AAAC/AAAAPwAAAD8AAAC/AACAPwAAAAAAAAAAAACAPwAAAAAAAAAAAACAPwAAAAAAAAAAAACAPwAAAAAAAAAAAACAvwAAAAAAAAAAAACAvwAAAAAAAAAAAACAvwAAAAAAAAAAAACAvwAAAAAAAAAAAAAAAAAAgD8AAAAAAAAAAAAAgD8AAAAAAAAAAAAAgD8AAAAAAAAAAAAAgD8AAAAAAAAAAAAAgL8AAAAAAAAAAAAAgL8AAAAAAAAAAAAAgL8AAAAAAAAAAAAAgL8AAAAAAAAAAAAAAAAAAIA/AAAAAAAAAAAAAIA/AAAAAAAAAAAAAIA/AAAAAAAAAAAAAIA/AAAAAAAAAAAAAIL/AAAAAAAAAAAAAIL/AAAAAAAAAAAAAIL/AAAAAAAAAAAAAIL/AAABAAIAAAACAAMABAAFAAYABAAGAAcACAAJAAoACAAKAAsADAANAA4ADAAOAA8AEAARABIAEAASABMAFAAVABYAFAAWABcA" }
+  ]
+}
