@@ -39,6 +39,7 @@ test("all twenty presets render, switch, and release their bounded GPU resources
     expect(reused.textures).toBe(populated.textures);
 
     await page.evaluate(() => (window as any).__particles.select("singularity"));
+    await expect(page.getByRole("region", { name: "Singularity", exact: true })).toBeVisible();
     await page.screenshot({ path: "test-results/particles-singularity.png" });
     await page.getByRole("button", { name: "Pause", exact: true }).click();
     const frozen = await page.evaluate(() => { const api = (window as any).__particles; const before = api.inspect().particles; api.present(10000); return { before, after: api.inspect().particles, paused: api.inspect().paused }; });

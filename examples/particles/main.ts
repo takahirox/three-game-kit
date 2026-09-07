@@ -143,12 +143,7 @@ addEventListener("keydown", event => {
         if (event.key === "ArrowLeft") { event.preventDefault(); moveSelection(-1); }
     }
     if (event.key === " " && !target.matches("input, textarea, select")) { event.preventDefault(); paused = !paused; syncPause(); }
-    if (event.key === "Tab" && selected) {
-        const controls = [...focus.querySelectorAll<HTMLButtonElement>("button"), ...document.querySelectorAll<HTMLElement>(".transport button, .transport input")];
-        const first = controls[0]!, last = controls[controls.length - 1]!;
-        if (event.shiftKey && document.activeElement === first) { event.preventDefault(); last.focus(); }
-        else if (!event.shiftKey && document.activeElement === last) { event.preventDefault(); first.focus(); }
-    }
+
 }, listenerOptions);
 addEventListener("resize", resize, listenerOptions);
 addEventListener("scroll", () => { if (testMode || paused) render(0); }, listenerOptions);

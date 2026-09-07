@@ -90,7 +90,7 @@ export function createEffect(id: PresetId, textures: Record<TextureName, THREE.D
     }
     switch (id) {
         case "solar-flare":
-            layer({ rate: 150, position: P(0, -1.5), shape: { kind: "cone", radius: 0.22, angle: 0.23 }, speed: [1.5, 3.2], size: [0.4, 0.8], lifetimeMs: [600, 1400], colorOverLife: [{ time: 0, value: 0xfff4b2 }, { time: 0.3, value: 0xffa323 }, { time: 1, value: 0xc31710 }], sizeOverLife: [{ time: 0, value: 0.4 }, { time: 0.3, value: 1 }, { time: 1, value: 0 }] });
+            layer({ rate: 150, simulationSpace: "world", position: P(0, -1.5), shape: { kind: "cone", radius: 0.22, angle: 0.23 }, speed: [1.5, 3.2], size: [0.4, 0.8], lifetimeMs: [600, 1400], colorOverLife: [{ time: 0, value: 0xfff4b2 }, { time: 0.3, value: 0xffa323 }, { time: 1, value: 0xc31710 }], sizeOverLife: [{ time: 0, value: 0.4 }, { time: 0.3, value: 1 }, { time: 1, value: 0 }] });
             layer({ rate: 90, position: P(0, -1.4), shape: { kind: "cone", radius: 0.3, angle: 0.4 }, speed: [2, 4], acceleration: P(0, -0.6), size: [0.035, 0.08], color: 0xffb14a }, "star"); break;
         case "singularity":
             ring(0xffb14b, 2, 500, 1, 0.24, "spiral");
