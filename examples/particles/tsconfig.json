@@ -14,5 +14,5 @@
       "@three-game-kit/client/*": ["../../packages/client/src/*.ts"]
     }
   },
-  "include": ["main.ts"]
+  "include": ["*.ts"]
 }

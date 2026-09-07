@@ -256,6 +256,7 @@ requireAll(verifyM5, [
   ,"test:genre-expansion"
   ,"typecheck:advanced-features"
   ,"test:advanced-features"
+  ,"verify:particles"
 ], "verify:m5 missing required gate");
 
 const ci = await readFile(resolve(root, ".github/workflows/ci.yml"), "utf8");
@@ -300,7 +301,7 @@ if (failures.length) {
     links: checkedLinks.length,
     requiredDocuments: requiredFiles.length,
     publicSpecifiers: publicSpecifiers.length,
-    features: 27,
+    features: 28,
     failures: 0
   }));
 }

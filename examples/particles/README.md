@@ -12,3 +12,7 @@ Run `pnpm verify:particles` for typechecking and Chromium rendering/lifecycle
 checks. If the default test port is occupied, set `PLAYWRIGHT_PORT=4184`.
 See [particle API documentation](../../docs/features/particles.md) for limits,
 ownership, overload policy, and simulation-space semantics.
+
+[feature.ts](./feature.ts) demonstrates transferring emitter ownership to a Client
+Runtime with `createParticleFeature`; call `client.boot()`,
+`client.startPresentation()`, and `client.shutdown()` on the returned runtime.
