@@ -3,7 +3,7 @@ import { defineFeatureConfiguration, type ClientFeatureDescriptor, type ClientFe
 
 export interface ParticleVector3 { readonly x: number; readonly y: number; readonly z: number }
 export interface ParticleSceneParent { readonly isObject3D: true }
-export interface ParticleCamera { readonly isCamera: true }
+export interface ParticleCamera { readonly isCamera: boolean }
 /** Borrowed Three.js texture; the emitter never disposes it. */
 export interface ParticleTexture { readonly isTexture: true }
 export type ParticleRange = number | readonly [number, number];
@@ -432,6 +432,8 @@ export function createParticleEmitter(parent: ParticleSceneParent, options: Part
                 const components = attribute.itemSize;
                 temporary.set(attribute.array.subarray(0, active * components));
                 for (let i = 0; i < active; i++) for (let j = 0; j < components; j++) attribute.array[i * components + j] = temporary[order[i]! * components + j]!;
+                attribute.clearUpdateRanges();
+                attribute.addUpdateRange(0, active * components);
                 attribute.needsUpdate = true;
             }
         },

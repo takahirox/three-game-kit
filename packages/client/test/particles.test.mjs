@@ -174,7 +174,13 @@ test("optional alpha sorting preserves per-particle appearance and updates after
     assert.deepEqual(centers(), [0, 0, -3, 0, 0, -2, 0, 0, -1]);
     assert.deepEqual(Array.from(attr("particleDimensions").array.slice(0, 9)), [2, 0, 0, 3, 0, 0, 1, 0, 0]);
     assert.deepEqual(Array.from(attr("particleAppearance").array.slice(0, 12)), [0, 1, 0, 1, 0, 0, 1, 1, 1, 0, 0, 1]);
+    // WebGL consumes update ranges after uploading the preceding frame.
+    for (const name of ["particleCenter", "particleAppearance", "particleDimensions"]) attr(name).clearUpdateRanges();
     camera.rotation.y = Math.PI; emitter.sort(camera);
+    for (const name of ["particleCenter", "particleAppearance", "particleDimensions"]) {
+        const attribute = attr(name);
+        assert.deepEqual(attribute.updateRanges, [{ start: 0, count: 3 * attribute.itemSize }]);
+    }
     assert.deepEqual(centers(), [0, 0, -1, 0, 0, -2, 0, 0, -3]);
     emitter.present(0); emitter.sort(camera);
     assert.deepEqual(centers(), [0, 0, -1, 0, 0, -2, 0, 0, -3]);

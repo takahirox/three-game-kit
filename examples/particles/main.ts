@@ -23,7 +23,7 @@ const atlas = new THREE.DataTexture(data, side, side);
 atlas.magFilter = THREE.LinearFilter; atlas.minFilter = THREE.LinearFilter; atlas.needsUpdate = true;
 const emitters = [
     createParticleEmitter(scene, {
-        capacity: 2048, seed: 19, rate: 240, position: { x: -3.4, y: 0, z: 0 },
+        capacity: 2048, seed: 19, rate: 240, simulationSpace: "world", position: { x: -3.4, y: 0, z: 0 },
         shape: { kind: "cone", radius: 0.15, angle: 0.3 }, speed: [4, 7], lifetimeMs: [700, 1500],
         acceleration: { x: 0, y: -6, z: 0 }, blending: "additive", size: [0.025, 0.085], color: 0xffbc63,
         colorOverLife: [{ time: 0, value: 0xffffff }, { time: 1, value: 0xff2200 }],
