@@ -11,7 +11,7 @@
       <canvas id="game-canvas" tabindex="0" aria-label="Relic Frontier 3D game"></canvas>
       <section id="hud" aria-live="polite">
         <div class="topbar">
-          <div class="brand"><span class="brand-mark">RF</span><div><strong>RELIC FRONTIER</strong><small>ANCIENT SIGNAL // 07</small></div></div>
+          <div class="brand"><span class="brand-mark"><i></i></span><div><strong>RELIC FRONTIER</strong><small>FIELD UNIT / 07</small></div></div>
           <div class="objective"><small data-hud-bind="extra:stage">EXPEDITION BRIEFING</small><strong data-hud-bind="extra:objective">Begin the expedition</strong><span class="cue" data-hud-bind="extra:cue"></span></div>
           <div class="score"><small>SCORE</small><strong data-hud-bind="score">0</strong></div>
         </div>
@@ -38,11 +38,16 @@
         </div>
         <div class="controls">WASD MOVE · DRAG LOOK · LMB ATTACK · RMB/F PULSE · SPACE JUMP · SHIFT DASH · E INTERACT · Q MEDKIT</div>
         <section class="overlay" data-hud-screen="title">
-          <div class="eyebrow">OFFICIAL THREE-GAME-KIT SHOWCASE</div>
-          <h1>RELIC<br /><em>FRONTIER</em></h1>
-          <p>A dormant signal stirs beneath the frontier ruins. Recover three Energy Cells, wake the chamber, and bring the Relic home.</p>
-          <button type="button" data-hud-action="start">BEGIN EXPEDITION <span>→</span></button>
-          <small>10–15 MINUTE SINGLE-PLAYER VERTICAL SLICE</small>
+          <div class="title-rail"><b>RF–07</b><i></i><span>UNKNOWN TERRITORY</span></div>
+          <div class="eyebrow">A THREE-GAME-KIT FIELD EXPERIENCE</div>
+          <h1><span>RELIC</span><br /><em>FRONTIER</em></h1>
+          <p>A dormant signal is calling from the buried chamber. Cross the overgrown ruins, restore its ancient circuit, and bring the Relic home.</p>
+          <div class="launch-row">
+            <button type="button" data-hud-action="start">ENTER THE FRONTIER <span>↗</span></button>
+            <dl class="mission-meta"><div><dt>WINDOW</dt><dd>10–15 MIN</dd></div><div><dt>MODE</dt><dd>SOLO / LIVE</dd></div></dl>
+          </div>
+          <small>MOVE WITH WASD · FOLLOW THE SIGNAL · SURVIVE THE GUARDIAN</small>
+          <div class="scene-caption"><span>LIVE TERRAIN FEED</span><b>35°41' N<br />139°41' E</b></div>
         </section>
         <section class="overlay result" data-hud-screen="results" hidden>
           <div class="eyebrow">EXPEDITION COMPLETE</div>

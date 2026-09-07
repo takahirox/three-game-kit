@@ -1,0 +1,62 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="theme-color" content="#151a2f" />
+    <title>Chroma Strike · three-game-kit</title>
+    <link rel="stylesheet" href="./styles.css" />
+  </head>
+  <body>
+    <main id="strike-app">
+      <canvas id="strike-canvas" tabindex="0" aria-label="Chroma Strike first-person voxel arena"></canvas>
+      <section id="strike-hud" data-phase="title" aria-live="polite">
+        <header class="match-bar">
+          <div class="brand"><i>CS</i><span><b>CHROMA STRIKE</b><small>LIVE TRAINING GRID</small></span></div>
+          <div class="round-state"><small>MATCH CLOCK</small><b id="timer-value">60.0</b></div>
+          <div class="round-state align-right"><small>ELIMINATIONS</small><b id="kills-value">0/5</b></div>
+        </header>
+
+        <div class="crosshair" id="crosshair"><i></i><i></i><i></i><i></i><b></b></div>
+        <div class="kill-feed" id="kill-feed"></div>
+
+        <aside class="player-card">
+          <div class="player-icon">01</div>
+          <div class="health-copy"><small>INTEGRITY</small><b><span id="health-value">100</span><em>HP</em></b><div class="health-track"><i id="health-bar"></i></div></div>
+        </aside>
+        <aside class="weapon-card">
+          <small>VX–12 / CHROMA</small>
+          <div><b id="ammo-value">12</b><i>/</i><span id="reserve-value">48</span></div>
+          <em id="reload-value"></em>
+        </aside>
+        <aside class="score-card"><small>SCORE</small><b id="score-value">0000</b><small>ACCURACY <span id="accuracy-value">—</span></small></aside>
+
+        <section class="screen title-screen" id="title-screen">
+          <div class="lobby-nav"><span class="active">QUICK PLAY</span><span>LOADOUT</span><span>TRAINING GRID 07</span></div>
+          <div class="title-copy">
+            <p class="eyebrow">THREE-GAME-KIT // COMBAT PROTOCOL</p>
+            <h1>CHROMA<br /><em>STRIKE</em></h1>
+            <p class="lede">Five targets. One magazine. Sixty seconds inside a bright voxel combat grid.</p>
+            <button type="button" data-strike-action="start">DEPLOY NOW <span>↗</span></button>
+            <div class="controls"><span><kbd>WASD</kbd> MOVE</span><span><kbd>MOUSE</kbd> AIM</span><span><kbd>LMB</kbd> FIRE</span><span><kbd>R</kbd> RELOAD</span></div>
+          </div>
+          <div class="loadout-card">
+            <small>ACTIVE LOADOUT</small><b>VX–12</b><span>CHROMA CARBINE</span><div class="weapon-glyph"><i></i><i></i><i></i></div>
+            <dl><div><dt>DAMAGE</dt><dd><i style="width:80%"></i></dd></div><div><dt>CONTROL</dt><dd><i style="width:67%"></i></dd></div><div><dt>PACE</dt><dd><i style="width:74%"></i></dd></div></dl>
+          </div>
+        </section>
+
+        <section class="screen countdown-screen" id="countdown-screen" hidden>
+          <small>SYNCING COMBAT GRID</small><b id="countdown-value">3</b><span>GET READY</span>
+        </section>
+
+        <section class="screen result-screen" id="result-screen" hidden>
+          <small>MATCH REPORT</small><h2 id="result-title">ARENA CLEARED</h2><p id="result-copy"></p>
+          <button type="button" data-strike-action="restart">RETURN TO LOBBY <span>↺</span></button>
+        </section>
+      </section>
+      <output id="strike-status">Booting combat grid…</output>
+    </main>
+    <script type="module" src="../src/chroma-strike/main.ts"></script>
+  </body>
+</html>

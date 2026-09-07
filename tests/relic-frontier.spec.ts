@@ -207,3 +207,83 @@ test("Relic Frontier completes a deterministic public-Feature expedition", async
   expect(await page.evaluate(() => window.__RELIC_FRONTIER__!.inspectLeaks())).toMatchObject({ hostListeners: 0, rafActive: false, hostDisposed: true });
   expect(await page.evaluate(() => window.__RELIC_FRONTIER__!.inspectAudio()?.disposed)).toBe(true);
 });
+
+test("Chroma Strike runs a deterministic voxel FPS match", async ({ page }, testInfo) => {
+  const consoleErrors: string[] = [];
+  const pageErrors: string[] = [];
+  page.on("console", (message) => { if (message.type() === "error") consoleErrors.push(message.text()); });
+  page.on("pageerror", (error) => pageErrors.push(error.message));
+  await page.goto("/showcases/relic-frontier/chroma-strike/index.html?test=1");
+  await expect.poll(() => page.evaluate(() => window.__CHROMA_STRIKE__?.ready)).toBe(true);
+  await expect.poll(() => page.evaluate(() => window.__CHROMA_STRIKE__?.screenshotReady)).toBe(true);
+
+  const boot = await page.evaluate(() => ({
+    snapshot: window.__CHROMA_STRIKE__!.snapshot(),
+    renderer: window.__CHROMA_STRIKE__!.inspectRenderer(),
+    vfx: window.__CHROMA_STRIKE__!.inspectVfx(),
+  }));
+  expect(boot.snapshot).toMatchObject({ phase: "title", ammo: 12, reserveAmmo: 48, kills: 0, targetKills: 5 });
+  expect(boot.renderer).toMatchObject({ backend: "three-webgl", disposed: false, screenshotReady: true });
+  expect(boot.renderer!.meshes).toBeGreaterThan(20);
+  expect(boot.renderer!.triangles).toBeGreaterThan(100);
+  expect(boot.renderer!.triangles).toBeLessThan(25_000);
+  expect(boot.renderer!.drawCalls).toBeLessThan(80);
+  expect(boot.vfx).toMatchObject({ disposed: false, queuedCommandCount: 0 });
+  expect(await page.evaluate(() => Object.isFrozen(window.__CHROMA_STRIKE__!.snapshot().enemies))).toBe(true);
+  await expect.poll(() => page.evaluate(() => window.__CHROMA_STRIKE__!.inspectRenderer()?.weaponAsset.status)).toBe("loaded");
+  await expect.poll(() => page.evaluate(() => window.__CHROMA_STRIKE__!.inspectRenderer()?.enemyAsset.status)).toBe("loaded");
+  const models = await page.evaluate(() => window.__CHROMA_STRIKE__!.inspectRenderer());
+  expect(models!.weaponAsset).toMatchObject({ file: "chroma-pulse-rifle.gltf", status: "loaded", active: true, fallbackVisible: false, meshes: 9, instances: 1 });
+  expect(models!.enemyAsset).toMatchObject({ file: "chroma-combat-bot.gltf", status: "loaded", active: true, fallbackVisible: false, meshes: 60, instances: 5 });
+  expect(models!.meshes).toBeGreaterThan(80);
+  await page.screenshot({ path: testInfo.outputPath("chroma-strike-title.png") });
+
+  await page.evaluate(() => { const game = window.__CHROMA_STRIKE__!; game.start(); game.advance(3.1); });
+  expect(await page.evaluate(() => window.__CHROMA_STRIKE__!.snapshot().phase)).toBe("running");
+  await expect(page.locator("#title-screen")).toBeHidden();
+  await expect(page.locator("#crosshair")).toBeVisible();
+
+  await page.evaluate(() => {
+    const game = window.__CHROMA_STRIKE__!;
+    game.loadScenario("duel");
+    for (let shot = 0; shot < 3; shot += 1) { game.press("fire"); game.advance(0.13); }
+  });
+  const duel = await page.evaluate(() => ({ snapshot: window.__CHROMA_STRIKE__!.snapshot(), events: window.__CHROMA_STRIKE__!.events() }));
+  expect(duel.snapshot).toMatchObject({ phase: "running", ammo: 9, kills: 1, hits: 3, shots: 3, score: 145 });
+  expect(duel.snapshot.enemies[0]).toMatchObject({ id: "bot-1", health: 0, alive: false });
+  expect(duel.events.map(({ kind }) => kind)).toEqual(expect.arrayContaining(["shot", "hit", "enemy-defeated"]));
+  await expect(page.locator("#kills-value")).toHaveText("1/5");
+
+  await page.evaluate(() => {
+    const game = window.__CHROMA_STRIKE__!;
+    game.loadScenario("duel");
+    game.press("fire"); game.advance(0.13);
+    game.press("reload"); game.advance(1.2);
+  });
+  expect(await page.evaluate(() => window.__CHROMA_STRIKE__!.snapshot())).toMatchObject({ ammo: 12, reserveAmmo: 47, reloadSeconds: 0 });
+  expect((await page.evaluate(() => window.__CHROMA_STRIKE__!.events())).map(({ kind }) => kind)).toEqual(expect.arrayContaining(["reload-started", "reload-complete"]));
+
+  await page.evaluate(() => {
+    const game = window.__CHROMA_STRIKE__!;
+    game.loadScenario("last-enemy");
+    for (let shot = 0; shot < 3; shot += 1) { game.press("fire"); game.advance(0.13); }
+  });
+  const victory = await page.evaluate(() => window.__CHROMA_STRIKE__!.snapshot());
+  expect(victory).toMatchObject({ phase: "results", result: "arena-clear", kills: 5, ammo: 9 });
+  await expect(page.locator("#result-screen")).toBeVisible();
+  await expect(page.locator("#result-title")).toHaveText("ARENA CLEARED");
+  await page.screenshot({ path: testInfo.outputPath("chroma-strike-results.png") });
+
+  await page.evaluate(() => { const game = window.__CHROMA_STRIKE__!; game.loadScenario("defeat"); game.advance(0.05); });
+  expect(await page.evaluate(() => window.__CHROMA_STRIKE__!.snapshot())).toMatchObject({ phase: "defeated", result: "defeated", player: { health: 0 } });
+  await expect(page.locator("#result-title")).toHaveText("SIGNAL LOST");
+  expect(await page.evaluate(() => window.__CHROMA_STRIKE__!.errors())).toEqual([]);
+  expect(consoleErrors).toEqual([]);
+  expect(pageErrors).toEqual([]);
+
+  await page.evaluate(() => window.__CHROMA_STRIKE__!.restart());
+  expect(await page.evaluate(() => window.__CHROMA_STRIKE__!.snapshot().phase)).toBe("title");
+  await page.evaluate(() => window.__CHROMA_STRIKE__!.dispose());
+  expect(await page.evaluate(() => window.__CHROMA_STRIKE__!.inspectLeaks())).toMatchObject({ hostListeners: 0, rafActive: false, hostDisposed: true, game: { disposed: true } });
+  expect(await page.evaluate(() => window.__CHROMA_STRIKE__!.inspectRenderer())).toMatchObject({ disposed: true });
+});

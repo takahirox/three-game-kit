@@ -1,0 +1,53 @@
+{
+  "asset": {
+    "version": "2.0",
+    "generator": "Relic Frontier hand-authored voxel glTF v1",
+    "copyright": "Original work of the three-game-kit repository, released under the repository license"
+  },
+  "scene": 0,
+  "scenes": [
+    { "name": "ChromaPulseRifleScene", "nodes": [0] }
+  ],
+  "nodes": [
+    { "name": "ChromaPulseRifle", "children": [1, 2, 3, 4, 5, 6, 7, 8, 9] },
+    { "name": "Receiver", "mesh": 0, "translation": [0, 0.02, 0.05], "scale": [0.1, 0.14, 0.55] },
+    { "name": "Barrel", "mesh": 1, "translation": [0, 0.05, -0.45], "scale": [0.05, 0.05, 0.45] },
+    { "name": "BarrelShroud", "mesh": 2, "translation": [0, 0.05, -0.32], "scale": [0.08, 0.09, 0.28] },
+    { "name": "MuzzleEmitter", "mesh": 3, "translation": [0, 0.05, -0.7], "scale": [0.07, 0.07, 0.06] },
+    { "name": "EnergyCell", "mesh": 4, "translation": [0, -0.12, 0.1], "scale": [0.07, 0.16, 0.12] },
+    { "name": "Grip", "mesh": 5, "translation": [0, -0.13, 0.24], "scale": [0.06, 0.16, 0.09] },
+    { "name": "Stock", "mesh": 6, "translation": [0, 0, 0.4], "scale": [0.07, 0.12, 0.18] },
+    { "name": "SightRail", "mesh": 7, "translation": [0, 0.115, 0.02], "scale": [0.04, 0.05, 0.12] },
+    { "name": "SightLens", "mesh": 8, "translation": [0, 0.115, -0.05], "scale": [0.03, 0.03, 0.02] }
+  ],
+  "meshes": [
+    { "name": "ReceiverMesh", "primitives": [{ "attributes": { "POSITION": 0, "NORMAL": 1 }, "indices": 2, "material": 0 }] },
+    { "name": "BarrelMesh", "primitives": [{ "attributes": { "POSITION": 0, "NORMAL": 1 }, "indices": 2, "material": 0 }] },
+    { "name": "BarrelShroudMesh", "primitives": [{ "attributes": { "POSITION": 0, "NORMAL": 1 }, "indices": 2, "material": 1 }] },
+    { "name": "MuzzleEmitterMesh", "primitives": [{ "attributes": { "POSITION": 0, "NORMAL": 1 }, "indices": 2, "material": 3 }] },
+    { "name": "EnergyCellMesh", "primitives": [{ "attributes": { "POSITION": 0, "NORMAL": 1 }, "indices": 2, "material": 2 }] },
+    { "name": "GripMesh", "primitives": [{ "attributes": { "POSITION": 0, "NORMAL": 1 }, "indices": 2, "material": 0 }] },
+    { "name": "StockMesh", "primitives": [{ "attributes": { "POSITION": 0, "NORMAL": 1 }, "indices": 2, "material": 1 }] },
+    { "name": "SightRailMesh", "primitives": [{ "attributes": { "POSITION": 0, "NORMAL": 1 }, "indices": 2, "material": 1 }] },
+    { "name": "SightLensMesh", "primitives": [{ "attributes": { "POSITION": 0, "NORMAL": 1 }, "indices": 2, "material": 3 }] }
+  ],
+  "materials": [
+    { "name": "GunmetalSlate", "pbrMetallicRoughness": { "baseColorFactor": [0.16, 0.19, 0.24, 1], "metallicFactor": 0.7, "roughnessFactor": 0.45 } },
+    { "name": "ChromaShellCyan", "pbrMetallicRoughness": { "baseColorFactor": [0.05, 0.85, 0.95, 1], "metallicFactor": 0.25, "roughnessFactor": 0.35 } },
+    { "name": "StrikeCoreMagenta", "pbrMetallicRoughness": { "baseColorFactor": [0.95, 0.15, 0.75, 1], "metallicFactor": 0.1, "roughnessFactor": 0.4 }, "emissiveFactor": [0.55, 0.05, 0.4] },
+    { "name": "VoltAmber", "pbrMetallicRoughness": { "baseColorFactor": [1, 0.65, 0.1, 1], "metallicFactor": 0.1, "roughnessFactor": 0.3 }, "emissiveFactor": [0.85, 0.5, 0.05] }
+  ],
+  "accessors": [
+    { "bufferView": 0, "componentType": 5126, "count": 24, "type": "VEC3", "min": [-0.5, -0.5, -0.5], "max": [0.5, 0.5, 0.5] },
+    { "bufferView": 1, "componentType": 5126, "count": 24, "type": "VEC3" },
+    { "bufferView": 2, "componentType": 5123, "count": 36, "type": "SCALAR" }
+  ],
+  "bufferViews": [
+    { "buffer": 0, "byteOffset": 0, "byteLength": 288, "target": 34962 },
+    { "buffer": 0, "byteOffset": 288, "byteLength": 288, "target": 34962 },
+    { "buffer": 0, "byteOffset": 576, "byteLength": 72, "target": 34963 }
+  ],
+  "buffers": [
+    { "byteLength": 648, "uri": "data:application/octet-stream;base64,AAAAPwAAAL8AAAA/AAAAPwAAAL8AAAC/AAAAPwAAAD8AAAC/AAAAPwAAAD8AAAA/AAAAvwAAAL8AAAC/AAAAvwAAAL8AAAA/AAAAvwAAAD8AAAA/AAAAvwAAAD8AAAC/AAAAvwAAAD8AAAA/AAAAPwAAAD8AAAA/AAAAPwAAAD8AAAC/AAAAvwAAAD8AAAC/AAAAvwAAAL8AAAC/AAAAPwAAAL8AAAC/AAAAPwAAAL8AAAA/AAAAvwAAAL8AAAA/AAAAvwAAAL8AAAA/AAAAPwAAAL8AAAA/AAAAPwAAAD8AAAA/AAAAvwAAAD8AAAA/AAAAPwAAAL8AAAC/AAAAvwAAAL8AAAC/AAAAvwAAAD8AAAC/AAAAPwAAAD8AAAC/AACAPwAAAAAAAAAAAACAPwAAAAAAAAAAAACAPwAAAAAAAAAAAACAPwAAAAAAAAAAAACAvwAAAAAAAAAAAACAvwAAAAAAAAAAAACAvwAAAAAAAAAAAACAvwAAAAAAAAAAAAAAAAAAgD8AAAAAAAAAAAAAgD8AAAAAAAAAAAAAgD8AAAAAAAAAAAAAgD8AAAAAAAAAAAAAgL8AAAAAAAAAAAAAgL8AAAAAAAAAAAAAgL8AAAAAAAAAAAAAgL8AAAAAAAAAAAAAAAAAAIA/AAAAAAAAAAAAAIA/AAAAAAAAAAAAAIA/AAAAAAAAAAAAAIA/AAAAAAAAAAAAAIL/AAAAAAAAAAAAAIL/AAAAAAAAAAAAAIL/AAAAAAAAAAAAAIL/AAABAAIAAAACAAMABAAFAAYABAAGAAcACAAJAAoACAAKAAsADAANAA4ADAAOAA8AEAARABIAEAASABMAFAAVABYAFAAWABcA" }
+  ]
+}
