@@ -32,16 +32,16 @@ export interface RelicFrontierRenderer extends RenderingFeatureAdapter {
 }
 
 const COLORS = Object.freeze({
-  night: 0x07111e,
-  stone: 0x334857,
-  stoneDark: 0x172932,
-  cyan: 0x48f5d1,
-  amber: 0xffbd59,
-  coral: 0xff5f6d,
-  violet: 0x9d7bff,
-  moss: 0x3d8066,
-  cell: 0xffe75a,
-  white: 0xf4fbff,
+  night: 0x07151b,
+  stone: 0x4b625f,
+  stoneDark: 0x1c3436,
+  cyan: 0x6fffe1,
+  amber: 0xffb45f,
+  coral: 0xff6b63,
+  violet: 0xb496ff,
+  moss: 0x4c8c71,
+  cell: 0xffdc73,
+  white: 0xf5f2e9,
 });
 
 const STAGE_COLORS: Readonly<Record<GuidanceStage, number>> = Object.freeze({
@@ -86,33 +86,109 @@ class Renderer implements RelicFrontierRenderer {
     this.renderer.setPixelRatio(testMode ? 1 : Math.min(devicePixelRatio, 2));
     this.renderer.outputColorSpace = THREE.SRGBColorSpace;
     this.renderer.toneMapping = THREE.ACESFilmicToneMapping;
-    this.renderer.toneMappingExposure = 1.08;
+    this.renderer.toneMappingExposure = 1.22;
     this.renderer.shadowMap.enabled = !testMode;
     this.scene.background = new THREE.Color(COLORS.night);
-    this.scene.fog = new THREE.FogExp2(COLORS.night, 0.018);
+    this.scene.fog = new THREE.FogExp2(0x0b2025, 0.014);
     this.vfx = createVfxRuntime(this.scene, { commandCapacity: 96, burstEffectCapacity: 16, trailEffectCapacity: 20, popupEffectCapacity: 12, maxBurstParticles: 48 });
 
-    this.scene.add(new THREE.HemisphereLight(0x9ad7ff, 0x11241f, 1.4));
-    const moon = new THREE.DirectionalLight(0xc7d8ff, 2.2);
-    moon.position.set(-12, 28, 18);
-    moon.castShadow = !testMode;
-    this.scene.add(moon);
+    this.scene.add(new THREE.HemisphereLight(0xbce9e4, 0x362b24, 2.05));
+    const moonLight = new THREE.DirectionalLight(0xffd4a8, 2.9);
+    moonLight.position.set(-12, 28, 18);
+    moonLight.castShadow = !testMode;
+    this.scene.add(moonLight);
+    const horizonLight = new THREE.PointLight(COLORS.coral, 28, 62, 2);
+    horizonLight.position.set(18, 9, -31);
+    this.scene.add(horizonLight);
     this.objectiveBeacon = new THREE.PointLight(COLORS.cyan, 18, 20, 2);
     this.objectiveBeacon.position.set(0, 4, -16);
     this.scene.add(this.objectiveBeacon);
 
-    const floorGeo = geo(new THREE.PlaneGeometry(38, 56, 1, 1));
+    const floorGeo = geo(new THREE.PlaneGeometry(42, 60, 1, 1));
     floorGeo.rotateX(-Math.PI / 2);
-    const floor = new THREE.Mesh(floorGeo, mat(new THREE.MeshStandardMaterial({ color: 0x132a2c, roughness: 0.94, metalness: 0.08 })));
+    const floor = new THREE.Mesh(floorGeo, mat(new THREE.MeshStandardMaterial({ color: 0x203c35, roughness: 0.97, metalness: 0.02 })));
     floor.receiveShadow = true;
     floor.position.z = -4;
     this.scene.add(floor);
 
     const pathGeo = geo(new THREE.PlaneGeometry(8, 52));
     pathGeo.rotateX(-Math.PI / 2);
-    const path = new THREE.Mesh(pathGeo, mat(new THREE.MeshStandardMaterial({ color: 0x263c43, roughness: 0.8, metalness: 0.18 })));
+    const path = new THREE.Mesh(pathGeo, mat(new THREE.MeshStandardMaterial({ color: 0x6f7667, roughness: 0.92, metalness: 0.03 })));
     path.position.set(0, 0.015, -5);
     this.scene.add(path);
+
+    const stepGeo = geo(new THREE.CylinderGeometry(2.25, 2.45, 0.24, 6));
+    const stepMaterial = mat(new THREE.MeshStandardMaterial({ color: 0x9a9277, roughness: 0.93, flatShading: true }));
+    const steps = new THREE.InstancedMesh(stepGeo, stepMaterial, 13);
+    const stepTransform = new THREE.Object3D();
+    for (let index = 0; index < 13; index += 1) {
+      stepTransform.position.set(Math.sin(index * 1.7) * 0.85, 0.14, 18 - index * 3.8);
+      stepTransform.rotation.set(0, index * 0.43, 0);
+      stepTransform.scale.set(0.9 + (index % 3) * 0.08, 1, 0.72 + (index % 2) * 0.12);
+      stepTransform.updateMatrix();
+      steps.setMatrixAt(index, stepTransform.matrix);
+    }
+    steps.receiveShadow = true;
+    this.scene.add(steps);
+
+    // A small, authored low-poly landscape gives the arena readable silhouettes
+    // without adding downloaded assets or texture memory.
+    const cliffGeo = geo(new THREE.ConeGeometry(4.4, 9, 6));
+    const cliffMaterial = mat(new THREE.MeshStandardMaterial({ color: 0x29443d, roughness: 0.98, flatShading: true }));
+    const cliffs = new THREE.InstancedMesh(cliffGeo, cliffMaterial, 14);
+    const cliffTransform = new THREE.Object3D();
+    for (const [index, x, z, scale, rotation] of [
+      [0, -21, 17, 1.35, 0.1], [1, 21, 14, 1.65, 0.55], [2, -22, 6, 1.8, 0.2], [3, 22, 2, 1.5, 0.8],
+      [4, -22, -8, 1.75, 0.5], [5, 22, -11, 1.9, 0.15], [6, -20, -23, 1.55, 0.8], [7, 20, -26, 1.65, 0.3],
+      [8, -14, -35, 1.9, 0.7], [9, 0, -39, 2.4, 0.1], [10, 15, -36, 2.1, 0.45], [11, -31, -17, 2.6, 0.25],
+      [12, 31, -10, 2.9, 0.65], [13, 28, 22, 2.25, 0.4],
+    ] as const) {
+      cliffTransform.position.set(x, 2.1 * scale - 3.2, z);
+      cliffTransform.rotation.set(0, rotation, Math.PI);
+      cliffTransform.scale.set(scale, scale, scale);
+      cliffTransform.updateMatrix();
+      cliffs.setMatrixAt(index, cliffTransform.matrix);
+    }
+    cliffs.castShadow = !testMode;
+    cliffs.receiveShadow = true;
+    this.scene.add(cliffs);
+
+    const monolithGeo = geo(new THREE.BoxGeometry(2.6, 8, 2.2));
+    const monolithMaterial = mat(new THREE.MeshStandardMaterial({ color: 0x304b49, roughness: 0.86, metalness: 0.09 }));
+    const monoliths = new THREE.InstancedMesh(monolithGeo, monolithMaterial, 9);
+    const monolithTransform = new THREE.Object3D();
+    for (const [index, x, z, height, tilt] of [
+      [0, -10, 20, 0.62, -0.08], [1, 11, 18, 0.82, 0.09], [2, -17, 9, 0.9, 0.04],
+      [3, 17, 5, 0.7, -0.06], [4, -17, -9, 1.1, 0.08], [5, 18, -14, 0.85, -0.08],
+      [6, -12, -27, 1.25, 0.04], [7, 12, -28, 1.05, -0.04], [8, 0, -34, 1.45, 0],
+    ] as const) {
+      monolithTransform.position.set(x, height * 4 - 0.7, z);
+      monolithTransform.rotation.set(tilt, index * 0.42, tilt * 0.5);
+      monolithTransform.scale.set(1, height, 1);
+      monolithTransform.updateMatrix();
+      monoliths.setMatrixAt(index, monolithTransform.matrix);
+    }
+    monoliths.castShadow = !testMode;
+    monoliths.receiveShadow = true;
+    this.scene.add(monoliths);
+
+    const grassGeo = geo(new THREE.ConeGeometry(0.32, 1.8, 3));
+    grassGeo.translate(0, 0.9, 0);
+    const grassMaterial = mat(new THREE.MeshStandardMaterial({ color: 0x69a36f, roughness: 1, flatShading: true }));
+    const grass = new THREE.InstancedMesh(grassGeo, grassMaterial, 30);
+    const grassTransform = new THREE.Object3D();
+    for (let index = 0; index < 30; index += 1) {
+      const side = index % 2 === 0 ? -1 : 1;
+      const z = 20 - Math.floor(index / 2) * 3.55;
+      const x = side * (5.8 + (index % 5) * 1.7);
+      const scale = 0.58 + (index % 4) * 0.17;
+      grassTransform.position.set(x, 0, z);
+      grassTransform.rotation.set((index % 3 - 1) * 0.11, index * 1.31, side * 0.09);
+      grassTransform.scale.set(scale, scale, scale);
+      grassTransform.updateMatrix();
+      grass.setMatrixAt(index, grassTransform.matrix);
+    }
+    this.scene.add(grass);
 
     const pillarGeo = geo(new THREE.CylinderGeometry(1.15, 1.4, 7, 6));
     const capGeo = geo(new THREE.CylinderGeometry(1.55, 1.55, 0.5, 6));
@@ -149,13 +225,22 @@ class Renderer implements RelicFrontierRenderer {
     }
 
     const crystalGeo = geo(new THREE.OctahedronGeometry(0.58, 0));
-    const playerMat = mat(new THREE.MeshToonMaterial({ color: 0xe8f7ff, emissive: 0x183a4c }));
-    const body = new THREE.Mesh(geo(new THREE.CapsuleGeometry(0.48, 0.82, 5, 10)), playerMat);
-    body.position.y = 1;
+    const playerMat = mat(new THREE.MeshToonMaterial({ color: 0xe9e2cf, emissive: 0x183a3b }));
+    const body = new THREE.Mesh(geo(new THREE.CapsuleGeometry(0.46, 0.78, 5, 10)), playerMat);
+    body.position.y = 1.02;
     body.castShadow = true;
-    const scarf = new THREE.Mesh(geo(new THREE.BoxGeometry(0.16, 0.12, 1.1)), mat(new THREE.MeshBasicMaterial({ color: COLORS.cyan })));
-    scarf.position.set(0, 1.35, 0.65);
-    this.player.add(body, scarf);
+    const hoodMaterial = mat(new THREE.MeshToonMaterial({ color: 0x213d3d }));
+    const hood = new THREE.Mesh(geo(new THREE.SphereGeometry(0.38, 8, 6)), hoodMaterial);
+    hood.position.y = 1.76;
+    hood.castShadow = true;
+    const face = new THREE.Mesh(geo(new THREE.BoxGeometry(0.38, 0.13, 0.04)), mat(new THREE.MeshBasicMaterial({ color: COLORS.cyan })));
+    face.position.set(0, 1.76, 0.355);
+    const pack = new THREE.Mesh(geo(new THREE.BoxGeometry(0.7, 0.72, 0.28)), hoodMaterial);
+    pack.position.set(0, 1.08, -0.42);
+    const scarf = new THREE.Mesh(geo(new THREE.BoxGeometry(0.18, 0.11, 1.25)), mat(new THREE.MeshBasicMaterial({ color: COLORS.coral })));
+    scarf.position.set(0.23, 1.48, -0.55);
+    scarf.rotation.y = -0.15;
+    this.player.add(body, hood, face, pack, scarf);
     this.scene.add(this.player);
 
     const enemyColors = { drone: COLORS.cyan, shooter: COLORS.amber, sentinel: COLORS.coral, boss: COLORS.violet } as const;
@@ -275,6 +360,16 @@ class Renderer implements RelicFrontierRenderer {
     const starGeo = geo(new THREE.BufferGeometry());
     starGeo.setAttribute("position", new THREE.BufferAttribute(stars, 3));
     this.scene.add(new THREE.Points(starGeo, mat(new THREE.PointsMaterial({ color: 0xb9dcff, size: 0.16 }))));
+
+    const motes = new Float32Array(210);
+    for (let index = 0; index < 70; index += 1) {
+      motes[index * 3] = Math.sin(index * 4.17) * (6 + (index % 9) * 1.25);
+      motes[index * 3 + 1] = 0.65 + (index % 11) * 0.42;
+      motes[index * 3 + 2] = 21 - (index % 19) * 3.2;
+    }
+    const moteGeo = geo(new THREE.BufferGeometry());
+    moteGeo.setAttribute("position", new THREE.BufferAttribute(motes, 3));
+    this.scene.add(new THREE.Points(moteGeo, mat(new THREE.PointsMaterial({ color: 0xffcc82, size: 0.09, transparent: true, opacity: 0.78, depthWrite: false }))));
     this.resize();
   }
 
