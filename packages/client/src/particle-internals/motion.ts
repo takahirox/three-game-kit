@@ -1,11 +1,11 @@
 import * as THREE from "three";
 import type { ParticleCollider, ParticleEmitterOptions, ParticleVectorCurve } from "./types.js";
-import { curve, number, record, sample, vector, integer } from "./validation.js";
+import { distribution, number, record, vector, integer } from "./validation.js";
 
 function vectorCurve(input: ParticleVectorCurve | undefined) {
     if (!input) return undefined;
     record(input, ["x", "y", "z"], "vector curve");
-    return [input.x, input.y, input.z].map(c => c === undefined ? undefined : curve(c, -1e6, 1e6, "vector curve"));
+    return [input.x, input.y, input.z].map(c => c === undefined ? undefined : distribution(c, -1e6, 1e6, "vector curve"));
 }
 
 /** @internal */
@@ -54,21 +54,22 @@ export function createMotion(options: ParticleEmitterOptions) {
         }
     }
     const stepMs = number(options.simulationStepMs ?? 1000 / 60, 1, 100, "simulationStepMs");
+    const limit = number(options.limitVelocity ?? 1e6, 0, 1e6, "limitVelocity");
     const maxSteps = integer(options.maxSubSteps ?? 120, 1, 1024, "maxSubSteps");
     const f = new THREE.Vector3(), delta = new THREE.Vector3(), start = new THREE.Vector3(), normal = new THREE.Vector3(), bestNormal = new THREE.Vector3();
     const projected = new THREE.Vector3(), contact = new THREE.Vector3();
     return {
         contact,
-        enabled: !!(velocity || force || noise || fields.length || collision), stepMs, maxSteps,
-        initialVelocity(v: THREE.Vector3) { if (velocity) for (let k = 0; k < 3; k++) { const c = velocity[k]; if (c) v.setComponent(k, v.getComponent(k) + sample(c, 0)); } },
+        enabled: !!(velocity || force || noise || fields.length || collision || options.limitVelocity !== undefined || options.runtime?.update || options.triggers?.length), stepMs, maxSteps,
+        initialVelocity(v: THREE.Vector3, random = 0) { if (velocity) for (let k = 0; k < 3; k++) { const c = velocity[k]; if (c) v.setComponent(k, v.getComponent(k) + c.sample(0, random)); } if (options.limitVelocity !== undefined) v.clampLength(0, limit); },
         /** Returns collision/kill flags. p and v are reusable caller-owned scratch vectors. */
         step(p: THREE.Vector3, v: THREE.Vector3, dtMs: number, ageMs: number, lifetimeMs: number, seed: number, acceleration: THREE.Vector3, drag: number): number {
             const dt = dtMs / 1000, t0 = Math.min(1, ageMs / lifetimeMs), t1 = Math.min(1, (ageMs + dtMs) / lifetimeMs);
             f.copy(acceleration);
             for (let k = 0; k < 3; k++) {
                 const fc = force?.[k], vc = velocity?.[k];
-                if (fc) f.setComponent(k, f.getComponent(k) + sample(fc, (t0 + t1) / 2));
-                if (vc && dt > 0) f.setComponent(k, f.getComponent(k) + (sample(vc, t1) - sample(vc, t0)) / dt);
+                if (fc) f.setComponent(k, f.getComponent(k) + fc.sample((t0 + t1) / 2, seed / 4294967296));
+                if (vc && dt > 0) f.setComponent(k, f.getComponent(k) + (vc.sample(t1, seed / 4294967296) - vc.sample(t0, seed / 4294967296)) / dt);
             }
             if (strength) {
                 const t = ageMs / 1000 * scroll + seed * 0.0001;
@@ -90,6 +91,7 @@ export function createMotion(options: ParticleEmitterOptions) {
             const integral = x < 0.001 ? dt * dt * (0.5 - x / 6 + x * x / 24 - x * x * x / 120) : (dt - decay) / drag;
             start.copy(p); p.addScaledVector(v, decay).addScaledVector(f, integral);
             v.multiplyScalar(Math.exp(-drag * dt)).addScaledVector(f, decay);
+            if (options.limitVelocity !== undefined) v.clampLength(0, limit);
             if (!colliders.length) return 0;
             let flags = 0, remaining = dt;
             for (let iteration = 0; iteration < 4; iteration++) {

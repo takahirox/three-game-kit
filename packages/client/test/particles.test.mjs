@@ -420,7 +420,7 @@ test("paused sorting retains trail colors and effect sorting preserves additive 
     const x = setup({ capacity: 4, trails: { segments: 4, intervalMs: 10 }, velocity: P(1), lifetimeMs: 5000 });
     x.emitter.emit(1, { position: P(0, 1, -1), color: 0xff0000 }); x.emitter.emit(1, { position: P(0, 2, -2), color: 0x00ff00 });
     x.emitter.present(0); x.emitter.present(100); x.emitter.sort(new THREE.PerspectiveCamera()); x.emitter.pause(); x.emitter.present(200);
-    const trail = x.scene.children[1], start = trail.geometry.getAttribute("segmentStart"), color = trail.geometry.getAttribute("particleAppearance");
+    const trail = x.scene.children[1], start = trail.geometry.getAttribute("segmentStart"), color = trail.geometry.getAttribute("segmentColorB");
     for (let i = 0; i < trail.geometry.instanceCount; i++) { if (start.getY(i) === 1) { close(color.getX(i), 1); close(color.getY(i), 0); } else { close(color.getX(i), 0); close(color.getY(i), 1); } }
     x.emitter.dispose();
     const scene = new THREE.Group(), effect = createParticleEffect(scene, { emitters: [
@@ -455,4 +455,137 @@ test("particle Feature accepts an owned system and releases nested effects on sh
     const client = createClientRuntime({ frameSource, features: [createParticleFeature({ emitters: [system] })] });
     assert.equal((await client.boot()).state, "running"); client.startPresentation(); frameSource.deliver(0); frameSource.deliver(100);
     assert.equal(system.inspect().activeParticleCount, 1); await client.shutdown(); assert.equal(scene.children.length, 0); assert.equal(system.inspect().disposed, true);
+});
+
+const constant = value => [{ time: 0, value }, { time: 1, value }];
+const xyz = (x = 0, y = 0, z = 0) => ({ x, y, z });
+
+test("curved emission integrates smooth keys and repeated random bursts survive frame partitions and hitches", () => {
+    const options = { capacity: 2048, seed: 123, durationMs: 1000, loop: true, lifetimeMs: 5000, speed: 0,
+        rate: 20, rateOverTime: [{ time: 0, value: 0, interpolation: "smooth" }, { time: 1, value: 2 }],
+        bursts: [{ timeMs: 0, count: [2, 7], cycles: 4, intervalMs: 200, probability: 0.7 }] };
+    const a = setup(options), b = setup(options);
+    a.emitter.present(0); a.emitter.present(2500);
+    for (let t = 0; t <= 2500; t += 25) b.emitter.present(t);
+    assert.deepEqual(a.centers(), b.centers());
+    assert.deepEqual(Array.from(a.attr("particleDimensions").array), Array.from(b.attr("particleDimensions").array));
+    assert.equal(a.emitter.inspect().emittedParticleCount, b.emitter.inspect().emittedParticleCount);
+    const curveOnly = setup({ rate: 20, durationMs: 1000, rateOverTime: options.rateOverTime, lifetimeMs: 2000 });
+    curveOnly.emitter.present(0); curveOnly.emitter.present(1000);
+    assert.equal(curveOnly.emitter.inspect().emittedParticleCount, 20);
+    a.emitter.present(1e11); assert.ok(a.emitter.inspect().activeParticleCount <= options.capacity);
+    const never = setup({ ...options, bursts: [{ timeMs: 0, count: 1, probability: 0 }], rate: 0 });
+    never.emitter.present(0); never.emitter.present(1e11); assert.equal(never.emitter.inspect().emittedParticleCount, 0);
+    for (const e of [a, b, curveOnly, never]) e.emitter.dispose();
+});
+
+test("curve distributions, random colors, speed modules, and 3D axes are stable through sorting and restart", () => {
+    const options = { capacity: 4, seed: 456, bursts: [{ timeMs: 0, count: 4 }], lifetimeMs: 2000, velocity: xyz(2), size: 1,
+        startColors: [0xff0000, 0x00ff00, 0x0000ff], sizeAxes: { x: 2, y: 3, z: 4 }, rotation3D: { x: 0.5 }, angularVelocity3D: { y: 2 },
+        angularVelocity: 2, angularVelocityOverLife: [{ time: 0, value: 0 }, { time: 1, value: 2 }],
+        sizeOverLife: { min: constant(1), max: constant(2) }, sizeBySpeed: { range: [0, 4], curve: constant(2) },
+        rotationBySpeed: { range: [0, 4], curve: constant(0.25) }, colorBySpeed: { range: [0, 4], curve: constant(0xffffff) } };
+    const a = setup(options); a.emitter.present(0); a.emitter.present(1000);
+    const saved = Array.from(a.attr("particleDimensions").array);
+    assert.ok(saved.filter((_, i) => i % 3 === 0).every(n => n >= 2 && n <= 4));
+    close(saved[1], 1.25); close(a.attr("particleRotation").getY(0), 1);
+    assert.deepEqual(Array.from(a.attr("particleScale").array.slice(0, 3)), [2, 3, 4]);
+    const appearance = Array.from(a.attr("particleAppearance").array);
+    a.emitter.seek(1000); assert.deepEqual(Array.from(a.attr("particleDimensions").array), saved); assert.deepEqual(Array.from(a.attr("particleAppearance").array), appearance);
+    a.emitter.dispose();
+});
+
+test("sprite FPS, row selection, start frames and interpolation wrap inside the selected row", () => {
+    const a = setup({ speed: 0, lifetimeMs: 5000, spriteSheet: { columns: 4, rows: 3, fps: 2, row: 1, startFrame: 3, blend: true } });
+    a.emitter.emit(1); a.emitter.present(0); a.emitter.present(250);
+    assert.equal(a.attr("particleDimensions").getZ(0), 7); assert.equal(a.attr("particleAtlas").getX(0), 4); close(a.attr("particleAtlas").getY(0), 0.5);
+    a.emitter.present(500); assert.equal(a.attr("particleDimensions").getZ(0), 4);
+    a.emitter.dispose();
+});
+
+test("runtime fields and collision changes preserve position and velocity at the update boundary", () => {
+    const a = setup({ velocity: xyz(1), lifetimeMs: 5000, simulationStepMs: 10, renderer: { kind: "stretched" } });
+    a.emitter.emit(1); a.emitter.present(0); a.emitter.present(1000); close(a.centers()[0], 1);
+    a.emitter.setForceFields([{ kind: "attractor", position: xyz(10), radius: 20, strength: 2 }]);
+    close(a.centers()[0], 1); a.emitter.present(1100); assert.ok(a.centers()[0] > 1.1);
+    const before = a.centers()[0], velocity = a.attr("particleVelocity").getX(0);
+    a.emitter.setForceFields([]); a.emitter.present(1200); close(a.centers()[0], before + velocity * 0.1);
+    a.emitter.setCollision({ colliders: [{ kind: "plane", normal: xyz(-1), offset: -1.4 }], bounce: 1 });
+    a.emitter.present(1500); assert.ok(a.centers()[0] < 1.4); assert.ok(a.attr("particleVelocity").getX(0) < 0);
+    const stable = a.centers(); assert.throws(() => a.emitter.setForceFields([{ kind: "vortex", position: xyz(), radius: 1, strength: 2, axis: xyz() }])); assert.deepEqual(a.centers(), stable);
+    a.emitter.dispose();
+});
+
+test("velocity limiting is enforced at birth and after acceleration", () => {
+    const a = setup({ velocity: xyz(10), acceleration: xyz(10), limitVelocity: 2, lifetimeMs: 2000, renderer: { kind: "stretched" } });
+    a.emitter.emit(1); close(a.attr("particleVelocity").getX(0), 2); a.emitter.present(0); a.emitter.present(1000);
+    close(a.attr("particleVelocity").getX(0), 2); assert.ok(a.centers()[0] < 2.1); a.emitter.dispose();
+});
+
+test("deforming mesh snapshots affect future births while existing particles remain independent", () => {
+    let offset = 0;
+    const vertices = () => [offset, 0, 0, offset + 1, 0, 0, offset, 1, 0];
+    const a = setup({ shape: { kind: "mesh", positions: vertices() }, speed: 0, runtime: { meshPositions: vertices } });
+    a.emitter.emit(1); const first = a.centers(); offset = 10; a.emitter.emit(1);
+    assert.deepEqual(a.centers().slice(0, 3), first); assert.ok(a.centers()[3] >= 10);
+    assert.throws(() => a.emitter.setMeshPositions([0, 0, 0])); a.emitter.dispose();
+});
+
+test("custom attributes and update callbacks commit once per fixed step; trigger enter/exit are bounded events", () => {
+    let calls = 0;
+    const a = setup({ capacity: 2, velocity: xyz(1), lifetimeMs: 2000, simulationStepMs: 100, events: true,
+        customAttributes: [{ name: "customHeat", size: 1, value: [0] }], triggers: [{ id: "gate", volume: { kind: "sphere", center: xyz(0.5), radius: 0.2 } }],
+        runtime: { update(p) { calls++; p.attributes[0] += p.deltaMs / 1000; } } });
+    a.emitter.emit(1); a.emitter.present(0); a.emitter.present(50); a.emitter.present(50);
+    assert.equal(calls, 1); close(a.attr("customHeat").getX(0), 0);
+    a.emitter.present(1000); assert.equal(calls, 11); close(a.attr("customHeat").getX(0), 1);
+    const crossings = a.emitter.drainEvents().filter(e => e.triggerId === "gate"); assert.deepEqual(crossings.map(e => e.kind), ["enter", "exit"]);
+    a.emitter.dispose();
+});
+
+test("retained trails fade after death, survive sorting and dense reuse, and delay completion", () => {
+    let complete = 0;
+    const a = setup({ capacity: 2, speed: 0, lifetimeMs: 200, velocity: xyz(1), opacityOverLife: constant(1),
+        trails: { segments: 4, intervalMs: 20, width: 0.2, widthOverTrail: [{ time: 0, value: 1 }, { time: 1, value: 0 }], colorOverTrail: [{ time: 0, value: 0xffffff }, { time: 1, value: 0x0000ff }], persistMs: 300 },
+        runtime: { onComplete() { complete++; } } });
+    a.emitter.emit(1, { color: 0xff0000 }); a.emitter.present(0); a.emitter.present(50); a.emitter.present(100); a.emitter.present(150);
+    a.emitter.present(200); assert.equal(a.emitter.inspect().activeParticleCount, 0); assert.equal(a.emitter.inspect().activeTrailCount, 1); assert.equal(complete, 0);
+    const trail = a.scene.children[1]; assert.ok(trail.geometry.instanceCount > 0);
+    a.emitter.present(500); assert.equal(a.emitter.inspect().activeTrailCount, 0); assert.equal(complete, 1); a.emitter.present(600); assert.equal(complete, 1);
+    a.emitter.emit(1); a.emitter.clear(); assert.equal(a.emitter.inspect().activeTrailCount, 0); a.emitter.dispose();
+});
+
+test("effect seek replays the sub-emitter DAG from time zero and completion waits for children", () => {
+    let completions = 0;
+    const definition = defineParticleEffect({ emitters: [
+        { id: "source", options: { capacity: 2, bursts: [{ timeMs: 0, count: 1 }], lifetimeMs: 100, velocity: xyz(1) } },
+        { id: "child", options: { capacity: 8, lifetimeMs: 200, velocity: xyz(0, 1), noise: { strength: 0.2 } } },
+    ], subEmitters: [{ source: "source", target: "child", event: "death", count: 2 }] });
+    const parent = new THREE.Group(), effect = createParticleEffect(parent, definition, { onComplete: () => completions++ });
+    effect.seek(200); assert.equal(effect.inspect().activeParticleCount, 2); assert.equal(completions, 0);
+    const attrs = () => Array.from(parent.children[0].children[1].geometry.getAttribute("particleCenter").array.slice(0, 6));
+    const first = attrs(); effect.seek(200); assert.deepEqual(attrs(), first);
+    effect.seek(400); assert.equal(effect.inspect().completed, true); assert.equal(completions, 1); effect.present(500); assert.equal(completions, 1); effect.dispose();
+});
+
+test("borrowed material/depth/trail textures survive disposal and incompatible settings reject without scene attachment", () => {
+    const material = new THREE.ShaderMaterial(), texture = new THREE.Texture(), depth = new THREE.DepthTexture(16, 16), camera = new THREE.PerspectiveCamera();
+    let released = 0; for (const r of [material, texture, depth]) r.addEventListener("dispose", () => released++);
+    const a = setup({ runtime: { material, trailTexture: texture, softParticles: { depthTexture: depth, camera, width: 16, height: 16 } }, trails: {} });
+    assert.equal(a.mesh.material, material); a.emitter.dispose(); assert.equal(released, 0);
+    const scene = new THREE.Group();
+    for (const bad of [{ rateOverTime: constant(1) }, { bursts: [{ timeMs: 0, count: 2, cycles: 2 }] }, { sizeAxes: { x: -1 } }, { spriteSheet: { columns: 2, rows: 2, row: 2 } }, { customAttributes: [{ name: "position", size: 3 }] }, { runtime: { material: new THREE.MeshBasicMaterial() } }, { triggers: [{ id: "x", volume: { kind: "sphere", center: xyz(), radius: -1 } }] }]) {
+        assert.throws(() => createParticleEmitter(scene, bad)); assert.equal(scene.children.length, 0);
+    }
+    material.dispose(); texture.dispose(); depth.dispose();
+});
+
+test("simulation LOD reduces update frequency and offscreen pause resumes without a catch-up jump", () => {
+    const parent = new THREE.Group(), camera = new THREE.PerspectiveCamera(45, 1, 0.1, 100); camera.position.z = 10; camera.updateMatrixWorld();
+    const system = createParticleSystem(parent, { camera, cull: true, offscreenSimulation: "pause", lod: [{ distance: 0, emissionScale: 1, updateIntervalMs: 100 }] });
+    const effect = system.createEffect(defineParticleEffect({ emitters: [{ id: "main", options: { velocity: xyz(1), lifetimeMs: 5000, bursts: [{ timeMs: 0, count: 1 }] } }] }));
+    system.present(0); system.present(50); assert.equal(effect.inspect().emitters[0].state.elapsedMs, 0);
+    system.present(100); close(effect.inspect().emitters[0].state.elapsedMs, 100);
+    effect.setTransform(xyz(1000)); system.present(200); close(effect.inspect().emitters[0].state.elapsedMs, 100);
+    effect.setTransform(xyz()); system.present(300); close(effect.inspect().emitters[0].state.elapsedMs, 200); system.dispose();
 });

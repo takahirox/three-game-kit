@@ -4,13 +4,15 @@ import { defineFeatureConfiguration, type ClientFeatureDescriptor, type ClientFe
 export * from "./particle-internals/types.js";
 export { defineParticleEffect, createParticleEffect, createParticleSystem } from "./particle-internals/effect.js";
 export type { ParticleEffectDefinition, ParticleEffect, ParticleEffectOptions, ParticleSystem, ParticleSystemOptions } from "./particle-internals/effect.js";
-import type { ParticleCamera, ParticleCurve, ParticleEmission, ParticleEmitter, ParticleEmitterOptions, ParticleInspection, ParticleParameters, ParticleEvent, ParticleSceneParent, ParticleVector3 } from "./particle-internals/types.js";
+import type { ParticleCamera, ParticleTexture, ParticleVector2, ParticleForceField, ParticleCollisionOptions, ParticleCurve, ParticleEmission, ParticleEmitter, ParticleEmitterOptions, ParticleInspection, ParticleParameters, ParticleEvent, ParticleSceneParent, ParticleVector3 } from "./particle-internals/types.js";
 import { emitterAccess } from "./particle-internals/access.js";
 import { createShape } from "./particle-internals/shapes.js";
 import { createSchedule } from "./particle-internals/schedule.js";
 import { createMotion } from "./particle-internals/motion.js";
+import { createVariation, colorDistribution } from "./particle-internals/variation.js";
+import { createRuntime } from "./particle-internals/runtime.js";
 import { createRenderer } from "./particle-internals/renderer.js";
-import { number, integer, record, vector, range, curve, sample } from "./particle-internals/validation.js";
+import { number, integer, record, vector, range, curve, distribution } from "./particle-internals/validation.js";
 
 const LIMIT = 65536;
 const MAX_TIME = 1e12;
@@ -23,7 +25,7 @@ const zero = { x: 0, y: 0, z: 0 };
 /** Seeded, fixed-capacity simulation with optional motion, collision, renderer and trail modules. */
 export function createParticleEmitter(parent: ParticleSceneParent, options: ParticleEmitterOptions = {}): ParticleEmitter {
     if (!(parent instanceof THREE.Object3D)) throw new TypeError("Particle parent must be a Three.js Object3D");
-    record(options, ["capacity", "seed", "rate", "durationMs", "bursts", "position", "rotation", "shape", "simulationSpace", "lifetimeMs", "speed", "acceleration", "drag", "size", "angle", "angularVelocity", "color", "sizeOverLife", "opacityOverLife", "colorOverLife", "blending", "depthTest", "texture", "spriteSheet", "loop", "startDelayMs", "prewarmMs", "timeScale", "rateOverDistance", "velocity", "inheritVelocity", "velocityOverLife", "forceOverLife", "noise", "forceFields", "collision", "simulationStepMs", "maxSubSteps", "renderer", "trails", "events", "eventCapacity"], "Particle options");
+    record(options, ["capacity", "seed", "rate", "durationMs", "bursts", "position", "rotation", "shape", "simulationSpace", "lifetimeMs", "speed", "acceleration", "drag", "size", "angle", "angularVelocity", "color", "sizeOverLife", "opacityOverLife", "colorOverLife", "blending", "depthTest", "texture", "spriteSheet", "loop", "startDelayMs", "prewarmMs", "timeScale", "rateOverDistance", "velocity", "inheritVelocity", "velocityOverLife", "forceOverLife", "noise", "forceFields", "collision", "simulationStepMs", "maxSubSteps", "renderer", "trails", "events", "eventCapacity", "rateOverTime", "triggers", "limitVelocity", "sizeAxes", "rotation3D", "angularVelocity3D", "angularVelocityOverLife", "sizeBySpeed", "colorBySpeed", "rotationBySpeed", "startColors", "lighting", "customAttributes", "runtime"], "Particle options");
     const sceneParent = parent;
     const capacity = integer(options.capacity ?? 1024, 1, LIMIT, "capacity");
     const seed = integer(options.seed ?? 1, 0, 0xffffffff, "seed");
@@ -46,7 +48,10 @@ export function createParticleEmitter(parent: ParticleSceneParent, options: Part
     if (options.loop && (options.durationMs === undefined || duration < 1)) throw new TypeError("loop requires durationMs >= 1");
     if (options.events !== undefined && typeof options.events !== "boolean") throw new TypeError("events must be boolean");
     const eventCapacity = integer(options.eventCapacity ?? Math.min(capacity * 4, 65536), 1, 65536, "eventCapacity");
-    const motion = createMotion(options);
+    let motion = createMotion(options);
+    const runtime = createRuntime(options, capacity);
+    let fieldConfig = options.forceFields ? structuredClone(options.forceFields) : [], collisionConfig = options.collision ? structuredClone(options.collision) : { colliders: [] };
+    const motionOptions = { ...options, ...(options.velocityOverLife ? { velocityOverLife: structuredClone(options.velocityOverLife) } : {}), ...(options.forceOverLife ? { forceOverLife: structuredClone(options.forceOverLife) } : {}), ...(options.noise ? { noise: { ...options.noise } } : {}) };
     const emitEvents = options.events ?? false, loop = options.loop ?? false;
     const acceleration = vector(options.acceleration ?? zero, "acceleration");
     const drag = number(options.drag ?? 0, 0, MAX_VALUE, "drag");
@@ -59,20 +64,31 @@ export function createParticleEmitter(parent: ParticleSceneParent, options: Part
     if (blending !== "normal" && blending !== "additive") throw new TypeError("Invalid blending");
     if (options.depthTest !== undefined && typeof options.depthTest !== "boolean") throw new TypeError("depthTest must be boolean");
     if (options.texture !== undefined && !(options.texture instanceof THREE.Texture)) throw new TypeError("texture must be a Three.js Texture");
-    const sizeKeys = curve(options.sizeOverLife ?? flat, 0, MAX_VALUE, "sizeOverLife");
-    const opacityKeys = curve(options.opacityOverLife ?? fade, 0, 1, "opacityOverLife");
-    const colorKeys = options.colorOverLife === undefined ? undefined : curve(options.colorOverLife, 0, 0xffffff, "colorOverLife", true);
-    const colors = colorKeys?.map(key => new THREE.Color(key.value));
+    const sizeKeys = distribution(options.sizeOverLife ?? flat, 0, MAX_VALUE, "sizeOverLife");
+    const opacityKeys = distribution(options.opacityOverLife ?? fade, 0, 1, "opacityOverLife");
+    const colorSample = options.colorOverLife === undefined ? undefined : colorDistribution(options.colorOverLife, "colorOverLife");
     const sheet = options.spriteSheet ?? { columns: 1, rows: 1 };
-    record(sheet, ["columns", "rows", "cycles"], "spriteSheet");
+    record(sheet, ["columns", "rows", "cycles", "startFrame", "fps", "row", "blend"], "spriteSheet");
     const columns = integer(sheet.columns, 1, 256, "columns");
     const rows = integer(sheet.rows, 1, 256, "rows");
-    const cycles = number(sheet.cycles ?? 1, 0.001, MAX_VALUE, "cycles");
-    const sampleShape = createShape(options.shape ?? { kind: "point" });
+    number(sheet.cycles ?? 1, 0.001, MAX_VALUE, "cycles");
+    const variation = createVariation(options, capacity, columns, rows);
+    let sampleShape = createShape(options.shape ?? { kind: "point" });
+    const meshIndices = options.shape?.kind === "mesh" && options.shape.indices ? [...options.shape.indices] : undefined;
+    function setMeshPositions(positions: readonly number[]): void {
+        live(); if (options.shape?.kind !== "mesh") throw new TypeError("setMeshPositions requires a mesh emission shape");
+        sampleShape = createShape({ kind: "mesh", positions, ...(meshIndices ? { indices: meshIndices } : {}) });
+    }
+    const rateKeys = options.rateOverTime === undefined ? undefined : curve(options.rateOverTime, 0, MAX_VALUE, "rateOverTime");
+    if (rateKeys && (options.durationMs === undefined || duration <= 0)) throw new TypeError("rateOverTime requires a positive durationMs");
     if (options.bursts !== undefined && (!Array.isArray(options.bursts) || options.bursts.length > 64)) throw new TypeError("bursts requires at most 64 entries");
     const bursts = Array.from(options.bursts ?? [], burst => {
-        record(burst, ["timeMs", "count"], "burst");
-        return { timeMs: number(burst.timeMs, 0, MAX_TIME, "burst timeMs"), count: integer(burst.count, 1, LIMIT, "burst count") };
+        record(burst, ["timeMs", "count", "cycles", "intervalMs", "probability"], "burst");
+        const counts = range(burst.count, 1, LIMIT, "burst count"); counts.forEach(c => integer(c, 1, LIMIT, "burst count"));
+        const cycles = integer(burst.cycles ?? 1, 1, 65536, "burst cycles");
+        if (cycles > 1 && burst.intervalMs === undefined) throw new TypeError("repeated bursts require intervalMs");
+        return { timeMs: number(burst.timeMs, 0, MAX_TIME, "burst timeMs"), count: counts, cycles,
+            intervalMs: number(burst.intervalMs ?? 1, 0.001, MAX_TIME, "burst intervalMs"), probability: number(burst.probability ?? 1, 0, 1, "burst probability") };
     }).sort((a, b) => a.timeMs - b.timeMs);
 
     // Dense active prefix. Swap-removal touches only one particle, never allocates.
@@ -82,7 +98,7 @@ export function createParticleEmitter(parent: ParticleSceneParent, options: Part
     const particleColors = new Float32Array(capacity * 3);
     const renderer = createRenderer(sceneParent, options, capacity, columns, rows);
     const { geometry, mesh, centers, appearances, dimensions, attributes } = renderer;
-    const schedule = createSchedule(rate, duration, delay, options.loop ?? false, bursts);
+    const schedule = createSchedule(rate, duration, delay, options.loop ?? false, bursts, rateKeys, seed);
     const ages = new Float64Array(capacity), ids = new Float64Array(capacity), noiseSeeds = new Uint32Array(capacity);
     let nextId = 0, droppedSimulationMs = 0, droppedEventCount = 0;
     let events: ParticleEvent[] = [];
@@ -92,27 +108,38 @@ export function createParticleEmitter(parent: ParticleSceneParent, options: Part
     const worldMatrix = new THREE.Matrix4();
     let sortScratch: { order: Uint32Array; depths: Float64Array; attributes: Float32Array[] } | undefined;
     const sortMatrix = new THREE.Matrix4();
-    let active = 0, disposed = false, emitting = true;
+    let active = 0, disposed = false, emitting = true, completed = false, inCallback = false;
     let presentationTimeMs: number | null = null, elapsed = 0;
     let sequence = 0;
     let emitted = 0, dropped = 0, expired = 0;
-    function live(): void { if (disposed) throw new Error("Particle emitter has been disposed"); }
+    function live(): void { if (inCallback) throw new Error("Particle callbacks cannot reenter the emitter"); if (disposed) throw new Error("Particle emitter has been disposed"); }
     let randomState = 0;
     function random(): number { randomState = (Math.imul(randomState, 1664525) + 1013904223) >>> 0; return randomState / 4294967296; }
     const scalarArrays = [born, lifetime, sizes, angles, spins, ages, ids, noiseSeeds];
     const vectorArrays = [positions, velocities, particleColors];
-    function remove(index: number): void {
-        active--; renderer.remove(index, active);
+    function remove(index: number, time = elapsed): void {
+        active--; renderer.remove(index, active, time, p); variation.remove(index, active); runtime.remove(index, active);
         for (const array of scalarArrays) array[index] = array[active]!;
         for (const array of vectorArrays) {
             for (let j = 0; j < 3; j++) array[index * 3 + j] = array[active * 3 + j]!;
         }
     }
-    function event(kind: ParticleEvent["kind"], i: number, time: number, position = p): void {
+    function event(kind: ParticleEvent["kind"], i: number, time: number, position = p, triggerId?: string): void {
         if (!emitEvents) return;
         if (events.length === eventCapacity) { droppedEventCount = addCount(droppedEventCount, 1); return; }
-        events.push(Object.freeze({ kind, particleId: ids[i]!, timeMs: time,
+        events.push(Object.freeze({ kind, ...(triggerId === undefined ? {} : { triggerId }), particleId: ids[i]!, timeMs: time,
             position: Object.freeze({ x: position.x, y: position.y, z: position.z }), velocity: Object.freeze({ x: v.x, y: v.y, z: v.z }) }));
+    }
+    function customStep(i: number, age: number, dt: number): void {
+        if (!runtime.enabled) return;
+        inCallback = true;
+        try { runtime.step(i, ids[i]!, age, lifetime[i]!, dt, p, v, (kind, triggerId) => event(kind, i, born[i]! + age, p, triggerId)); }
+        finally { inCallback = false; }
+    }
+    function checkComplete(): void {
+        const done = active === 0 && renderer.activeTrailCount === 0 && (!emitting || (schedule.exhausted() && (distanceRate === 0 || (!loop && elapsed >= delay + duration))));
+        if (!done) { completed = false; return; }
+        if (!completed) { completed = true; if (runtime.onComplete) { inCallback = true; try { runtime.onComplete(); } finally { inCallback = false; } } }
     }
     function evaluate(i: number, time: number, terminal = false): boolean {
         const age = Math.max(0, Math.min(time - born[i]!, lifetime[i]!)), j = i * 3;
@@ -134,6 +161,7 @@ export function createParticleEmitter(parent: ParticleSceneParent, options: Part
         for (let n = 0; n < steps; n++) {
             const flags = motion.step(p, v, motion.stepMs, current, lifetime[i]!, noiseSeeds[i]!, acceleration, drag);
             current += motion.stepMs;
+            customStep(i, current, motion.stepMs);
             renderer.sample(i, p, born[i]! + current);
             if (flags & 1) event("collision", i, born[i]! + current, motion.contact);
             if (flags & 2) { event("death", i, born[i]! + current); return false; }
@@ -150,12 +178,13 @@ export function createParticleEmitter(parent: ParticleSceneParent, options: Part
     function expireAt(time: number): void {
         for (let i = active - 1; i >= 0; i--) if (time - born[i]! >= lifetime[i]!) {
             if (evaluate(i, born[i]! + lifetime[i]!, true)) event("death", i, born[i]! + lifetime[i]!);
-            remove(i); expired = addCount(expired, 1);
+            remove(i, born[i]! + lifetime[i]!); expired = addCount(expired, 1);
         }
     }
     function spawn(count: number, time: number, location: THREE.Vector3, lifetimeRange: readonly [number, number], speedRange: readonly [number, number], sizeRange: readonly [number, number], color: number, localSeed: number, sequenceBase = sequence, velocityOverride = initialVelocity): number {
         const accepted = Math.min(count, capacity - active);
-        tint.setHex(color);
+        if (accepted && runtime.meshPositions) { inCallback = true; let vertices: readonly number[]; try { vertices = runtime.meshPositions(); } finally { inCallback = false; } setMeshPositions(vertices); }
+        if (accepted) completed = false;
         if (space === "world") { sceneParent.updateWorldMatrix(true, false); worldMatrix.copy(sceneParent.matrixWorld); }
         for (let n = 0; n < accepted; n++) {
             randomState = (localSeed ^ Math.imul(sequenceBase + n, 0x9e3779b1)) >>> 0;
@@ -170,10 +199,10 @@ export function createParticleEmitter(parent: ParticleSceneParent, options: Part
                 v.set(e[0]! * x + e[4]! * y + e[8]! * z, e[1]! * x + e[5]! * y + e[9]! * z, e[2]! * x + e[6]! * y + e[10]! * z);
             }
             v.addScaledVector(inherited, inheritVelocity);
-            motion.initialVelocity(v);
+            motion.initialVelocity(v, ((localSeed ^ Math.imul(sequenceBase + n, 0x9e3779b1)) >>> 0) / 4294967296);
             const i = active++;
             ages[i] = 0; ids[i] = nextId++; noiseSeeds[i] = (localSeed ^ Math.imul(sequenceBase + n, 0x9e3779b1)) >>> 0;
-            renderer.birth(i, p, time);
+
             positions[i * 3] = p.x; positions[i * 3 + 1] = p.y; positions[i * 3 + 2] = p.z;
             velocities[i * 3] = v.x; velocities[i * 3 + 1] = v.y; velocities[i * 3 + 2] = v.z;
             born[i] = time;
@@ -181,7 +210,10 @@ export function createParticleEmitter(parent: ParticleSceneParent, options: Part
             sizes[i] = (sizeRange[0] + random() * (sizeRange[1] - sizeRange[0])) * sizeScale;
             angles[i] = angle[0] + random() * (angle[1] - angle[0]);
             spins[i] = spin[0] + random() * (spin[1] - spin[0]);
+            tint.setHex(color); variation.birth(i, random, tint); runtime.birth(i); customStep(i, 0, 0);
+            p.toArray(positions, i * 3); v.toArray(velocities, i * 3);
             particleColors[i * 3] = tint.r; particleColors[i * 3 + 1] = tint.g; particleColors[i * 3 + 2] = tint.b;
+            renderer.birth(i, p, time); renderer.appearance(i, tint, 1);
             event("birth", i, time);
         }
         sequence = (sequence + count) >>> 0;
@@ -196,21 +228,17 @@ export function createParticleEmitter(parent: ParticleSceneParent, options: Part
             if (!motion.enabled) renderer.sample(i, p, elapsed);
             const j = i * 3;
             tint.setRGB(particleColors[j]!, particleColors[j + 1]!, particleColors[j + 2]!);
-            if (colorKeys && colors) {
-                for (let k = 1; k < colorKeys.length; k++) if (progress <= colorKeys[k]!.time) {
-                    const a = colorKeys[k - 1]!, b = colorKeys[k]!;
-                    // Interpolate in linear working color space, then multiply by initial tint.
-                    const t = (progress - a.time) / (b.time - a.time);
-                    const ca = colors[k - 1]!, cb = colors[k]!;
-                    tint.setRGB(particleColors[j]! * (ca.r + (cb.r - ca.r) * t), particleColors[j + 1]! * (ca.g + (cb.g - ca.g) * t), particleColors[j + 2]! * (ca.b + (cb.b - ca.b) * t));
-                    break;
-                }
-            }
-            appearances.setXYZW(i, tint.r, tint.g, tint.b, sample(opacityKeys, progress));
-            const frame = Math.min(columns * rows - 1, Math.floor((progress * cycles % 1) * columns * rows));
-            dimensions.setXYZ(i, sizes[i]! * sample(sizeKeys, progress), angles[i]! + spins[i]! * seconds, frame);
+            const r = noiseSeeds[i]! / 4294967296, speedNow = v.length();
+            colorSample?.(tint, progress, r);
+            variation.color(tint, speedNow, r);
+            appearances.setXYZW(i, tint.r, tint.g, tint.b, opacityKeys.sample(progress, r));
+            renderer.appearance(i, tint, appearances.getW(i));
+            const frame = variation.frame(i, seconds, progress, renderer.atlas);
+            dimensions.setXYZ(i, sizes[i]! * sizeKeys.sample(progress, r) * variation.size(speedNow, r), angles[i]! + variation.angle(seconds, progress, lifetime[i]!, speedNow, r, spins[i]!), frame);
+            if (renderer.scales && renderer.rotations) variation.axes(i, progress, lifetime[i]!, r, renderer.scales, renderer.rotations);
+            runtime.upload(i, renderer.customAttributes);
         }
-        renderer.upload(active);
+        renderer.upload(active, elapsed);
     }
     function skip(count: number): void { sequence = (sequence + count) >>> 0; dropped = addCount(dropped, count); }
     function scaledBirth(count: number, time: number, location: THREE.Vector3): void {
@@ -239,6 +267,19 @@ export function createParticleEmitter(parent: ParticleSceneParent, options: Part
             const r = integer(overrides.seed ?? seed, 0, 0xffffffff, "seed");
             const velocity = overrides.velocity === undefined ? initialVelocity : vector(overrides.velocity, "velocity");
             const accepted = spawn(count, elapsed - ageMs, location, l, s, z, c, r, overrides.seed === undefined ? sequence : 0, velocity); return accepted;
+    }
+    function reset(): void {
+        completed = false; renderer.clear(); active = 0; elapsed = 0; schedule.reset(); sequence = 0; nextId = 0;
+        densityRemainder = 0; distanceRemainder = 0; hasPreviousOrigin = false; inherited.set(0, 0, 0); events = []; emitting = true;
+    }
+    function replaceMotion(next: ReturnType<typeof createMotion>): void {
+        for (let i = active - 1; i >= 0; i--) {
+            if (!evaluate(i, elapsed)) { remove(i); expired = addCount(expired, 1); continue; }
+            const age = elapsed - born[i]!;
+            if (motion.enabled && age > ages[i]!) customStep(i, age, age - ages[i]!);
+            p.toArray(positions, i * 3); v.toArray(velocities, i * 3); ages[i] = age;
+        }
+        motion = { ...next, enabled: true }; upload();
     }
     const api: ParticleEmitter = Object.freeze({
         present(timestampMs: number): void {
@@ -269,7 +310,7 @@ export function createParticleEmitter(parent: ParticleSceneParent, options: Part
                 }
             }
             if (paused) upload();
-            previousOrigin.copy(observedOrigin); hasPreviousOrigin = true;
+            previousOrigin.copy(observedOrigin); hasPreviousOrigin = true; checkComplete();
         },
         emit(count: number, overrides: ParticleEmission = {}): number { const accepted = emitInternal(count, overrides); expireAt(elapsed); upload(); return accepted; },
         setTransform(position: ParticleVector3, rotation: ParticleVector3 = zero): void {
@@ -288,7 +329,18 @@ export function createParticleEmitter(parent: ParticleSceneParent, options: Part
             const c = integer(parameters.color ?? baseColor, 0, 0xffffff, "color");
             emissionScale = e; sizeScale = z; speedScale = s; baseColor = c;
         },
-        prewarm(durationMs: number): void { live(); advance(number(durationMs, 0, MAX_VALUE, "prewarmMs")); },
+        prewarm(durationMs: number): void { live(); advance(number(durationMs, 0, MAX_VALUE, "prewarmMs")); checkComplete(); },
+        seek(timeMs: number): void {
+            live(); number(timeMs, 0, MAX_VALUE, "seek timeMs");
+            // Fixed replay steps make motion, trails and child-module state reproducible.
+            const wasPaused = paused; reset(); advance(0);
+            for (let t = 0; t < timeMs;) { const dt = Math.min(1000 / 60, timeMs - t); advance(dt); t += dt; }
+            paused = wasPaused; events = []; checkComplete();
+        },
+        setForceFields(fields: readonly ParticleForceField[]) { live(); const next = createMotion({ ...motionOptions, forceFields: fields, ...(collisionConfig ? { collision: collisionConfig } : {}) }); fieldConfig = structuredClone(fields); replaceMotion(next); },
+        setCollision(collision: ParticleCollisionOptions) { live(); const next = createMotion({ ...motionOptions, collision, ...(fieldConfig ? { forceFields: fieldConfig } : {}) }); collisionConfig = structuredClone(collision); replaceMotion(next); },
+        setMeshPositions,
+        setDepthSource(texture: ParticleTexture, width: number, height: number, origin?: ParticleVector2) { live(); renderer.setDepthSource(texture as THREE.Texture, width, height, origin); },
         drainEvents(): readonly ParticleEvent[] { live(); const result = events; events = []; return result; },
         cull(camera: ParticleCamera): boolean { live(); if (!(camera instanceof THREE.Camera)) throw new TypeError("cull camera must be a Three.js Camera"); return renderer.cull(camera); },
         sort(camera: ParticleCamera): void {
@@ -317,10 +369,10 @@ export function createParticleEmitter(parent: ParticleSceneParent, options: Part
                 attribute.needsUpdate = true;
             }
         },
-        clear(): void { live(); active = 0; upload(); },
-        restart(): void { live(); active = 0; elapsed = 0; schedule.reset(); sequence = 0; nextId = 0; densityRemainder = 0; distanceRemainder = 0; hasPreviousOrigin = false; inherited.set(0, 0, 0); events = []; emitting = true; paused = false; upload(); if (initialPrewarm) advance(initialPrewarm); },
+        clear(): void { live(); active = 0; renderer.clear(); upload(); checkComplete(); },
+        restart(): void { live(); reset(); paused = false; upload(); if (initialPrewarm) advance(initialPrewarm); },
         inspect(): ParticleInspection {
-            return Object.freeze({ disposed, paused, timeScale, elapsedMs: elapsed, culled: renderer.culled, droppedSimulationMs, droppedEventCount, emitting: !disposed && emitting, presentationTimeMs, activeParticleCount: active, capacity,
+            return Object.freeze({ disposed, completed, activeTrailCount: disposed ? 0 : renderer.activeTrailCount, paused, timeScale, elapsedMs: elapsed, culled: renderer.culled, droppedSimulationMs, droppedEventCount, emitting: !disposed && emitting, presentationTimeMs, activeParticleCount: active, capacity,
                 emittedParticleCount: emitted, droppedParticleCount: dropped, expiredParticleCount: expired,
                 liveResourceCounts: Object.freeze({ objects: disposed ? 0 : renderer.resourceCount, geometries: disposed ? 0 : renderer.resourceCount, materials: disposed ? 0 : renderer.resourceCount }) });
         },
@@ -334,8 +386,10 @@ export function createParticleEmitter(parent: ParticleSceneParent, options: Part
         emit: emitInternal,
         flush() { live(); expireAt(elapsed); upload(); },
         refresh() { live(); upload(); },
+        reset() { live(); reset(); advance(0); },
+        complete() { live(); checkComplete(); },
     });
-    if (initialPrewarm) advance(initialPrewarm);
+    try { if (initialPrewarm) advance(initialPrewarm); } catch (error) { api.dispose(); throw error; }
     return api;
 }
 

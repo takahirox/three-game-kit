@@ -1,14 +1,14 @@
 import { expect, test } from "@playwright/test";
 
-test("all twenty presets render, switch, and release their bounded GPU resources", async ({ page }) => {
+test("all twenty-six presets render, switch, and release their bounded GPU resources", async ({ page }) => {
     const errors: string[] = [];
     page.on("pageerror", error => errors.push(error.message));
     page.on("console", message => { if (message.type() === "error") errors.push(message.text()); });
     await page.goto("/examples/particles/index.html?test=1");
     await page.waitForFunction(() => "__particles" in window);
-    await expect(page.locator(".card")).toHaveCount(20);
+    await expect(page.locator(".card")).toHaveCount(26);
     const initial = await page.evaluate(() => (window as any).__particles.inspect());
-    expect(initial.initializedCount).toBeLessThan(20);
+    expect(initial.initializedCount).toBeLessThan(26);
     expect(initial.renderedIds.length).toBeGreaterThan(1);
     await page.screenshot({ path: "test-results/particles-workshop.png" });
 
@@ -26,12 +26,14 @@ test("all twenty presets render, switch, and release their bounded GPU resources
         expect(result.bright, `${result.id} visible pixels`).toBeGreaterThan(20);
         expect(result.calls, result.id).toBeGreaterThan(0);
         expect(result.calls, `${result.id} draw budget`).toBeLessThanOrEqual(5);
-        expect(result.triangles, result.id).toBe(result.particles * 2);
+        if (["turbulence", "orbital-current", "comet", "shards", "cascade", "surface"].includes(result.id)) {
+            expect(result.triangles, result.id).toBeGreaterThanOrEqual(result.particles * 2);
+        } else expect(result.triangles, result.id).toBe(result.particles * 2);
     }
     const populated = await page.evaluate(() => (window as any).__particles.inspect());
-    expect(populated.initializedCount).toBe(20);
-    expect(populated.textures).toBeLessThanOrEqual(8);
-    expect(populated.geometries).toBeLessThanOrEqual(60);
+    expect(populated.initializedCount).toBe(26);
+    expect(populated.textures).toBeLessThanOrEqual(10);
+    expect(populated.geometries).toBeLessThanOrEqual(80);
     await page.evaluate(() => { const api = (window as any).__particles; for (const id of api.inspect().presetIds) api.select(id); });
     const reused = await page.evaluate(() => (window as any).__particles.inspect());
     expect(reused.geometries).toBe(populated.geometries);
@@ -56,7 +58,7 @@ test("all twenty presets render, switch, and release their bounded GPU resources
     await page.keyboard.press("Escape");
     await expect(page.locator("#focus")).toBeHidden();
     await page.getByRole("button", { name: "Magic", exact: true }).click();
-    await expect(page.locator(".card:visible")).toHaveCount(4);
+    await expect(page.locator(".card:visible")).toHaveCount(5);
     const disposed = await page.evaluate(() => { const api = (window as any).__particles; api.dispose(); api.dispose(); return api.inspect(); });
     expect(disposed.children).toBe(0); expect(disposed.geometries).toBe(0); expect(disposed.programs).toBe(0); expect(disposed.textures).toBe(0);
     expect(errors).toEqual([]);
@@ -66,10 +68,10 @@ test("mobile gallery scrolls to the remaining effects and supports focus navigat
     await page.setViewportSize({ width: 390, height: 844 });
     await page.goto("/examples/particles/index.html?test=1");
     await page.waitForFunction(() => "__particles" in window);
-    await page.locator('[data-id="matrix"]').scrollIntoViewIfNeeded();
-    await expect.poll(() => page.evaluate(() => (window as any).__particles.inspect().renderedIds)).toContain("matrix");
-    await page.locator('[data-id="matrix"]').click();
-    await expect(page.locator("#focus-title")).toHaveText("Digital rain");
+    await page.locator('[data-id="surface"]').scrollIntoViewIfNeeded();
+    await expect.poll(() => page.evaluate(() => (window as any).__particles.inspect().renderedIds)).toContain("surface");
+    await page.locator('[data-id="surface"]').click();
+    await expect(page.locator("#focus-title")).toHaveText("Prismatic forge");
     expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBe(390);
     await page.screenshot({ path: "test-results/particles-mobile.png" });
     await page.getByRole("button", { name: "Next effect" }).click();
@@ -103,34 +105,66 @@ test("authored formations remain populated beyond their original particle lifeti
     expect(result.again).toEqual(result.before);
 });
 
-test("native modules render trails, mesh particles and event cascades with bounded resources", async ({ page }) => {
+test("new module effects share the atlas gallery, controls and resource lifecycle", async ({ page }) => {
     const errors: string[] = [];
     page.on("pageerror", error => errors.push(error.message));
     page.on("console", message => { if (message.type() === "error") errors.push(message.text()); });
     await page.setViewportSize({ width: 1500, height: 1300 });
-    await page.goto("/examples/particles/modules.html?test=1");
-    await page.waitForFunction(() => "__particleModules" in window);
-    await expect(page.locator("article")).toHaveCount(6);
-    const initial = await page.evaluate(() => (window as any).__particleModules.inspect());
-    for (const effect of initial.effects) expect(effect.activeParticleCount, effect.id).toBeGreaterThan(0);
+    await page.goto("/examples/particles/index.html?test=1");
+    await page.waitForFunction(() => "__particles" in window);
+    await page.getByRole("button", { name: "New 6", exact: true }).click();
+    await expect(page.locator(".card:visible")).toHaveCount(6);
+    await expect(page.locator(".new-badge")).toHaveCount(6);
+    await expect(page).toHaveURL(/particles\/index\.html/);
+    const initial = await page.evaluate(() => (window as any).__particles.inspect());
+    expect(initial.renderedIds).toEqual(["turbulence", "orbital-current", "comet", "shards", "cascade", "surface"]);
     expect(initial.effects.find((e: any) => e.id === "surface").drawSavings).toBe(1);
-    const energy = await page.evaluate(() => (window as any).__particleModules.pixelEnergy());
-    for (const effect of energy) expect(effect.bright, effect.id).toBeGreaterThan(10);
-    await page.screenshot({ path: "test-results/particle-modules.png", fullPage: true });
+    await page.screenshot({ path: "test-results/particles-new-effects.png", fullPage: true });
     await page.getByRole("button", { name: "Pause", exact: true }).click();
-    const frozen = await page.evaluate(() => { const api = (window as any).__particleModules; const before = api.inspect().time; api.present(2000); return { before, ...api.inspect() }; });
-    expect(frozen.paused).toBe(true); expect(frozen.time).toBe(frozen.before);
-    for (const effect of frozen.effects) for (const emitter of effect.emitters) expect(emitter.state.paused).toBe(true);
-    await page.getByRole("button", { name: "Burst", exact: true }).click();
-    await page.getByRole("button", { name: "Restart", exact: true }).click();
+    const frozen = await page.evaluate(() => { const api = (window as any).__particles; const before = api.inspect(); api.present(2000); return { before, after: api.inspect() }; });
+    expect(frozen.after.paused).toBe(true);
+    expect(frozen.after.particles).toBe(frozen.before.particles);
+    expect(frozen.after.emitters.map((e: any) => e.elapsedMs)).toEqual(frozen.before.emitters.map((e: any) => e.elapsedMs));
+    await page.getByRole("button", { name: /Burst/ }).click();
+    expect(await page.evaluate(() => (window as any).__particles.inspect().particles)).toBeGreaterThan(frozen.after.particles);
+    await page.getByRole("button", { name: /Restart/ }).click();
+    const restarted = await page.evaluate(() => (window as any).__particles.inspect());
     await page.getByRole("button", { name: "Play", exact: true }).click();
-    await page.getByRole("combobox", { name: "Speed", exact: true }).selectOption("2");
-    await page.getByRole("combobox", { name: "Density", exact: true }).selectOption("0.5");
-    await page.evaluate(() => { const api = (window as any).__particleModules; for (let t = 2016; t <= 7000; t += 80) api.present(t); });
-    const later = await page.evaluate(() => (window as any).__particleModules.inspect());
-    expect(later.geometries).toBe(initial.geometries); expect(later.programs).toBe(initial.programs);
-    for (const effect of later.effects) { expect(effect.activeParticleCount).toBeLessThanOrEqual(effect.capacity); for (const emitter of effect.emitters) expect(emitter.state.timeScale).toBe(2); }
-    const disposed = await page.evaluate(() => { const api = (window as any).__particleModules; api.dispose(); api.dispose(); return api.inspect(); });
+    await page.getByRole("slider", { name: "Animation speed" }).fill("2");
+    await page.evaluate(() => { const api = (window as any).__particles; for (let t = 2016; t <= 7000; t += 80) api.present(t); });
+    const later = await page.evaluate(() => (window as any).__particles.inspect());
+    expect(later.speed).toBe(2);
+    expect(restarted.initializedCount).toBe(6);
+    // WebGL allocates geometry only on its first visible draw; exercise a full
+    // event cycle before comparing the next cycle's resource counts.
+    expect(later.geometries).toBeLessThanOrEqual(13);
+    await page.evaluate(() => { const api = (window as any).__particles; for (let t = 7016; t <= 12000; t += 80) api.present(t); });
+    const repeated = await page.evaluate(() => (window as any).__particles.inspect());
+    expect(repeated.geometries).toBe(later.geometries); expect(repeated.programs).toBe(later.programs);
+    for (const emitter of later.emitters) expect(emitter.activeParticleCount).toBeLessThanOrEqual(emitter.capacity);
+    await page.locator('[data-id="shards"]').click();
+    await expect(page.locator("#focus-title")).toHaveText("Crystal impact");
+    await expect(page.locator("#focus-index")).toHaveText("24 / 26");
+    await page.keyboard.press("Escape");
+    await expect(page.locator(".card:visible")).toHaveCount(6);
+    await page.getByRole("button", { name: "All effects 26", exact: true }).click();
+    await expect(page.locator(".card:visible")).toHaveCount(26);
+    const disposed = await page.evaluate(() => { const api = (window as any).__particles; api.dispose(); api.dispose(); return api.inspect(); });
     expect(disposed.children).toBe(0); expect(disposed.geometries).toBe(0); expect(disposed.programs).toBe(0);
+    expect(errors).toEqual([]);
+});
+
+test("soft intersections, atlas blending, lighting and custom attributes produce correct GPU pixels", async ({ page }) => {
+    const errors: string[] = [];
+    page.on("console", message => { if (message.type() === "error") errors.push(message.text()); });
+    await page.goto("/examples/particles/index.html?test=1");
+    const result = await page.evaluate(async () => { const module = "/tests/support/particles-rendering.ts"; return (await import(module)).checkParticleRendering(); });
+    expect(result.faded[0]).toBeGreaterThan(40); expect(result.faded[0]).toBeLessThan(65);
+    expect(result.solid[0]).toBeGreaterThan(245);
+    expect(result.blended[0]).toBeGreaterThan(120); expect(result.blended[0]).toBeLessThan(135);
+    expect(result.blended[2]).toBeGreaterThan(120); expect(result.blended[2]).toBeLessThan(135);
+    expect(result.litFront[0]).toBeGreaterThan(240); expect(result.litBack[0]).toBeLessThan(5);
+    expect(result.customPixel[0]).toBeGreaterThan(120); expect(result.customPixel[0]).toBeLessThan(135);
+    expect(result.borrowedDisposals).toBe(0); expect(result.remaining.geometries).toBe(0); expect(result.remaining.textures).toBe(0);
     expect(errors).toEqual([]);
 });

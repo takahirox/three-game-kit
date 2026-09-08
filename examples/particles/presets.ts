@@ -1,6 +1,34 @@
 import * as THREE from "three";
-import { createParticleEmitter, type ParticleEmitter, type ParticleEmitterOptions, type ParticleEmission } from "@three-game-kit/client/particles";
+import { createParticleEmitter, createParticleSystem, defineParticleEffect, type ParticleRuntimeOptions, type ParticleEffectDefinition, type ParticleEmitter, type ParticleEmitterOptions, type ParticleEmission } from "@three-game-kit/client/particles";
 import type { TextureName } from "./textures.js";
+
+const P = (x = 0, y = 0, z = 0) => ({ x, y, z });
+const fade = [{ time: 0, value: 1 }, { time: 0.75, value: 0.7 }, { time: 1, value: 0 }];
+const shard = [0, 0.7, 0, -0.25, -0.3, 0.25, 0.25, -0.3, 0.25, 0, 0.7, 0, 0.25, -0.3, 0.25, 0, -0.3, -0.3, 0, 0.7, 0, 0, -0.3, -0.3, -0.25, -0.3, 0.25];
+const NATIVE_PRESETS = [
+    { id: "turbulence", category: "FIRE", color: "#ff954f", name: "Ember turbulence", description: "滑らかな放出カーブで炎が呼吸する。床との境界は深度で淡く溶け、火の粉は速度で伸びる。", definition: { emitters: [
+        { id: "main", options: { capacity: 512, rate: 100, rateOverTime: [{ time: 0, value: 0.5, interpolation: "smooth" }, { time: 0.5, value: 1.4, interpolation: "smooth" }, { time: 1, value: 0.5 }], sizeOverLife: { min: [{ time: 0, value: 0.4 }, { time: 1, value: 1 }], max: [{ time: 0, value: 0.8 }, { time: 1, value: 1.8 }] }, durationMs: 2000, loop: true, prewarmMs: 1200, position: P(0, -1.4), shape: { kind: "circle", radius: 0.35 }, velocity: P(0, 1.2), lifetimeMs: [900, 1800], size: [0.18, 0.42], blending: "additive", noise: { strength: 2.5, frequency: 2, scrollSpeed: 1 }, forceOverLife: { y: [{ time: 0, value: 0.3 }, { time: 1, value: 2 }] }, colorOverLife: [{ time: 0, value: 0xffe0a0 }, { time: 0.3, value: 0xff7d20 }, { time: 1, value: 0xa01924 }], opacityOverLife: fade } },
+        { id: "sparks", options: { capacity: 128, rate: 24, position: P(0, -1.3), shape: { kind: "cone", radius: 0.3, angle: 0.4 }, speed: [2, 4], lifetimeMs: 1600, size: 0.045, color: 0xffc469, blending: "additive", renderer: { kind: "stretched", velocityScale: 0.12 } } },
+    ] } },
+    { id: "orbital-current", category: "ENERGY", color: "#a37bff", name: "Orbital current", description: "動く渦と吸引力が光を編む。速度に応じた色の変化と、先細りの軌跡。", definition: { emitters: [
+        { id: "main", options: { capacity: 128, rate: 24, renderer: { kind: "horizontal" }, limitVelocity: 4, colorBySpeed: { range: [0, 3], curve: [{ time: 0, value: 0x8765ff }, { time: 1, value: 0xffffff }] }, shape: { kind: "ring", radius: 1.7 }, velocity: P(0, 0.15), lifetimeMs: 4000, size: 0.08, color: 0xa37bff, blending: "additive", forceFields: [{ kind: "vortex", position: P(), axis: P(0, 1), strength: 3, radius: 4 }, { kind: "attractor", position: P(), strength: 1.7, radius: 4 }], trails: { segments: 20, intervalMs: 30, width: 0.06, widthOverTrail: [{ time: 0, value: 1 }, { time: 1, value: 0 }] }, prewarmMs: 1000 } },
+    ] } },
+    { id: "comet", category: "COSMIC", color: "#5be7ff", name: "Ribbon flight", description: "移動距離に応じて描かれるリボン。色と幅が尾に沿って変わり、粒子が消えた後にも残光が続く。", definition: { emitters: [
+        { id: "main", options: { capacity: 256, rateOverDistance: 35, simulationSpace: "world", velocity: P(), inheritVelocity: 0.25, lifetimeMs: 1600, size: 0.08, color: 0x5be7ff, blending: "additive", drag: 1, trails: { segments: 20, intervalMs: 25, width: 0.07, persistMs: 650, widthOverTrail: [{ time: 0, value: 1 }, { time: 1, value: 0 }], colorOverTrail: [{ time: 0, value: 0xffffff }, { time: 1, value: 0x6941ff }] } } },
+    ] } },
+    { id: "shards", category: "NATURE", color: "#86dfff", name: "Crystal impact", description: "光を受ける立体の結晶。三軸の回転と異なる縦横比で、動く障害物に当たりながら跳ねる。", definition: { emitters: [
+        { id: "main", options: { capacity: 128, rate: 18, sizeAxes: { x: [0.6, 1.3], y: [1, 2], z: [0.6, 1.2] }, rotation3D: { x: [0, 6.28], y: [0, 6.28], z: [0, 6.28] }, angularVelocity3D: { x: [-2, 2], y: [-3, 3] }, lighting: { ambient: 0.25, intensity: 1.6, direction: P(2, 3, 4) }, startColors: [0x86dfff, 0xb9a8ff, 0x6dffcf], position: P(0, 1.6), simulationSpace: "world", shape: { kind: "circle", radius: 0.7 }, velocity: P(0.35, -0.5), acceleration: P(0, -4), lifetimeMs: 3500, size: [0.12, 0.24], angularVelocity: [1, 4], color: 0x86dfff, renderer: { kind: "mesh", positions: shard }, collision: { colliders: [{ kind: "plane", normal: P(0, 1), offset: -1.5 }, { kind: "sphere", center: P(-0.5, -0.65), radius: 0.45 }, { kind: "box", min: P(0.4, -1.5, -0.4), max: P(1.1, -0.8, 0.4) }], bounce: 0.65, friction: 0.15, radius: 0.1 }, prewarmMs: 1000 } },
+    ] } },
+    { id: "cascade", category: "FIRE", color: "#ff87c4", name: "Midnight cascade", description: "確率と個数が変わる連続バースト。花火が開き、火花の衝突から二次的な光が生まれる。", definition: { emitters: [
+        { id: "main", options: { capacity: 16, durationMs: 1800, loop: true, bursts: [{ timeMs: 0, count: [1, 2], cycles: 2, intervalMs: 550, probability: 0.85 }], position: P(0, -1.3), velocity: P(0, 3), lifetimeMs: 700, size: 0.12, color: 0xffd67d, blending: "additive", trails: { segments: 16, width: 0.035 } } },
+        { id: "bloom", options: { capacity: 512, speed: [0.7, 2], lifetimeMs: [1400, 2200], acceleration: P(0, -1.2), color: 0xff87c4, size: 0.07, blending: "additive", renderer: { kind: "stretched", velocityScale: 0.12 }, collision: { colliders: [{ kind: "plane", normal: P(0, 1), offset: -1.5 }], response: "kill" } } },
+        { id: "splash", options: { capacity: 128, shape: { kind: "cone", radius: 0, angle: 1 }, speed: [0.3, 1], lifetimeMs: 300, size: 0.06, color: 0xffffff, blending: "additive" } },
+    ], subEmitters: [{ source: "main", target: "bloom", event: "death", count: 80 }, { source: "bloom", target: "splash", event: "collision", count: 3 }] } },
+    { id: "surface", category: "MAGIC", color: "#58ffc3", name: "Prismatic forge", description: "脈動するメッシュ表面から光が生まれる。変形のサンプリングと、二層の光をまとめる描画。", definition: { emitters: [
+        { id: "main", options: { capacity: 256, rate: 90, shape: { kind: "mesh", positions: shard }, speed: [0.3, 0.8], size: 0.055, lifetimeMs: 1800, color: 0x58ffc3, blending: "additive", prewarmMs: 1000 } },
+        { id: "rim", options: { capacity: 256, rate: 60, shape: { kind: "line", start: P(-1.8, -1), end: P(1.8, -1) }, velocity: P(0, 0.8), lifetimeMs: 1400, size: 0.045, color: 0xaf96ff, blending: "additive", prewarmMs: 1000 } },
+    ] } },
+] as const satisfies readonly { id: string; name: string; category: string; color: string; description: string; definition: ParticleEffectDefinition }[];
 
 export const PRESETS = [
     { id: "solar-flare", name: "Solar flare", category: "FIRE", color: "#ff954f", description: "白熱するコアから炎と火の粉が立ち上がる、太陽のフレア。" },
@@ -23,21 +51,80 @@ export const PRESETS = [
     { id: "warp", name: "Warp speed", category: "COSMIC", color: "#9caeff", description: "星々の間を駆け抜けるワープ航行。奥から光の線が迫る。" },
     { id: "toxic", name: "Toxic garden", category: "NATURE", color: "#c1ff6c", description: "ライム色の胞子と霧があふれ出す、幻想的な毒の庭。" },
     { id: "matrix", name: "Digital rain", category: "ENERGY", color: "#6bffb3", description: "光る文字が縦に流れ落ちるデジタルの雨。スプライトシートを使用。" },
+    ...NATIVE_PRESETS.map(preset => ({ id: preset.id, name: preset.name, category: preset.category, color: preset.color, description: preset.description, native: true as const })),
 ] as const;
 export type PresetId = typeof PRESETS[number]["id"];
 export interface Effect {
     readonly scene: THREE.Scene;
     readonly camera: THREE.PerspectiveCamera;
-    readonly emitters: readonly ParticleEmitter[];
+    readonly emitters: readonly Pick<ParticleEmitter, "inspect">[];
+    readonly drawSavings?: number;
     advance(deltaMs: number, emitting: boolean): void;
+    prepareRender?(renderer: THREE.WebGLRenderer): void;
     burst(): void;
     dispose(): void;
 }
 const flat = [{ time: 0, value: 1 }, { time: 1, value: 1 }];
 const fadeInOut = [{ time: 0, value: 0 }, { time: 0.15, value: 1 }, { time: 1, value: 0 }];
-const P = (x = 0, y = 0, z = 0) => ({ x, y, z });
+
+function createNativeEffect(preset: typeof NATIVE_PRESETS[number], textures: Record<TextureName, THREE.DataTexture>): Effect {
+    const scene = new THREE.Scene();
+    const camera = new THREE.PerspectiveCamera(45, 1, 0.1, 100);
+    camera.position.set(0, 1.8, 7.5); camera.lookAt(0, 0, 0);
+    let time = 0;
+    const runtime: Record<string, ParticleRuntimeOptions> = {};
+    let depthTarget: THREE.WebGLRenderTarget | undefined, opaqueScene: THREE.Scene | undefined, floor: THREE.Mesh<THREE.PlaneGeometry, THREE.MeshBasicMaterial> | undefined;
+    if (preset.id === "turbulence") {
+        depthTarget = new THREE.WebGLRenderTarget(256, 256); depthTarget.depthTexture = new THREE.DepthTexture(256, 256);
+        runtime.main = { softParticles: { depthTexture: depthTarget.depthTexture, camera, width: 256, height: 256, fadeDistance: 0.3 } };
+        opaqueScene = new THREE.Scene();
+        floor = new THREE.Mesh(new THREE.PlaneGeometry(4.2, 3.2), new THREE.MeshBasicMaterial({ color: 0x101626 }));
+        floor.rotation.x = -Math.PI / 2; floor.position.y = -1.4;
+        opaqueScene.add(floor); scene.add(floor.clone());
+    }
+    if (preset.id === "comet") runtime.main = { trailTexture: textures.streak };
+    if (preset.id === "surface") runtime.main = { meshPositions: () => shard.map((v, i) => i % 3 === 1 ? v * (1.25 + Math.sin(time / 500) * 0.35) : v * (1.1 + Math.cos(time / 650) * 0.25)) };
+    const system = createParticleSystem(scene, { camera, cull: true, maxParticles: 2048, runtime });
+    const effect = system.createEffect(defineParticleEffect(preset.definition));
+    let state = effect.inspect();
+    const viewport = new THREE.Vector4(), scissor = new THREE.Vector4();
+
+    const emitters = state.emitters.map((_, index) => ({ inspect: () => state.emitters[index]!.state }));
+    function advance(deltaMs: number, emitting: boolean): void {
+        time += deltaMs;
+        effect.setEmitting(emitting);
+        if (preset.id === "comet") effect.setTransform(P(Math.sin(time / 900) * 1.6, Math.cos(time / 650) * 0.8, Math.sin(time / 1200) * 0.5));
+        if (deltaMs > 0 && preset.id === "orbital-current") effect.setForceFields("main", [
+            { kind: "vortex", position: P(Math.sin(time / 1200) * 0.4), axis: P(0, 1), strength: 3, radius: 4 },
+            { kind: "attractor", position: P(0, Math.sin(time / 800) * 0.4), strength: 1.7, radius: 4 },
+        ]);
+        if (deltaMs > 0 && preset.id === "shards") effect.setCollision("main", { colliders: [
+            { kind: "plane", normal: P(0, 1), offset: -1.5 }, { kind: "sphere", center: P(Math.sin(time / 900) * 0.65, -0.65), radius: 0.5 },
+        ], bounce: 0.7, friction: 0.15, radius: 0.1 });
+        system.present(time);
+        state = effect.inspect();
+    }
+    advance(0, true);
+    for (let i = 0; i < 36; i++) advance(40, true);
+    return {
+        scene, camera, emitters, advance, drawSavings: state.drawSavings,
+        prepareRender(renderer) {
+            if (!depthTarget || !opaqueScene) return;
+            const target = renderer.getRenderTarget(), scissorTest = renderer.getScissorTest();
+            renderer.getViewport(viewport); renderer.getScissor(scissor);
+            const pixelRatio = renderer.getPixelRatio();
+            effect.setDepthSource("main", depthTarget.depthTexture!, viewport.z * pixelRatio, viewport.w * pixelRatio, { x: viewport.x * pixelRatio, y: viewport.y * pixelRatio });
+            renderer.setRenderTarget(depthTarget); renderer.setScissorTest(false); renderer.setViewport(0, 0, 256, 256); renderer.clear(); renderer.render(opaqueScene, camera);
+            renderer.setRenderTarget(target); renderer.setViewport(viewport); renderer.setScissor(scissor); renderer.setScissorTest(scissorTest);
+        },
+        burst() { effect.emit("main", preset.id === "cascade" ? 1 : 16); state = effect.inspect(); },
+        dispose() { system.dispose(); state = effect.inspect(); scene.clear(); depthTarget?.dispose(); floor?.geometry.dispose(); floor?.material.dispose(); opaqueScene?.clear(); },
+    };
+}
 
 export function createEffect(id: PresetId, textures: Record<TextureName, THREE.DataTexture>): Effect {
+    const native = NATIVE_PRESETS.find(preset => preset.id === id);
+    if (native) return createNativeEffect(native, textures);
     const scene = new THREE.Scene();
     const camera = new THREE.PerspectiveCamera(42, 1, 0.1, 80);
     camera.position.set(0, 0.5, 7.2); camera.lookAt(0, 0.3, 0);
@@ -116,7 +203,7 @@ export function createEffect(id: PresetId, textures: Record<TextureName, THREE.D
             for (const color of [0xff80b7, 0xffcde6]) layer({ rate: 30, position: P(0, 2.4), shape: { kind: "box", halfExtents: P(2.7, 0.3, 1) }, speed: 0, acceleration: P(0.16, -0.65), lifetimeMs: [2500, 4000], size: [0.12, 0.24], angle: [0, 6.28], angularVelocity: [-2, 2], color, blending: "normal" }, "petal"); break;
         case "aurora":
             for (const [j, color] of [0x38ffd0, 0x44a9ff, 0x985aff].entries()) {
-                const e = layer({ capacity: 180, lifetimeMs: 1e6, size: 0.8, color, opacityOverLife: [{ time: 0, value: 0.3 }, { time: 1, value: 0.3 }] }, "streak");
+                const e = layer({ capacity: 180, renderer: { kind: "vertical" }, lifetimeMs: 1e6, size: 0.8, color, opacityOverLife: [{ time: 0, value: 0.3 }, { time: 1, value: 0.3 }] }, "streak");
                 // Tall vertical sprites trace a wavy curtain, animated by the parent.
                 for (let i = 0; i < 160; i++) { const x = (i / 159 - 0.5) * 4.8; e.emit(1, { position: P(x, Math.sin(x * 1.6 + j * 0.8) * 0.65 + j * 0.28, j * -0.15), size: 1.4 + Math.sin(i * 0.05) * 0.6 }); }
             }
@@ -177,7 +264,7 @@ export function createEffect(id: PresetId, textures: Record<TextureName, THREE.D
             layer({ rate: 65, position: P(0, -1.2), shape: { kind: "cone", radius: 0.8, angle: 0.35 }, speed: [0.3, 1.2], lifetimeMs: 2500, size: [0.1, 0.22], color: 0xc4ff40 }, "ripple");
             layer({ rate: 40, position: P(0, -1.1), shape: { kind: "sphere", radius: 0.65 }, acceleration: P(0, 0.3), lifetimeMs: 3000, size: [0.5, 1], color: 0x4a8e21, sizeOverLife: [{ time: 0, value: 0.2 }, { time: 1, value: 2 }] }, "smoke"); break;
         case "matrix":
-            layer({ rate: 120, position: P(0, 2.9), rotation: P(0, 0, Math.PI), shape: { kind: "cone", radius: 2, angle: 0 }, speed: [1.2, 2.5], lifetimeMs: 2600, size: [0.16, 0.23], color: 0x65ffac, spriteSheet: { columns: 4, rows: 4, cycles: 3 } }, "glyph"); break;
+            layer({ rate: 120, position: P(0, 2.9), rotation: P(0, 0, Math.PI), shape: { kind: "cone", radius: 2, angle: 0 }, speed: [1.2, 2.5], lifetimeMs: 2600, size: [0.16, 0.23], color: 0x65ffac, spriteSheet: { columns: 4, rows: 4, fps: 10, startFrame: [0, 15], row: "random", blend: true } }, "glyph"); break;
     }
     function advance(deltaMs: number, emitting: boolean): void {
         recording = false;
