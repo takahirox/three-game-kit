@@ -124,8 +124,8 @@ test("native modules render trails, mesh particles and event cascades with bound
     await page.getByRole("button", { name: "Burst", exact: true }).click();
     await page.getByRole("button", { name: "Restart", exact: true }).click();
     await page.getByRole("button", { name: "Play", exact: true }).click();
-    await page.getByLabel("Speed", { exact: true }).selectOption("2");
-    await page.getByLabel("Density", { exact: true }).selectOption("0.5");
+    await page.getByRole("combobox", { name: "Speed", exact: true }).selectOption("2");
+    await page.getByRole("combobox", { name: "Density", exact: true }).selectOption("0.5");
     await page.evaluate(() => { const api = (window as any).__particleModules; for (let t = 2016; t <= 7000; t += 80) api.present(t); });
     const later = await page.evaluate(() => (window as any).__particleModules.inspect());
     expect(later.geometries).toBe(initial.geometries); expect(later.programs).toBe(initial.programs);
