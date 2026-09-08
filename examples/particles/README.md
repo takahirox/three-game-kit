@@ -48,11 +48,13 @@ limits, ownership, overload policy, and simulation-space semantics.
 
 ## Native module effects
 
-The same atlas includes turbulent fire, a vortex with trails, a distance-emitting
-comet, colliding mesh shards, a chained firework, and mesh/line emission with shared
-draws. Their current versions exercise curved emission, random bursts, dynamic
-fields/colliders, persistent textured ribbons, 3D rotation and Lambert lighting,
-soft depth intersections and deforming surface sampling. Digital rain uses
+The same atlas includes turbulent fire, orbital motion with trails, a distance-emitting
+comet, colliding mesh shards, a chained firework, and masked mesh/box-edge emission with shared
+draws. Their current versions exercise Hermite/Bezier curves, non-repeating random bursts,
+arc sweeps, orbital/radial velocity, live velocity inheritance, recorded inputs,
+axis lifetime/speed curves, collision lifetime loss, inherited child appearance,
+octave noise and PBR scene lights/shadows,
+soft depth intersections and deforming surface sampling with an image mask. Digital rain uses
 random atlas rows/start frames, explicit FPS and frame blending; Aurora veil
 uses vertical billboards. All six use the existing gallery cards, focus view and playback controls;
 there is no separate demo page. They are created only when visible, and reuse the

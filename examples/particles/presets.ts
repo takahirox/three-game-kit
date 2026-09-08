@@ -6,27 +6,27 @@ const P = (x = 0, y = 0, z = 0) => ({ x, y, z });
 const fade = [{ time: 0, value: 1 }, { time: 0.75, value: 0.7 }, { time: 1, value: 0 }];
 const shard = [0, 0.7, 0, -0.25, -0.3, 0.25, 0.25, -0.3, 0.25, 0, 0.7, 0, 0.25, -0.3, 0.25, 0, -0.3, -0.3, 0, 0.7, 0, 0, -0.3, -0.3, -0.25, -0.3, 0.25];
 const NATIVE_PRESETS = [
-    { id: "turbulence", category: "FIRE", color: "#ff954f", name: "Ember turbulence", description: "滑らかな放出カーブで炎が呼吸する。床との境界は深度で淡く溶け、火の粉は速度で伸びる。", definition: { emitters: [
-        { id: "main", options: { capacity: 512, rate: 100, rateOverTime: [{ time: 0, value: 0.5, interpolation: "smooth" }, { time: 0.5, value: 1.4, interpolation: "smooth" }, { time: 1, value: 0.5 }], sizeOverLife: { min: [{ time: 0, value: 0.4 }, { time: 1, value: 1 }], max: [{ time: 0, value: 0.8 }, { time: 1, value: 1.8 }] }, durationMs: 2000, loop: true, prewarmMs: 1200, position: P(0, -1.4), shape: { kind: "circle", radius: 0.35 }, velocity: P(0, 1.2), lifetimeMs: [900, 1800], size: [0.18, 0.42], blending: "additive", noise: { strength: 2.5, frequency: 2, scrollSpeed: 1 }, forceOverLife: { y: [{ time: 0, value: 0.3 }, { time: 1, value: 2 }] }, colorOverLife: [{ time: 0, value: 0xffe0a0 }, { time: 0.3, value: 0xff7d20 }, { time: 1, value: 0xa01924 }], opacityOverLife: fade } },
+    { id: "turbulence", category: "FIRE", color: "#ff954f", name: "Ember turbulence", description: "接線付きカーブと三層のノイズで炎が呼吸する。揺らぎが大きさと回転にも伝わり、床との境界は淡く溶ける。", definition: { emitters: [
+        { id: "main", options: { capacity: 512, rate: 100, rateOverTime: [{ time: 0, value: 0.5, interpolation: "hermite", outTangent: 0 }, { time: 0.5, value: 1.4, interpolation: "hermite", inTangent: 0, outTangent: 0 }, { time: 1, value: 0.5, inTangent: 0 }], sizeOverLife: { min: [{ time: 0, value: 0.4 }, { time: 1, value: 1 }], max: [{ time: 0, value: 0.8 }, { time: 1, value: 1.8 }] }, durationMs: 2000, loop: true, prewarmMs: 1200, position: P(0, -1.4), shape: { kind: "circle", radius: 0.35 }, velocity: P(0, 1.2), lifetimeMs: [900, 1800], size: [0.18, 0.42], blending: "additive", noise: { strength: 2.5, frequency: 2, scrollSpeed: 1, octaves: 3, strengthAxes: P(1, 0.3, 1), rotationAmount: 0.15, sizeAmount: 0.12 }, forceOverLife: { y: [{ time: 0, value: 0.3 }, { time: 1, value: 2 }] }, colorOverLife: [{ time: 0, value: 0xffe0a0 }, { time: 0.3, value: 0xff7d20 }, { time: 1, value: 0xa01924 }], opacityOverLife: fade } },
         { id: "sparks", options: { capacity: 128, rate: 24, position: P(0, -1.3), shape: { kind: "cone", radius: 0.3, angle: 0.4 }, speed: [2, 4], lifetimeMs: 1600, size: 0.045, color: 0xffc469, blending: "additive", renderer: { kind: "stretched", velocityScale: 0.12 } } },
     ] } },
-    { id: "orbital-current", category: "ENERGY", color: "#a37bff", name: "Orbital current", description: "動く渦と吸引力が光を編む。速度に応じた色の変化と、先細りの軌跡。", definition: { emitters: [
-        { id: "main", options: { capacity: 128, rate: 24, renderer: { kind: "horizontal" }, limitVelocity: 4, colorBySpeed: { range: [0, 3], curve: [{ time: 0, value: 0x8765ff }, { time: 1, value: 0xffffff }] }, shape: { kind: "ring", radius: 1.7 }, velocity: P(0, 0.15), lifetimeMs: 4000, size: 0.08, color: 0xa37bff, blending: "additive", forceFields: [{ kind: "vortex", position: P(), axis: P(0, 1), strength: 3, radius: 4 }, { kind: "attractor", position: P(), strength: 1.7, radius: 4 }], trails: { segments: 20, intervalMs: 30, width: 0.06, widthOverTrail: [{ time: 0, value: 1 }, { time: 1, value: 0 }] }, prewarmMs: 1000 } },
+    { id: "orbital-current", category: "ENERGY", color: "#a37bff", name: "Orbital current", description: "往復する円弧から光が生まれ、軌道速度と半径方向の移動で螺旋を編む。速度に応じて色が変わる。", definition: { emitters: [
+        { id: "main", options: { capacity: 128, rate: 24, renderer: { kind: "horizontal" }, limitVelocity: 4, colorBySpeed: { range: [0, 3], curve: [{ time: 0, value: 0x8765ff }, { time: 1, value: 0xffffff }] }, orbitalVelocity: { y: [{ time: 0, value: 1.8 }, { time: 1, value: 0.6 }] }, radialVelocity: [{ time: 0, value: -0.1 }, { time: 1, value: -0.35 }], shape: { kind: "ring", radius: 1.7, arc: { angle: Math.PI * 1.5, mode: "pingPong", speed: 2 } }, velocity: P(0, 0.15), lifetimeMs: 4000, size: 0.08, color: 0xa37bff, blending: "additive", trails: { segments: 20, intervalMs: 30, width: 0.06, widthOverTrail: [{ time: 0, value: 1 }, { time: 1, value: 0 }] }, prewarmMs: 1000 } },
     ] } },
-    { id: "comet", category: "COSMIC", color: "#5be7ff", name: "Ribbon flight", description: "移動距離に応じて描かれるリボン。色と幅が尾に沿って変わり、粒子が消えた後にも残光が続く。", definition: { emitters: [
-        { id: "main", options: { capacity: 256, rateOverDistance: 35, simulationSpace: "world", velocity: P(), inheritVelocity: 0.25, lifetimeMs: 1600, size: 0.08, color: 0x5be7ff, blending: "additive", drag: 1, trails: { segments: 20, intervalMs: 25, width: 0.07, persistMs: 650, widthOverTrail: [{ time: 0, value: 1 }, { time: 1, value: 0 }], colorOverTrail: [{ time: 0, value: 0xffffff }, { time: 1, value: 0x6941ff }] } } },
+    { id: "comet", category: "COSMIC", color: "#5be7ff", name: "Ribbon flight", description: "生きている粒子も発生源の速度を受け継ぐリボン。動きと手動バーストを記録し、残光が続く。", definition: { emitters: [
+        { id: "main", options: { capacity: 256, rateOverDistance: 35, simulationSpace: "world", velocity: P(), inheritVelocity: 0.25, inheritVelocityMode: "current", inheritVelocityOverLife: [{ time: 0, value: 1 }, { time: 1, value: 0.2 }], recording: { maxCommands: 4000 }, lifetimeMs: 1600, size: 0.08, color: 0x5be7ff, blending: "additive", drag: 1, trails: { segments: 20, intervalMs: 25, width: 0.07, persistMs: 650, widthOverTrail: [{ time: 0, value: 1 }, { time: 1, value: 0 }], colorOverTrail: [{ time: 0, value: 0xffffff }, { time: 1, value: 0x6941ff }] } } },
     ] } },
-    { id: "shards", category: "NATURE", color: "#86dfff", name: "Crystal impact", description: "光を受ける立体の結晶。三軸の回転と異なる縦横比で、動く障害物に当たりながら跳ねる。", definition: { emitters: [
-        { id: "main", options: { capacity: 128, rate: 18, sizeAxes: { x: [0.6, 1.3], y: [1, 2], z: [0.6, 1.2] }, rotation3D: { x: [0, 6.28], y: [0, 6.28], z: [0, 6.28] }, angularVelocity3D: { x: [-2, 2], y: [-3, 3] }, lighting: { ambient: 0.25, intensity: 1.6, direction: P(2, 3, 4) }, startColors: [0x86dfff, 0xb9a8ff, 0x6dffcf], position: P(0, 1.6), simulationSpace: "world", shape: { kind: "circle", radius: 0.7 }, velocity: P(0.35, -0.5), acceleration: P(0, -4), lifetimeMs: 3500, size: [0.12, 0.24], angularVelocity: [1, 4], color: 0x86dfff, renderer: { kind: "mesh", positions: shard }, collision: { colliders: [{ kind: "plane", normal: P(0, 1), offset: -1.5 }, { kind: "sphere", center: P(-0.5, -0.65), radius: 0.45 }, { kind: "box", min: P(0.4, -1.5, -0.4), max: P(1.1, -0.8, 0.4) }], bounce: 0.65, friction: 0.15, radius: 0.1 }, prewarmMs: 1000 } },
+    { id: "shards", category: "NATURE", color: "#86dfff", name: "Crystal impact", description: "シーンの照明と影を受けるPBRの結晶。軸別の大きさ・回転カーブを持ち、衝突のたびに寿命が短くなる。", definition: { emitters: [
+        { id: "main", options: { capacity: 128, rate: 18, castShadow: true, receiveShadow: true, sizeAxesOverLife: { y: [{ time: 0, value: 0.5, interpolation: "bezier", outControl: 1.8 }, { time: 1, value: 0.4, inControl: 1.1 }] }, angularVelocityAxesBySpeed: { range: [0, 5], curves: { x: [{ time: 0, value: 0.2 }, { time: 1, value: 2 }] } }, sizeAxes: { x: [0.6, 1.3], y: [1, 2], z: [0.6, 1.2] }, rotation3D: { x: [0, 6.28], y: [0, 6.28], z: [0, 6.28] }, angularVelocity3D: { x: [-2, 2], y: [-3, 3] }, lighting: { ambient: 0.25, intensity: 1.6, direction: P(2, 3, 4) }, startColors: [0x86dfff, 0xb9a8ff, 0x6dffcf], position: P(0, 1.6), simulationSpace: "world", shape: { kind: "circle", radius: 0.7 }, velocity: P(0.35, -0.5), acceleration: P(0, -4), lifetimeMs: 3500, size: [0.12, 0.24], angularVelocity: [1, 4], color: 0x86dfff, renderer: { kind: "mesh", positions: shard }, collision: { colliders: [{ kind: "plane", normal: P(0, 1), offset: -1.5 }, { kind: "sphere", center: P(-0.5, -0.65), radius: 0.45 }, { kind: "box", min: P(0.4, -1.5, -0.4), max: P(1.1, -0.8, 0.4) }], bounce: 0.65, friction: 0.15, radius: 0.1 }, prewarmMs: 1000 } },
     ] } },
-    { id: "cascade", category: "FIRE", color: "#ff87c4", name: "Midnight cascade", description: "確率と個数が変わる連続バースト。花火が開き、火花の衝突から二次的な光が生まれる。", definition: { emitters: [
+    { id: "cascade", category: "FIRE", color: "#ff87c4", name: "Midnight cascade", description: "確率と個数が変わる連続バースト。衝突した火花の色と大きさを子粒子が受け継ぎ、二次的な光が生まれる。", definition: { emitters: [
         { id: "main", options: { capacity: 16, durationMs: 1800, loop: true, bursts: [{ timeMs: 0, count: [1, 2], cycles: 2, intervalMs: 550, probability: 0.85 }], position: P(0, -1.3), velocity: P(0, 3), lifetimeMs: 700, size: 0.12, color: 0xffd67d, blending: "additive", trails: { segments: 16, width: 0.035 } } },
         { id: "bloom", options: { capacity: 512, speed: [0.7, 2], lifetimeMs: [1400, 2200], acceleration: P(0, -1.2), color: 0xff87c4, size: 0.07, blending: "additive", renderer: { kind: "stretched", velocityScale: 0.12 }, collision: { colliders: [{ kind: "plane", normal: P(0, 1), offset: -1.5 }], response: "kill" } } },
         { id: "splash", options: { capacity: 128, shape: { kind: "cone", radius: 0, angle: 1 }, speed: [0.3, 1], lifetimeMs: 300, size: 0.06, color: 0xffffff, blending: "additive" } },
-    ], subEmitters: [{ source: "main", target: "bloom", event: "death", count: 80 }, { source: "bloom", target: "splash", event: "collision", count: 3 }] } },
-    { id: "surface", category: "MAGIC", color: "#58ffc3", name: "Prismatic forge", description: "脈動するメッシュ表面から光が生まれる。変形のサンプリングと、二層の光をまとめる描画。", definition: { emitters: [
+    ], subEmitters: [{ source: "main", target: "bloom", event: "death", count: 80 }, { source: "bloom", target: "splash", event: "collision", count: 3, probability: 0.7, inheritColor: true, inheritSize: true }] } },
+    { id: "surface", category: "MAGIC", color: "#58ffc3", name: "Prismatic forge", description: "画像の明るい部分をマスクに、変形する結晶から光が生まれる。箱の辺をなぞる光と二層で描く。", definition: { emitters: [
         { id: "main", options: { capacity: 256, rate: 90, shape: { kind: "mesh", positions: shard }, speed: [0.3, 0.8], size: 0.055, lifetimeMs: 1800, color: 0x58ffc3, blending: "additive", prewarmMs: 1000 } },
-        { id: "rim", options: { capacity: 256, rate: 60, shape: { kind: "line", start: P(-1.8, -1), end: P(1.8, -1) }, velocity: P(0, 0.8), lifetimeMs: 1400, size: 0.045, color: 0xaf96ff, blending: "additive", prewarmMs: 1000 } },
+        { id: "rim", options: { capacity: 256, rate: 60, shape: { kind: "box", halfExtents: P(1.4, 0.6, 0.5), emitFrom: "edge" }, velocity: P(0, 0.8), lifetimeMs: 1400, size: 0.045, color: 0xaf96ff, blending: "additive", prewarmMs: 1000 } },
     ] } },
 ] as const satisfies readonly { id: string; name: string; category: string; color: string; description: string; definition: ParticleEffectDefinition }[];
 
@@ -82,10 +82,23 @@ function createNativeEffect(preset: typeof NATIVE_PRESETS[number], textures: Rec
         floor.rotation.x = -Math.PI / 2; floor.position.y = -1.4;
         opaqueScene.add(floor); scene.add(floor.clone());
     }
+    let standard: THREE.MeshStandardMaterial | undefined, sun: THREE.DirectionalLight | undefined, receiver: THREE.Mesh<THREE.PlaneGeometry, THREE.MeshStandardMaterial> | undefined;
+    if (preset.id === "shards") {
+        standard = new THREE.MeshStandardMaterial({ roughness: 0.28, metalness: 0.55 }); runtime.main = { material: standard };
+        scene.add(new THREE.HemisphereLight(0xa5dfff, 0x3b174b, 2.5)); sun = new THREE.DirectionalLight(0xffffff, 4); sun.position.set(2, 4, 3); sun.castShadow = true;
+        sun.shadow.mapSize.set(256, 256); sun.shadow.camera.left = -3; sun.shadow.camera.right = 3; sun.shadow.camera.top = 3; sun.shadow.camera.bottom = -3; sun.shadow.bias = -0.001; scene.add(sun);
+        receiver = new THREE.Mesh(new THREE.PlaneGeometry(4.5, 3.5), new THREE.MeshStandardMaterial({ color: 0x101a2a, roughness: 1 })); receiver.rotation.x = -Math.PI / 2; receiver.position.y = -1.5; receiver.receiveShadow = true; scene.add(receiver);
+    }
     if (preset.id === "comet") runtime.main = { trailTexture: textures.streak };
     if (preset.id === "surface") runtime.main = { meshPositions: () => shard.map((v, i) => i % 3 === 1 ? v * (1.25 + Math.sin(time / 500) * 0.35) : v * (1.1 + Math.cos(time / 650) * 0.25)) };
     const system = createParticleSystem(scene, { camera, cull: true, maxParticles: 2048, runtime });
-    const effect = system.createEffect(defineParticleEffect(preset.definition));
+    let definition: ParticleEffectDefinition = preset.definition;
+    if (preset.id === "surface") {
+        const image = textures.star.image;
+        const values = Array.from({ length: image.width * image.height }, (_, i) => image.data![i * 4 + 3]! / 255);
+        definition = { ...preset.definition, emitters: preset.definition.emitters.map(e => e.id !== "main" ? e : { ...e, options: { ...e.options, shape: { kind: "mesh", positions: shard, uvs: shard.flatMap((_, i) => i % 3 ? [] : [(shard[i]! + 0.25) / 0.5, shard[i + 1]! + 0.3]), mask: { width: image.width, height: image.height, values, threshold: 0.2, channel: "clip" } } } }) };
+    }
+    const effect = system.createEffect(defineParticleEffect(definition));
     let state = effect.inspect();
     const viewport = new THREE.Vector4(), scissor = new THREE.Vector4();
 
@@ -94,13 +107,9 @@ function createNativeEffect(preset: typeof NATIVE_PRESETS[number], textures: Rec
         time += deltaMs;
         effect.setEmitting(emitting);
         if (preset.id === "comet") effect.setTransform(P(Math.sin(time / 900) * 1.6, Math.cos(time / 650) * 0.8, Math.sin(time / 1200) * 0.5));
-        if (deltaMs > 0 && preset.id === "orbital-current") effect.setForceFields("main", [
-            { kind: "vortex", position: P(Math.sin(time / 1200) * 0.4), axis: P(0, 1), strength: 3, radius: 4 },
-            { kind: "attractor", position: P(0, Math.sin(time / 800) * 0.4), strength: 1.7, radius: 4 },
-        ]);
         if (deltaMs > 0 && preset.id === "shards") effect.setCollision("main", { colliders: [
             { kind: "plane", normal: P(0, 1), offset: -1.5 }, { kind: "sphere", center: P(Math.sin(time / 900) * 0.65, -0.65), radius: 0.5 },
-        ], bounce: 0.7, friction: 0.15, radius: 0.1 });
+        ], bounce: 0.7, friction: 0.15, radius: 0.1, lifetimeLoss: 0.12 });
         system.present(time);
         state = effect.inspect();
     }
@@ -109,6 +118,7 @@ function createNativeEffect(preset: typeof NATIVE_PRESETS[number], textures: Rec
     return {
         scene, camera, emitters, advance, drawSavings: state.drawSavings,
         prepareRender(renderer) {
+            renderer.shadowMap.enabled = !!sun;
             if (!depthTarget || !opaqueScene) return;
             const target = renderer.getRenderTarget(), scissorTest = renderer.getScissorTest();
             renderer.getViewport(viewport); renderer.getScissor(scissor);
@@ -118,7 +128,7 @@ function createNativeEffect(preset: typeof NATIVE_PRESETS[number], textures: Rec
             renderer.setRenderTarget(target); renderer.setViewport(viewport); renderer.setScissor(scissor); renderer.setScissorTest(scissorTest);
         },
         burst() { effect.emit("main", preset.id === "cascade" ? 1 : 16); state = effect.inspect(); },
-        dispose() { system.dispose(); state = effect.inspect(); scene.clear(); depthTarget?.dispose(); floor?.geometry.dispose(); floor?.material.dispose(); opaqueScene?.clear(); },
+        dispose() { system.dispose(); state = effect.inspect(); scene.clear(); depthTarget?.dispose(); floor?.geometry.dispose(); floor?.material.dispose(); opaqueScene?.clear(); standard?.dispose(); receiver?.geometry.dispose(); receiver?.material.dispose(); sun?.shadow.map?.depthTexture?.dispose(); sun?.shadow.dispose(); },
     };
 }
 

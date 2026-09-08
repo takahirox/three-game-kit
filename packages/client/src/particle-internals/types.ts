@@ -5,13 +5,18 @@ export interface ParticleCamera { readonly isCamera: boolean }
 /** Borrowed Three.js texture; the emitter never disposes it. */
 export interface ParticleTexture { readonly isTexture: true }
 export type ParticleRange = number | readonly [number, number];
-export interface ParticleKeyframe { readonly time: number; readonly value: number; readonly interpolation?: "linear" | "smooth" }
+export interface ParticleKeyframe { readonly time: number; readonly value: number; readonly interpolation?: "linear" | "smooth" | "hermite" | "bezier"; readonly inTangent?: number; readonly outTangent?: number; readonly inControl?: number; readonly outControl?: number }
 export type ParticleCurve = readonly ParticleKeyframe[];
 /** A stable, seeded blend between two curves, chosen once per particle. */
 export type ParticleCurveRange = ParticleCurve | { readonly min: ParticleCurve; readonly max: ParticleCurve };
 export interface ParticleVectorRange { readonly x?: ParticleRange; readonly y?: ParticleRange; readonly z?: ParticleRange }
 export interface ParticleSpeedCurve { readonly range: readonly [number, number]; readonly curve: ParticleCurveRange }
-export interface ParticleMaterial { readonly isShaderMaterial: true }
+export type ParticleMaterial = { readonly isShaderMaterial: true } | { readonly isMeshStandardMaterial: boolean };
+export interface ParticleVectorSpeedCurve { readonly range: readonly [number, number]; readonly curves: ParticleVectorCurve }
+export interface ParticleEmissionMask { readonly width: number; readonly height: number; readonly values: readonly number[]; readonly threshold?: number; readonly channel?: "probability" | "clip" }
+export interface ParticleArc { readonly angle: number; readonly mode?: "random" | "loop" | "pingPong"; readonly speed?: number; readonly offset?: number }
+export interface ParticleNoise { readonly strength: number; readonly frequency?: number; readonly scrollSpeed?: number; readonly octaves?: number; readonly octaveMultiplier?: number; readonly octaveScale?: number; readonly strengthAxes?: ParticleVector3; readonly remap?: ParticleCurve; readonly positionAmount?: number; readonly rotationAmount?: number; readonly sizeAmount?: number }
+export interface ParticleTrigger { readonly id: string; readonly volume: ParticleCollider }
 export interface ParticleUpdateContext {
     readonly particleId: number;
     readonly ageMs: number;
@@ -28,7 +33,7 @@ export interface ParticleRuntimeOptions {
     readonly update?: (particle: ParticleUpdateContext) => void;
     /** Supply current mesh vertices, including skinned vertices, before an emission batch. */
     readonly meshPositions?: () => readonly number[];
-    /** Borrowed ShaderMaterial implementing the documented particle attribute contract. */
+    /** Borrowed ShaderMaterial, or MeshStandardMaterial adapted for scene lighting and shadows. */
     readonly material?: ParticleMaterial;
     readonly trailTexture?: ParticleTexture;
     /** Depth from an opaque-only pass in the same camera and viewport; never the active render target. */
@@ -37,28 +42,30 @@ export interface ParticleRuntimeOptions {
 }
 export type ParticleShape =
     | { readonly kind: "point" }
-    | { readonly kind: "sphere"; readonly radius: number; readonly surface?: boolean }
-    | { readonly kind: "box"; readonly halfExtents: ParticleVector3 }
-    | { readonly kind: "cone"; readonly radius: number; readonly angle: number }
-    | { readonly kind: "circle"; readonly radius: number }
-    | { readonly kind: "ring"; readonly radius: number; readonly innerRadius?: number }
+    | { readonly kind: "sphere"; readonly radius: number; readonly surface?: boolean; readonly hemisphere?: boolean }
+    | { readonly kind: "box"; readonly halfExtents: ParticleVector3; readonly emitFrom?: "volume" | "surface" | "edge" }
+    | { readonly kind: "cone"; readonly radius: number; readonly angle: number; readonly arc?: ParticleArc }
+    | { readonly kind: "circle"; readonly radius: number; readonly arc?: ParticleArc; readonly mask?: ParticleEmissionMask }
+    | { readonly kind: "ring"; readonly radius: number; readonly innerRadius?: number; readonly arc?: ParticleArc; readonly mask?: ParticleEmissionMask }
     | { readonly kind: "line"; readonly start: ParticleVector3; readonly end: ParticleVector3 }
-    /** Copied triangle positions, optionally indexed. Samples uniformly by surface area. */
-    | { readonly kind: "mesh"; readonly positions: readonly number[]; readonly indices?: readonly number[] };
+    /** Copied triangle positions, optionally indexed. Surface area, unique edge length, or uniform vertices. */
+    | { readonly kind: "mesh"; readonly positions: readonly number[]; readonly indices?: readonly number[]; readonly emitFrom?: "surface" | "edge" | "vertex"; readonly uvs?: readonly number[]; readonly mask?: ParticleEmissionMask };
 export interface ParticleVectorCurve { readonly x?: ParticleCurveRange; readonly y?: ParticleCurveRange; readonly z?: ParticleCurveRange }
 export type ParticleForceField =
     | { readonly kind: "attractor"; readonly position: ParticleVector3; readonly strength: number; readonly radius: number }
     | { readonly kind: "vortex"; readonly position: ParticleVector3; readonly axis: ParticleVector3; readonly strength: number; readonly radius: number };
-export type ParticleCollider =
+export type ParticleCollider = { readonly id?: string } & (
     | { readonly kind: "plane"; readonly normal: ParticleVector3; readonly offset: number }
     | { readonly kind: "sphere"; readonly center: ParticleVector3; readonly radius: number }
-    | { readonly kind: "box"; readonly min: ParticleVector3; readonly max: ParticleVector3 };
+    | { readonly kind: "box"; readonly min: ParticleVector3; readonly max: ParticleVector3 });
 export interface ParticleCollisionOptions {
     readonly colliders: readonly ParticleCollider[];
     readonly bounce?: number;
     readonly friction?: number;
     readonly radius?: number;
     readonly response?: "bounce" | "kill";
+    /** Fraction of original lifetime removed per contact step. */
+    readonly lifetimeLoss?: number;
 }
 export interface ParticleTrailOptions {
     /** Fixed ring-buffer samples per particle (2–64). */
@@ -89,6 +96,14 @@ export interface ParticleParameters {
 export interface ParticleEvent {
     readonly kind: "birth" | "death" | "collision" | "enter" | "exit";
     readonly triggerId?: string;
+    readonly colliderId?: string;
+    readonly normal?: ParticleVector3;
+    readonly color: number;
+    readonly size: number;
+    readonly sizeAxes: ParticleVector3;
+    readonly rotation: ParticleVector3;
+    readonly lifetimeMs: number;
+    readonly remainingLifetimeMs: number;
     readonly particleId: number;
     readonly timeMs: number;
     /** Position and velocity in this emitter's simulation space. */
@@ -121,13 +136,19 @@ export interface ParticleEmitterOptions {
     /** Replaces shape-derived velocity; rotated at birth, in units/second. */
     readonly velocity?: ParticleVector3;
     readonly inheritVelocity?: number;
+    readonly inheritVelocityMode?: "initial" | "current";
+    readonly inheritVelocityOverLife?: ParticleCurveRange;
+    readonly orbitalVelocity?: ParticleVectorCurve;
+    readonly orbitalOffset?: ParticleVector3;
+    readonly radialVelocity?: ParticleCurveRange;
+    readonly speedModifier?: ParticleCurveRange;
     /** Additive velocity and force curves in simulation space. */
     readonly velocityOverLife?: ParticleVectorCurve;
     readonly forceOverLife?: ParticleVectorCurve;
-    readonly noise?: { readonly strength: number; readonly frequency?: number; readonly scrollSpeed?: number };
+    readonly noise?: ParticleNoise;
     readonly forceFields?: readonly ParticleForceField[];
     readonly collision?: ParticleCollisionOptions;
-    readonly triggers?: readonly { readonly id: string; readonly volume: ParticleCollider }[];
+    readonly triggers?: readonly ParticleTrigger[];
     readonly limitVelocity?: number;
     /** Optional numerical modules use a fixed step; excess catch-up steps are dropped. */
     readonly simulationStepMs?: number;
@@ -147,6 +168,10 @@ export interface ParticleEmitterOptions {
     readonly rotation3D?: ParticleVectorRange;
     readonly angularVelocity3D?: ParticleVectorRange;
     readonly angularVelocityOverLife?: ParticleCurveRange;
+    readonly sizeAxesOverLife?: ParticleVectorCurve;
+    readonly angularVelocityAxesOverLife?: ParticleVectorCurve;
+    readonly sizeAxesBySpeed?: ParticleVectorSpeedCurve;
+    readonly angularVelocityAxesBySpeed?: ParticleVectorSpeedCurve;
     readonly sizeBySpeed?: ParticleSpeedCurve;
     readonly colorBySpeed?: ParticleSpeedCurve;
     readonly rotationBySpeed?: ParticleSpeedCurve;
@@ -158,15 +183,20 @@ export interface ParticleEmitterOptions {
     readonly colorOverLife?: ParticleCurveRange;
     readonly blending?: "normal" | "additive";
     readonly depthTest?: boolean;
+    readonly castShadow?: boolean;
+    readonly receiveShadow?: boolean;
     readonly texture?: ParticleTexture;
     readonly lighting?: { readonly ambient?: number; readonly intensity?: number; readonly direction?: ParticleVector3; readonly color?: number };
     readonly customAttributes?: readonly { readonly name: string; readonly size: 1 | 2 | 3 | 4; readonly value?: readonly number[] }[];
     /** Functions and borrowed GPU resources are supplied separately from serializable effect definitions. */
     readonly runtime?: ParticleRuntimeOptions;
+    /** Opt-in bounded history for manual emissions, settings and parent motion. */
+    readonly recording?: { readonly maxCommands?: number; readonly maxBytes?: number };
     /** Sprite sheet cells run left-to-right, bottom-to-top over each particle's life. */
     readonly spriteSheet?: { readonly columns: number; readonly rows: number; readonly cycles?: number; readonly startFrame?: ParticleRange; readonly fps?: number; readonly row?: number | "random"; readonly blend?: boolean };
 }
 export interface ParticleEmission {
+    readonly sizeAxes?: ParticleVector3;
     readonly position?: ParticleVector3;
     readonly lifetimeMs?: ParticleRange;
     readonly speed?: ParticleRange;
@@ -174,6 +204,7 @@ export interface ParticleEmission {
     readonly size?: ParticleRange;
     readonly color?: number;
     readonly seed?: number;
+    readonly rotation3D?: ParticleVector3;
 }
 export interface ParticleInspection {
     readonly disposed: boolean;
@@ -189,6 +220,9 @@ export interface ParticleInspection {
     readonly droppedEventCount: number;
     readonly emittedParticleCount: number;
     readonly droppedParticleCount: number;
+    readonly skippedBurstCount: number;
+    readonly recordedUntilMs?: number;
+    readonly recordingFull?: boolean;
     readonly expiredParticleCount: number;
     readonly completed: boolean;
     readonly activeTrailCount: number;
@@ -209,10 +243,11 @@ export interface ParticleEmitter {
     setParameters(parameters: ParticleParameters): void;
     /** Advances simulation without changing the accepted presentation timestamp. */
     prewarm(durationMs: number): void;
-    /** Replays automatic emission from zero using current settings. Manual emissions and external scene history are not replayed. */
-    seek(timeMs: number): void;
+    /** Default: automatic emission with current inputs. Recorded mode restores a bounded input journal when recording is enabled. */
+    seek(timeMs: number, mode?: "automatic" | "recorded"): void;
     setForceFields(fields: readonly ParticleForceField[]): void;
     setCollision(collision: ParticleCollisionOptions): void;
+    setTriggers(triggers: readonly ParticleTrigger[]): void;
     setDepthSource(texture: ParticleTexture, width: number, height: number, origin?: ParticleVector2): void;
     setMeshPositions(positions: readonly number[]): void;
     drainEvents(): readonly ParticleEvent[];

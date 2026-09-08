@@ -11,22 +11,19 @@ export function createSchedule(rate: number, duration: number, delay: number, lo
         for (let n = 0; n < 48; n++) { const mid = (lo + hi) / 2; if (emittedAt(mid) < index) lo = mid; else hi = mid; }
         return hi;
     }
-    // A bounded deterministic random table enables exact arithmetic skipping, even
-    // across days of missed updates. The table repeats every 256 burst occurrences.
+    function random(index: number, occurrence: number, salt: number) {
+        let n = seed ^ Math.imul(index + 1, 0x9e3779b1) ^ Math.imul(occurrence >>> 0, 0x85ebca6b) ^ Math.imul(Math.floor(occurrence / 4294967296), 0xc2b2ae35) ^ salt;
+        n = Math.imul(n ^ (n >>> 16), 0x7feb352d); n = Math.imul(n ^ (n >>> 15), 0x846ca68b);
+        return ((n ^ (n >>> 16)) >>> 0) / 4294967296;
+    }
     const streams = [
-        ...(perCycle > 0 ? [{ rate: true, offset: 0, interval: 0, repeats: perCycle, cursor: 0, counts: [1], prefix: [0, 1] }] : []),
+        ...(perCycle > 0 ? [{ rate: true, offset: 0, interval: 0, repeats: perCycle, cursor: 0, constant: 1 as number | undefined, count: (_n: number) => 1 }] : []),
         ...bursts.filter(b => b.timeMs <= duration).map((b, index) => {
             const interval = b.intervalMs ?? 1, repeats = Math.min(b.cycles ?? 1, Math.floor((duration - b.timeMs) / interval) + 1);
-            const limits = typeof b.count === "number" ? [b.count, b.count] : b.count;
-            let state = (seed ^ Math.imul(index + 1, 0x9e3779b1)) >>> 0;
-            const random = () => { state = (Math.imul(state, 1664525) + 1013904223) >>> 0; return state / 4294967296; };
-            const counts = Array.from({ length: limits[0] === limits[1] && (b.probability ?? 1) === 1 ? 1 : 256 }, () => {
-                const accept = random() < (b.probability ?? 1);
-                const count = limits[0]! + Math.floor(random() * (limits[1]! - limits[0]! + 1));
-                return accept ? count : 0;
-            });
-            const prefix = [0]; for (const count of counts) prefix.push(prefix[prefix.length - 1]! + count);
-            return { rate: false, offset: b.timeMs, interval, repeats, cursor: 0, counts, prefix };
+            const limits = typeof b.count === "number" ? [b.count, b.count] : b.count, probability = b.probability ?? 1;
+            const constant = probability === 0 ? 0 : probability === 1 && limits[0] === limits[1] ? limits[0] : undefined;
+            return { rate: false, offset: b.timeMs, interval, repeats, cursor: 0, constant,
+                count: (n: number) => constant ?? (random(index, n, 0) < probability ? limits[0]! + Math.floor(random(index, n, 0x27d4eb2d) * (limits[1]! - limits[0]! + 1)) : 0) };
         }),
     ];
     type Stream = typeof streams[number];
@@ -41,15 +38,17 @@ export function createSchedule(rate: number, duration: number, delay: number, lo
         const cycle = Math.floor(s.cursor / s.repeats), index = s.cursor % s.repeats;
         return delay + (loop ? cycle * duration : 0) + (s.rate ? rateTime(index + 1) : s.offset + index * s.interval);
     }
-    function sum(s: Stream, n: number): number { const len = s.counts.length; return Math.floor(n / len) * s.prefix[len]! + s.prefix[n % len]!; }
-    function skipTo(s: Stream, to: number, skip: (count: number) => void) {
+    function skipTo(s: Stream, to: number, skip: (count: number, bursts?: number) => void) {
         if (to <= s.cursor) return;
-        const count = sum(s, to) - sum(s, s.cursor); s.cursor = to; if (count) skip(count);
+        // Unknown random occurrences are reported separately, never estimated as particles.
+        if (s.constant !== undefined) skip((to - s.cursor) * s.constant);
+        else skip(0, to - s.cursor);
+        s.cursor = to;
     }
     return {
-        exhausted() { return streams.every(s => s.counts.every(n => n === 0) || (!loop && s.cursor >= s.repeats)); },
+        exhausted() { return streams.every(s => s.constant === 0 || (!loop && s.cursor >= s.repeats)); },
         reset() { for (const s of streams) s.cursor = 0; },
-        advance(end: number, maxLife: number, budget: number, birth: (count: number, time: number) => void, skip: (count: number) => void) {
+        advance(end: number, maxLife: number, budget: number, birth: (count: number, time: number) => void, skip: (count: number, bursts?: number) => void) {
             for (const s of streams) skipTo(s, countAt(s, end - maxLife), skip);
             while (budget > 0) {
                 let selected: Stream | undefined, next = Infinity;
@@ -58,7 +57,7 @@ export function createSchedule(rate: number, duration: number, delay: number, lo
                     if (time < next || (time === next && !s.rate && selected?.rate)) { selected = s; next = time; }
                 }
                 if (!selected) break;
-                const count = selected.counts[selected.cursor % selected.counts.length]!;
+                const count = selected.count(selected.cursor);
                 const attempts = Math.min(budget, count);
                 if (attempts) birth(attempts, next); if (attempts < count) skip(count - attempts);
                 selected.cursor++; budget -= Math.max(1, attempts);

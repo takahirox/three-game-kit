@@ -46,7 +46,25 @@ export function checkParticleRendering() {
     const custom = createParticleEmitter(scene, { size: 1, speed: 0, simulationStepMs: 100, customAttributes: [{ name: "customHeat", size: 1 }],
         runtime: { material, update(p) { p.attributes[0] = p.ageMs / 1000; } } });
     custom.emit(1); custom.present(0); custom.present(500); const customPixel = pixel(); custom.dispose(); const borrowedDisposals = materialDisposals;
+    const pbr = new THREE.MeshStandardMaterial({ roughness: 0.6, metalness: 0.1, side: THREE.DoubleSide });
+    let pbrDisposals = 0; pbr.addEventListener("dispose", () => pbrDisposals++);
+    const sun = new THREE.DirectionalLight(0xffffff, 3); sun.position.set(2, 0, 3); scene.add(sun);
+    const standard = createParticleEmitter(scene, { size: 0.8, speed: 0, opacityOverLife: flat, runtime: { material: pbr } });
+    standard.emit(1); const standardLit = pixel(); sun.intensity = 0; const standardDark = pixel(); standard.dispose(); sun.intensity = 3;
+    pbr.map = atlas;
+    const mapped = createParticleEmitter(scene, { size: 0.8, speed: 0, opacityOverLife: flat, spriteSheet: { columns: 2, rows: 1, startFrame: 1 }, runtime: { material: pbr } });
+    mapped.emit(1); const standardBlue = pixel(); atlas.offset.x = -0.5; const standardRed = pixel(); mapped.dispose(); atlas.offset.x = 0; pbr.map = null;
+    renderer.shadowMap.enabled = true; sun.castShadow = true; sun.shadow.mapSize.set(256, 256); sun.shadow.camera.left = -2; sun.shadow.camera.right = 2; sun.shadow.camera.top = 2; sun.shadow.camera.bottom = -2; sun.shadow.bias = -0.0001;
+    const receiver = new THREE.Mesh(new THREE.PlaneGeometry(4, 4), new THREE.MeshStandardMaterial({ roughness: 1 })); receiver.position.z = -0.6; receiver.receiveShadow = true; scene.add(receiver);
+    const caster = createParticleEmitter(scene, { size: 0.6, speed: 0, opacityOverLife: flat, renderer: { kind: "mesh", positions }, rotation3D: { z: 0.2 }, castShadow: true, receiveShadow: true, runtime: { material: pbr } }); caster.emit(1);
+    const casterMesh = scene.children.find(o => o.name === "three-game-kit-particles")!;
+    function energy() { pixel(); const buffer = new Uint8Array(80 * 80 * 4); renderer.readRenderTargetPixels(target, 0, 0, 80, 80, buffer); return buffer.reduce((sum, value, i) => sum + (i % 4 < 3 ? value : 0), 0); }
+    const shadowEnergy = energy(); casterMesh.castShadow = false; const unshadowedEnergy = energy();
+    casterMesh.castShadow = true;
+    const point = new THREE.PointLight(0xffffff, 2); point.position.set(-1, 1, 2); point.castShadow = true; point.shadow.mapSize.set(128, 128); scene.add(point); pixel();
+    caster.dispose(); receiver.removeFromParent(); receiver.geometry.dispose(); receiver.material.dispose(); sun.removeFromParent(); point.removeFromParent(); sun.shadow.map?.depthTexture?.dispose(); point.shadow.map?.depthTexture?.dispose(); sun.shadow.dispose(); point.shadow.dispose();
+    const borrowedPbrDisposals = pbrDisposals; pbr.dispose();
     material.dispose(); atlas.dispose(); target.dispose(); depth.dispose(); plane.geometry.dispose(); plane.material.dispose();
     const remaining = { ...renderer.info.memory }; renderer.dispose();
-    return { faded, perspectiveFaded, solid, blended, litFront, litBack, tiltedLight, customPixel, borrowedDisposals, remaining };
+    return { standardBlue, standardRed, standardLit, standardDark, shadowEnergy, unshadowedEnergy, borrowedPbrDisposals, faded, perspectiveFaded, solid, blended, litFront, litBack, tiltedLight, customPixel, borrowedDisposals, remaining };
 }

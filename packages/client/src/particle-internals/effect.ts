@@ -1,6 +1,6 @@
 import * as THREE from "three";
 import { createParticleEmitter } from "../particles.js";
-import type { ParticleCamera, ParticleVector2, ParticleForceField, ParticleCollisionOptions, ParticleRuntimeOptions, ParticleEmission, ParticleEmitter, ParticleEmitterOptions, ParticleEvent, ParticleParameters, ParticleSceneParent, ParticleTexture, ParticleVector3 } from "./types.js";
+import type { ParticleCamera, ParticleVector2, ParticleForceField, ParticleCollisionOptions, ParticleRuntimeOptions, ParticleEmission, ParticleEmitter, ParticleEmitterOptions, ParticleEvent, ParticleParameters, ParticleSceneParent, ParticleTexture, ParticleVector3, ParticleTrigger } from "./types.js";
 import { integer, number, record, vector } from "./validation.js";
 import { emitterAccess } from "./access.js";
 import { createBatches } from "./batch.js";
@@ -11,6 +11,7 @@ export interface ParticleEffectDefinition {
     readonly subEmitters?: readonly {
         readonly source: string; readonly target: string; readonly event: ParticleEvent["kind"];
         readonly count: number; readonly inheritVelocity?: number;
+        readonly probability?: number; readonly inheritColor?: boolean; readonly inheritSize?: boolean; readonly inheritRotation?: boolean; readonly inheritLifetime?: boolean;
     }[];
 }
 export interface ParticleEffect {
@@ -23,8 +24,9 @@ export interface ParticleEffect {
     setParameters(parameters: ParticleParameters): void;
     setTransform(position: ParticleVector3, rotation?: ParticleVector3): void;
     prewarm(durationMs: number): void;
-    seek(timeMs: number): void;
+    seek(timeMs: number, mode?: "automatic" | "recorded"): void;
     setForceFields(id: string, fields: readonly ParticleForceField[]): void;
+    setTriggers(id: string, triggers: readonly ParticleTrigger[]): void;
     setCollision(id: string, collision: ParticleCollisionOptions): void;
     setDepthSource(id: string, texture: ParticleTexture, width: number, height: number, origin?: ParticleVector2): void;
     setMeshPositions(id: string, positions: readonly number[]): void;
@@ -74,9 +76,11 @@ export function defineParticleEffect(input: ParticleEffectDefinition): ParticleE
     }
     if (input.subEmitters !== undefined && (!Array.isArray(input.subEmitters) || input.subEmitters.length > 64)) throw new TypeError("effect requires at most 64 sub-emitter links");
     for (const link of input.subEmitters ?? []) {
-        record(link, ["source", "target", "event", "count", "inheritVelocity"], "sub-emitter link");
+        record(link, ["source", "target", "event", "count", "inheritVelocity", "probability", "inheritColor", "inheritSize", "inheritRotation", "inheritLifetime"], "sub-emitter link");
         if (!ids.has(link.source) || !ids.has(link.target)) throw new TypeError("sub-emitter source and target must exist");
         if (!["birth", "death", "collision", "enter", "exit"].includes(link.event)) throw new TypeError("Invalid sub-emitter event");
+        number(link.probability ?? 1, 0, 1, "sub-emitter probability");
+        for (const flag of [link.inheritColor, link.inheritSize, link.inheritRotation, link.inheritLifetime]) if (flag !== undefined && typeof flag !== "boolean") throw new TypeError("sub-emitter inheritance flags must be boolean");
         integer(link.count, 1, 65536, "sub-emitter count"); number(link.inheritVelocity ?? 0, 0, 1, "sub-emitter inheritVelocity");
     }
     const visited = new Set<string>(), visiting = new Set<string>();
@@ -119,12 +123,13 @@ export function createParticleEffect(parent: ParticleSceneParent, input: Particl
             const callback = providedRuntime?.onComplete;
             if (callback !== undefined && typeof callback !== "function") throw new TypeError("onComplete must be a function");
             const runtime = providedRuntime ? { ...providedRuntime, ...(callback ? { onComplete: () => { notifications.set(e.id, callback); } } : {}) } : undefined;
-            emitters.set(e.id, createParticleEmitter(group, { ...config, ...(runtime ? { runtime } : {}), ...(texture ? { texture } : {}), ...(links.some(l => l.source === e.id) ? { events: true } : {}) }));
+            emitters.set(e.id, createParticleEmitter(group, { ...config, ...(links.some(l => l.target === e.id && (l.inheritRotation || l.inheritSize)) && !config.rotation3D ? { rotation3D: { x: 0, y: 0, z: 0 } } : {}), ...(runtime ? { runtime } : {}), ...(texture ? { texture } : {}), ...(links.some(l => l.source === e.id) ? { events: true } : {}) }));
         }
         if (options.batch ?? true) batches = createBatches(group);
     } catch (error) { for (const e of emitters.values()) e.dispose(); group.removeFromParent(); throw error; }
     let disposed = false, completed = false, droppedSubEmitterCount = 0;
     const routed = new Map<string, number>();
+    const inheritedRotation = new THREE.Quaternion(), parentRotation = new THREE.Quaternion(), rotationScale = new THREE.Vector3();
     const sourcePosition = new THREE.Vector3(), sourceVelocity = new THREE.Vector3(), inverse = new THREE.Matrix4(), normalMatrix = new THREE.Matrix3(), rotation = new THREE.Quaternion(), euler = new THREE.Euler();
     function live() { if (disposed) throw new Error("Particle effect has been disposed"); }
     function route(id: string) {
@@ -134,6 +139,10 @@ export function createParticleEffect(parent: ParticleSceneParent, input: Particl
         const sourceTime = sourceEmitter.inspect().elapsedMs;
         group.updateWorldMatrix(true, false); inverse.copy(group.matrixWorld).invert(); normalMatrix.setFromMatrix4(inverse);
         for (const event of events) for (const link of sourceLinks) if (link.event === event.kind) {
+            let hash = Math.imul(event.particleId + 1, 0x9e3779b1) ^ Math.imul(links.indexOf(link) + 1, 0x85ebca6b) ^ (source.options.seed ?? 1) ^ Math.floor(event.timeMs * 1000);
+            hash = Math.imul(hash ^ (hash >>> 16), 0x7feb352d); hash = Math.imul(hash ^ (hash >>> 15), 0x846ca68b);
+            if (((hash ^ (hash >>> 16)) >>> 0) / 4294967296 >= (link.probability ?? 1)) continue;
+            const inheritedAppearance = { ...(link.inheritColor ? { color: event.color } : {}), ...(link.inheritSize ? { size: event.size, sizeAxes: event.sizeAxes } : {}), ...(link.inheritLifetime ? { lifetimeMs: event.lifetimeMs } : {}) };
             const target = configs.get(link.target)!;
             const targetEmitter = emitters.get(link.target)!;
             const remaining = (target.options.capacity ?? 1024) - (routed.get(link.target) ?? 0), count = Math.min(link.count, remaining);
@@ -145,14 +154,25 @@ export function createParticleEffect(parent: ParticleSceneParent, input: Particl
             // emit() expects parent-local birth coordinates, even for a world-space target.
             if (source.options.simulationSpace === "world") sourcePosition.applyMatrix4(inverse);
             const sourceWorld = source.options.simulationSpace === "world";
+            let rotationOverride: ParticleVector3 | undefined;
+            if (link.inheritRotation) {
+                inheritedRotation.setFromEuler(euler.set(event.rotation.x, event.rotation.y, event.rotation.z, "ZYX"));
+                if (sourceWorld !== (target.options.simulationSpace === "world")) {
+                    group.matrixWorld.decompose(sourceVelocity, parentRotation, rotationScale);
+                    if (sourceWorld) parentRotation.invert(); inheritedRotation.premultiply(parentRotation);
+                    sourceVelocity.copy(event.velocity);
+                }
+                euler.setFromQuaternion(inheritedRotation, "ZYX"); rotationOverride = { x: euler.x, y: euler.y, z: euler.z };
+            }
+            const appearance = { ...inheritedAppearance, ...(rotationOverride ? { rotation3D: rotationOverride } : {}) };
             // An explicit target velocity is transformed into simulation space by its emitter.
             if (sourceWorld) sourceVelocity.applyMatrix3(normalMatrix);
             if (link.inheritVelocity) {
                 const r = target.options.rotation;
-                rotation.setFromEuler(euler.set(r?.x ?? 0, r?.y ?? 0, r?.z ?? 0)).invert();
+                rotation.setFromEuler(euler.set(r?.x ?? 0, r?.y ?? 0, r?.z ?? 0, "XYZ")).invert();
                 sourceVelocity.applyQuaternion(rotation).multiplyScalar(link.inheritVelocity);
-                emitterAccess.get(targetEmitter)!.emit(count, { position: sourcePosition, velocity: sourceVelocity }, ageMs);
-            } else emitterAccess.get(targetEmitter)!.emit(count, { position: sourcePosition }, ageMs);
+                emitterAccess.get(targetEmitter)!.emit(count, { ...appearance, position: sourcePosition, velocity: sourceVelocity }, ageMs);
+            } else emitterAccess.get(targetEmitter)!.emit(count, { ...appearance, position: sourcePosition }, ageMs);
         }
     }
     function refresh() { for (const e of emitters.values()) emitterAccess.get(e)!.refresh(); batches?.update(); }
@@ -185,7 +205,13 @@ export function createParticleEffect(parent: ParticleSceneParent, input: Particl
         setParameters(parameters: ParticleParameters) { live(); for (const e of emitters.values()) e.setParameters(parameters); },
         setTransform(position: ParticleVector3, r: ParticleVector3 = { x: 0, y: 0, z: 0 }) { live(); const p = vector(position, "position"), rotation = vector(r, "rotation"); group.position.copy(p); group.rotation.set(rotation.x, rotation.y, rotation.z); },
         prewarm(durationMs: number) { live(); number(durationMs, 0, 1e6, "prewarmMs"); for (const e of emitters.values()) e.prewarm(durationMs); routeAll(); batches?.update(); checkComplete(); },
-        seek(timeMs: number) {
+        seek(timeMs: number, mode: "automatic" | "recorded" = "automatic") {
+            if (mode !== "automatic" && mode !== "recorded") throw new TypeError("Invalid seek mode");
+            if (mode === "recorded") {
+                live(); for (const e of emitters.values()) { const until = e.inspect().recordedUntilMs; if (until === undefined) throw new TypeError("recorded effect seek requires recording on every emitter"); number(timeMs, 0, until, "recorded effect seek"); }
+                for (const e of emitters.values()) e.seek(timeMs, "recorded");
+                completed = [...emitters.values()].every(e => e.inspect().completed); batches?.update(); return;
+            }
             live(); number(timeMs, 0, 1e6, "seek timeMs"); completed = false;
             for (const e of emitters.values()) emitterAccess.get(e)!.reset();
             routeAll();
@@ -197,6 +223,7 @@ export function createParticleEffect(parent: ParticleSceneParent, input: Particl
             batches?.update(); checkComplete();
         },
         setForceFields(id: string, fields: readonly ParticleForceField[]) { live(); named(id).setForceFields(fields); },
+        setTriggers(id: string, triggers: readonly ParticleTrigger[]) { live(); named(id).setTriggers(triggers); },
         setCollision(id: string, collision: ParticleCollisionOptions) { live(); named(id).setCollision(collision); },
         setDepthSource(id: string, texture: ParticleTexture, width: number, height: number, origin?: ParticleVector2) { live(); named(id).setDepthSource(texture, width, height, origin); },
         setMeshPositions(id: string, positions: readonly number[]) { live(); named(id).setMeshPositions(positions); },

@@ -35,34 +35,70 @@ export function curve(value: ParticleCurve, min: number, max: number, label: str
     if (!Array.isArray(value) || value.length < 2 || value.length > 16) throw new TypeError(`${label} requires 2 to 16 keys`);
     let previous = -1;
     const copied = Array.from(value, key => {
-        record(key, ["time", "value", "interpolation"], label);
-        if (key.interpolation !== undefined && key.interpolation !== "linear" && key.interpolation !== "smooth") throw new TypeError(`${label} interpolation is invalid`);
+        record(key, ["time", "value", "interpolation", "inTangent", "outTangent", "inControl", "outControl"], label);
+        for (const field of ["inTangent", "outTangent", "inControl", "outControl"] as const) if (key[field] !== undefined) number(key[field]!, -1e6, 1e6, `${label} ${field}`);
+        if (key.interpolation !== undefined && key.interpolation !== "linear" && key.interpolation !== "smooth" && key.interpolation !== "hermite" && key.interpolation !== "bezier") throw new TypeError(`${label} interpolation is invalid`);
         const time = number(key.time, 0, 1, label);
         if (time <= previous) throw new TypeError(`${label} times must strictly increase`);
         previous = time;
-        return { time, value: color ? integer(key.value, min, max, label) : number(key.value, min, max, label), ...(key.interpolation ? { interpolation: key.interpolation } : {}) };
+        if (color && (key.interpolation === "hermite" || key.interpolation === "bezier")) throw new TypeError("Color gradients use linear or smooth interpolation");
+        return { ...key, time, value: color ? integer(key.value, min, max, label) : number(key.value, min, max, label), ...(key.interpolation ? { interpolation: key.interpolation } : {}) };
     });
     if (copied[0]!.time !== 0 || copied[copied.length - 1]!.time !== 1) throw new TypeError(`${label} must cover 0 to 1`);
+    for (let i = 1; i < copied.length; i++) {
+        const c = coefficients(copied[i - 1]!, copied[i]!);
+        const roots: number[] = [];
+        const d = 4 * c[2] * c[2] - 12 * c[3] * c[1];
+        if (Math.abs(c[3]) < 1e-15) { if (c[2]) roots.push(-c[1] / (2 * c[2])); }
+        else if (d >= 0) { roots.push((-2 * c[2] + Math.sqrt(d)) / (6 * c[3]), (-2 * c[2] - Math.sqrt(d)) / (6 * c[3])); }
+        for (const u of roots) if (u > 0 && u < 1) number(c[0] + u * (c[1] + u * (c[2] + u * c[3])), min, max, `${label} curve extrema`);
+    }
     return copied;
+}
+type Cubic = readonly [number, number, number, number];
+const compiled = new WeakMap<ParticleCurve, readonly Cubic[]>();
+function coefficients(a: ParticleCurve[number], b: ParticleCurve[number]): Cubic {
+    const span = b.time - a.time, delta = b.value - a.value;
+    if (a.interpolation === "smooth") return [a.value, 0, 3 * delta, -2 * delta];
+    if (a.interpolation === "hermite") {
+        const m0 = (a.outTangent ?? delta / span) * span, m1 = (b.inTangent ?? delta / span) * span;
+        return [a.value, m0, 3 * delta - 2 * m0 - m1, -2 * delta + m0 + m1];
+    }
+    if (a.interpolation === "bezier") {
+        const p = a.outControl ?? a.value + delta / 3, q = b.inControl ?? a.value + 2 * delta / 3;
+        return [a.value, 3 * (p - a.value), 3 * (a.value - 2 * p + q), b.value - a.value + 3 * (p - q)];
+    }
+    return [a.value, delta, 0, 0];
+}
+function cubics(keys: ParticleCurve) {
+    let values = compiled.get(keys);
+    if (!values) { values = keys.slice(1).map((b, i) => coefficients(keys[i]!, b)); compiled.set(keys, values); }
+    return values;
 }
 /** @internal */
 export function sample(keys: ParticleCurve, t: number): number {
+    const cs = cubics(keys);
     for (let i = 1; i < keys.length; i++) {
         const a = keys[i - 1]!, b = keys[i]!;
-        if (t <= b.time) { const u = Math.max(0, (t - a.time) / (b.time - a.time)); return a.value + (b.value - a.value) * (a.interpolation === "smooth" ? u * u * (3 - 2 * u) : u); }
+        if (t <= b.time) { const u = Math.max(0, (t - a.time) / (b.time - a.time)), c = cs[i - 1]!; return c[0] + u * (c[1] + u * (c[2] + u * c[3])); }
     }
     return keys[keys.length - 1]!.value;
 }
 /** @internal */
 export function integral(keys: ParticleCurve, t: number): number {
-    let result = 0;
+    let result = 0; const cs = cubics(keys);
     for (let i = 1; i < keys.length; i++) {
-        const a = keys[i - 1]!, b = keys[i]!, span = b.time - a.time;
+        const a = keys[i - 1]!, b = keys[i]!, span = b.time - a.time, c = cs[i - 1]!;
         const u = Math.max(0, Math.min(1, (t - a.time) / span));
-        result += span * (a.value * u + (b.value - a.value) * (a.interpolation === "smooth" ? u ** 3 - u ** 4 / 2 : u * u / 2));
+        result += span * u * (c[0] + u * (c[1] / 2 + u * (c[2] / 3 + u * c[3] / 4)));
         if (t <= b.time) break;
     }
     return result;
+}
+/** @internal */
+export function vectorDistribution(input: import("./types.js").ParticleVectorCurve | undefined, fallback: number, min = -1e6) {
+    if (input !== undefined) record(input, ["x", "y", "z"], "vector curves");
+    return [input?.x, input?.y, input?.z].map(c => distribution(c ?? [{ time: 0, value: fallback }, { time: 1, value: fallback }], min, 1e6, "vector curve"));
 }
 /** @internal */
 export function distribution(value: ParticleCurveRange, min: number, max: number, label: string) {
