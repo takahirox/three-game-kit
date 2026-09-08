@@ -26,6 +26,7 @@ export function createTrails(options: ParticleEmitterOptions, capacity: number) 
     const history = new Float32Array(slots * segments * 3), counts = new Uint8Array(slots), heads = new Uint8Array(slots), lastSample = new Float64Array(slots);
     const identities = new Float64Array(slots);
     const order = new Uint32Array(slots);
+    let orderDirty = true;
     const liveColors = new Float32Array(capacity * 4);
     const ends = new Float32Array(capacity * 3), savedColors = new Float32Array(capacity * 4), death = new Float64Array(capacity);
     let retained = 0, activeTrailCount = 0;
@@ -69,15 +70,16 @@ export function createTrails(options: ParticleEmitterOptions, capacity: number) 
     });
     g.instanceCount = 0;
     const mesh = new THREE.Mesh(g, m); mesh.name = "three-game-kit-particle-trails"; mesh.frustumCulled = false; mesh.visible = false;
-    function copy(from: number, to: number) { identities[to] = identities[from]!; counts[to] = counts[from]!; heads[to] = heads[from]!; lastSample[to] = lastSample[from]!; history.copyWithin(to * segments * 3, from * segments * 3, (from + 1) * segments * 3); }
+    function copy(from: number, to: number) { orderDirty = true; identities[to] = identities[from]!; counts[to] = counts[from]!; heads[to] = heads[from]!; lastSample[to] = lastSample[from]!; history.copyWithin(to * segments * 3, from * segments * 3, (from + 1) * segments * 3); }
     const point = new THREE.Vector3();
     return {
         mesh, starts, finishes, maxWidth: width * Math.max(...widthKeys.map(k => k.value)),
         get activeTrailCount() { return activeTrailCount; },
-        clear() { retained = 0; activeTrailCount = 0; counts.fill(0); g.instanceCount = 0; mesh.visible = false; },
-        birth(i: number, p: THREE.Vector3, time: number, id: number) { identities[i] = id; counts[i] = 1; heads[i] = 0; lastSample[i] = time; p.toArray(history, i * segments * 3); },
+        clear() { orderDirty = true; retained = 0; activeTrailCount = 0; counts.fill(0); g.instanceCount = 0; mesh.visible = false; },
+        birth(i: number, p: THREE.Vector3, time: number, id: number) { orderDirty = true; identities[i] = id; counts[i] = 1; heads[i] = 0; lastSample[i] = time; p.toArray(history, i * segments * 3); },
         appearance(i: number, color: THREE.Color, alpha: number) { liveColors[i * 4] = color.r; liveColors[i * 4 + 1] = color.g; liveColors[i * 4 + 2] = color.b; liveColors[i * 4 + 3] = alpha; },
         remove(i: number, last: number, time: number, endpoint: THREE.Vector3) {
+            orderDirty = true;
             if (persist && (ribbon || counts[i]! > 1)) {
                 let slot = retained;
                 if (retained < capacity) retained++;
@@ -101,8 +103,8 @@ export function createTrails(options: ParticleEmitterOptions, capacity: number) 
             let n = 0; activeTrailCount = 0;
             if (ribbon) {
                 const total = active + retained;
-                for (let i = 0; i < total; i++) order[i] = i < active ? i : capacity + i - active;
-                const sorted = order.subarray(0, total).sort((a, b) => identities[b]! - identities[a]!);
+                const sorted = order.subarray(0, total);
+                if (orderDirty) { for (let i = 0; i < total; i++) order[i] = i < active ? i : capacity + i - active; sorted.sort((a, b) => identities[b]! - identities[a]!); orderDirty = false; }
                 const position = (i: number, a: THREE.InstancedBufferAttribute, target: number) => { if (i < capacity) a.setXYZ(target, centers.getX(i), centers.getY(i), centers.getZ(i)); else { const j = (i - capacity) * 3; a.setXYZ(target, ends[j]!, ends[j + 1]!, ends[j + 2]!); } };
                 const color = (i: number, a: THREE.InstancedBufferAttribute, target: number, t: number) => {
                     const orphan = i >= capacity, j = (orphan ? i - capacity : i) * 4, source = orphan ? savedColors : liveColors;

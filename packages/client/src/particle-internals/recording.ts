@@ -78,7 +78,7 @@ export function createRecordedEmitter(parent: THREE.Object3D, options: ParticleE
     function run(method: string, args: unknown[]) {
         if (executing || replaying || inStateHook) throw new Error("Particle callbacks cannot reenter recorded mutations");
         const matrix = snapshot();
-        const state = full ? undefined : capture();
+        const state = full && branch === undefined ? undefined : capture();
         // Texture/camera handles are borrowed; all authoring data is copied.
         const copy = method === "setDepthSource" ? [args[0], ...structuredClone(args.slice(1))] : structuredClone(args);
         if (branch !== undefined) { commands = branch; bytes = commands.reduce((n, c) => n + c.bytes, initialBytes); until = clock; full = false; branch = undefined; }
@@ -108,6 +108,7 @@ export function createRecordedEmitter(parent: THREE.Object3D, options: ParticleE
             let index = 0;
             for (; index < commands.length; index++) {
                 const command = commands[index]!;
+                if (command.elapsed > time && previousTime === time) break;
                 restore(command.state);
                 samples = command.vertices; sampleIndex = 0;
                 if (command.elapsed > time) {

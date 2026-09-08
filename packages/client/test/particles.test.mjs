@@ -860,3 +860,37 @@ test("recorded seeking interpolates observed parent motion and restores external
     s.emitter.seek(1000, "recorded"); assert.equal(counter, end); s.emitter.dispose();
     assert.throws(() => setup({ recording: {}, runtime: { captureState: () => ({ value: Infinity }), restoreState() {} } }), /finite/);
 });
+
+test("independent reference trails are never combined into a parent-space batch", () => {
+    const scene = new THREE.Group(), a = new THREE.Group(), b = new THREE.Group(); scene.add(a, b); b.position.x = 5;
+    const definition = { emitters: ["a", "b"].map(id => ({ id, options: { simulationSpace: "custom", blending: "additive", velocity: { x: 1, y: 0, z: 0 }, trails: { width: 0.1 } } })) };
+    const effect = createParticleEffect(scene, definition, { runtime: { a: { customSimulationSpace: a }, b: { customSimulationSpace: b } } });
+    effect.emit("a", 1); effect.emit("b", 1); effect.present(0); effect.present(100);
+    assert.equal(effect.inspect().drawSavings, 0); effect.dispose();
+});
+
+test("recorded boundaries do not restore future inputs and full journals capture branched inputs", () => {
+    let input = 1;
+    const s = setup({ recording: { maxCommands: 4 }, speed: 0, simulationStepMs: 100, lifetimeMs: 1000,
+        runtime: { captureState: () => input, restoreState: state => { input = state; }, update: p => { p.velocity.x = input; } } });
+    s.emitter.emit(1); s.emitter.present(0); input = 7; s.emitter.present(100);
+    s.emitter.seek(0, "recorded"); assert.equal(input, 1);
+    s.emitter.seek(100, "recorded"); input = 8; s.emitter.present(200); s.emitter.present(300); assert.equal(s.emitter.inspect().recordingFull, true);
+    s.emitter.seek(100, "recorded"); input = 9; s.emitter.present(200); s.emitter.seek(200, "recorded"); assert.equal(input, 9); s.emitter.dispose();
+});
+
+test("sub-emitter routing converts custom reference coordinates and inherited velocity", () => {
+    const scene = new THREE.Group(), a = new THREE.Group(), b = new THREE.Group(); a.position.x = 10; a.rotation.z = Math.PI / 2; b.position.x = 20; scene.add(a, b);
+    const effect = createParticleEffect(scene, { emitters: ["a", "b"].map(id => ({ id, options: { simulationSpace: "custom", velocity: { x: 1, y: 0, z: 0 }, renderer: { kind: "stretched" } } })), subEmitters: [{ source: "a", target: "b", event: "birth", count: 1, inheritVelocity: 1 }] }, { runtime: { a: { customSimulationSpace: a }, b: { customSimulationSpace: b } } });
+    effect.emit("a", 1); effect.present(0); const mesh = scene.children[2].children[1];
+    close(mesh.geometry.getAttribute("particleCenter").getX(0), -20); close(mesh.geometry.getAttribute("particleVelocity").getX(0), 1); close(mesh.geometry.getAttribute("particleVelocity").getY(0), 0);
+    effect.dispose();
+});
+
+test("render priority changes split compatible batches and reject invalid settings before attachment", () => {
+    const scene = new THREE.Group(); assert.throws(() => createParticleEmitter(scene, { renderOrder: NaN, trails: {} }), TypeError); assert.equal(scene.children.length, 0);
+    const effect = createParticleEffect(scene, { emitters: ["a", "b"].map(id => ({ id, options: { blending: "additive" } })) }); effect.emit("a", 1); effect.emit("b", 1);
+    effect.setRenderOrder("b", 2); assert.equal(effect.inspect().drawSavings, 0);
+    assert.equal(scene.children[0].children.filter(m => m.visible).length, 2);
+    effect.setRenderOrder("a", 2); assert.equal(effect.inspect().drawSavings, 1); effect.dispose();
+});

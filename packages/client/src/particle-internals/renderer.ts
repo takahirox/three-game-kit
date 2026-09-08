@@ -276,7 +276,7 @@ export function createRenderer(parent: THREE.Object3D, options: ParticleEmitterO
         for (const entry of variants) entry.geometry.instanceCount = 0;
         for (let i = 0; i < activeCount; i++) {
             const entry = variants[displayChoices[i]!]!, target = entry.geometry.instanceCount++;
-            attributes.forEach((a, j) => { for (let k = 0; k < a.itemSize; k++) entry.attributes[j]!.array[target * a.itemSize + k] = a.array[i * a.itemSize + k]!; });
+            for (let j = 0; j < attributes.length; j++) { const a = attributes[j]!; for (let k = 0; k < a.itemSize; k++) entry.attributes[j]!.array[target * a.itemSize + k] = a.array[i * a.itemSize + k]!; }
         }
         for (const entry of variants) { entry.mesh.visible = entry.geometry.instanceCount > 0; for (const a of entry.attributes) dirty(a, entry.geometry.instanceCount); }
     }
@@ -288,7 +288,7 @@ export function createRenderer(parent: THREE.Object3D, options: ParticleEmitterO
         entry.mesh.onBeforeShadow = (_r, _o, _c, c) => { simulation.apply(entry.mesh); standard?.update(c, entry.mesh); };
         parent.add(entry.mesh);
     }
-    if (trails) { parent.add(trails.mesh); trails.mesh.onBeforeRender = () => simulation.apply(trails.mesh); }
+    if (trails) { trails.mesh.userData.particleCustomMaterial = simulation.independent; parent.add(trails.mesh); trails.mesh.onBeforeRender = () => simulation.apply(trails.mesh); }
 
     const bounds = new THREE.Box3(), point = new THREE.Vector3(), sphere = new THREE.Sphere(), frustum = new THREE.Frustum(), matrix = new THREE.Matrix4();
     let culled = false;

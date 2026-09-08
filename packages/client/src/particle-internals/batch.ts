@@ -29,7 +29,7 @@ export function createBatches(parent: THREE.Object3D) {
         return { sources, geometry, mesh };
     });
     return {
-        drawSavings: batches.reduce((sum, b) => sum + b.sources.length - 1, 0),
+        get drawSavings() { return batches.reduce((sum, b) => sum + (b.sources.every(s => s.renderOrder === b.sources[0]!.renderOrder) ? b.sources.length - 1 : 0), 0); },
         count: batches.length,
         update() {
             for (const b of batches) {

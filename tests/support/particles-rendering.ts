@@ -63,9 +63,11 @@ export function checkParticleRendering() {
     const sized = createParticleEmitter(scene, { size: 0.01, speed: 0, opacityOverLife: flat, renderer: { kind: "billboard", minScreenSize: 0.5, maxScreenSize: 0.5, flip: { x: 1, y: 0, z: 0 } } });
     sized.emit(1); pixel(); renderer.readRenderTargetPixels(target, 50, 40, 1, 1, pixels); const screenSizePixel = Array.from(pixels); sized.dispose();
     const shifted = createParticleEmitter(scene, { size: 0.5, speed: 0, opacityOverLife: flat, renderer: { kind: "billboard", pivot: { x: 2, y: 0, z: 0 } } }); shifted.emit(1); const pivotCenter = pixel(); shifted.dispose();
+    const neutral = new THREE.DataTexture(new Uint8Array([128, 128, 255, 255, 128, 128, 255, 255]), 2, 1); neutral.needsUpdate = true;
+    pbr.map = atlas; pbr.alphaMap = neutral; pbr.normalMap = neutral; pbr.roughnessMap = neutral; pbr.metalnessMap = neutral; pbr.aoMap = neutral; pbr.lightMap = neutral; pbr.emissiveMap = neutral;
     renderer.shadowMap.enabled = true; sun.castShadow = true; sun.shadow.mapSize.set(256, 256); sun.shadow.camera.left = -2; sun.shadow.camera.right = 2; sun.shadow.camera.top = 2; sun.shadow.camera.bottom = -2; sun.shadow.bias = -0.0001;
     const receiver = new THREE.Mesh(new THREE.PlaneGeometry(4, 4), new THREE.MeshStandardMaterial({ roughness: 1 })); receiver.position.z = -0.6; receiver.receiveShadow = true; scene.add(receiver);
-    const caster = createParticleEmitter(scene, { size: 0.6, speed: 0, opacityOverLife: flat, renderer: { kind: "mesh", positions }, rotation3D: { z: 0.2 }, castShadow: true, receiveShadow: true, runtime: { material: pbr } }); caster.emit(1);
+    const caster = createParticleEmitter(scene, { spriteSheet: { columns: 2, rows: 1, fps: 1, blend: true }, size: 0.6, speed: 0, opacityOverLife: flat, renderer: { kind: "mesh", positions }, rotation3D: { z: 0.2 }, castShadow: true, receiveShadow: true, runtime: { material: pbr } }); caster.emit(1); caster.present(0); caster.present(500);
     const casterMesh = scene.children.find(o => o.name === "three-game-kit-particles")!;
     function energy() { pixel(); const buffer = new Uint8Array(80 * 80 * 4); renderer.readRenderTargetPixels(target, 0, 0, 80, 80, buffer); return buffer.reduce((sum, value, i) => sum + (i % 4 < 3 ? value : 0), 0); }
     const shadowEnergy = energy(); casterMesh.castShadow = false; const unshadowedEnergy = energy();
@@ -73,7 +75,7 @@ export function checkParticleRendering() {
     const point = new THREE.PointLight(0xffffff, 2); point.position.set(-1, 1, 2); point.castShadow = true; point.shadow.mapSize.set(128, 128); scene.add(point); pixel();
     caster.dispose(); receiver.removeFromParent(); receiver.geometry.dispose(); receiver.material.dispose(); sun.removeFromParent(); point.removeFromParent(); sun.shadow.map?.depthTexture?.dispose(); point.shadow.map?.depthTexture?.dispose(); sun.shadow.dispose(); point.shadow.dispose();
     const borrowedPbrDisposals = pbrDisposals; pbr.dispose();
-    material.dispose(); atlas.dispose(); target.dispose(); depth.dispose(); plane.geometry.dispose(); plane.material.dispose();
+    neutral.dispose(); material.dispose(); atlas.dispose(); target.dispose(); depth.dispose(); plane.geometry.dispose(); plane.material.dispose();
     const remaining = { ...renderer.info.memory }; renderer.dispose();
     return { standardSoftBlend, screenSizePixel, pivotCenter, standardBlue, standardRed, standardLit, standardDark, shadowEnergy, unshadowedEnergy, borrowedPbrDisposals, faded, perspectiveFaded, solid, blended, litFront, litBack, tiltedLight, customPixel, borrowedDisposals, remaining };
 }
