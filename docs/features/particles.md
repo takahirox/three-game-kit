@@ -57,7 +57,9 @@ handles must be presented and disposed by the application.
 | `lifetimeMs`, `speed`, `size`, `angle`, `angularVelocity` | Constants or uniformly sampled `[min, max]` ranges; angles are radians |
 | `velocity` | Explicit initial vector replacing shape direction/speed, then rotated/transformed at birth |
 | `inheritVelocity` | 0–1 fraction of observed emitter velocity; `inheritVelocityMode: "current"` also updates live particles, with `inheritVelocityOverLife` |
-| `acceleration`, `drag` | Constant acceleration and linear resistance, with an analytic fast path |
+| `acceleration`, `drag` | Constant acceleration and linear resistance; optional lifetime drag curves and size/speed multipliers |
+| `interpolateMotion` | Interpolate observed transforms at scheduled birth times |
+| `lights` | Bounded particle-following PointLight pool with color, lifetime, size and opacity controls |
 | `velocityOverLife`, `forceOverLife` | Independent optional `x`, `y`, `z` scalar curves, additive in simulation space |
 | `noise` | Seeded value noise, 1–8 octaves, axis strengths, remap, position/rotation/size amounts |
 | `orbitalVelocity`, `orbitalOffset`, `radialVelocity`, `speedModifier` | Axis angular velocity around a simulation-space center, radial units/second, and base translation multiplier |
@@ -531,8 +533,7 @@ Skipped events and simulation time have separate counters. Counts saturate at th
 maximum safe integer.
 
 Distance emission interpolates observed emitter origins in simulation space.
-It cannot reconstruct curved paths or parent rotation between observations.
-Automatic time births still use the transform observed at processing time.
+With `interpolateMotion: true`, time births and distance births interpolate observed translation, quaternion rotation and scale. This approximates motion between observations; it cannot recover unobserved turns or curved trajectories. Without this option, time births retain the transform observed at processing time.
 Velocity inheritance measures origin displacement per simulated second; manual
 births use the latest measured velocity. Paused movement is discarded on resume.
 Local particles follow the parent; world particles remain at their captured world
@@ -554,7 +555,7 @@ clear and restart. No per-particle objects are allocated during motion or render
 enabled event recording intentionally allocates bounded immutable snapshots.
 
 Each populated mesh variant uses one instanced draw; trails/ribbons add one. The default emitter uses one draw. Optional `sort(camera)`
-uses `sortMode` (default `"distance"`); an explicit `sort(camera, "oldest" | "youngest" | "none" | "distance")` overrides it. Sorting reuses scratch storage. `"none"` restores dense simulation order. With multiple meshes, order is preserved within each variant; variants and different emitters are not globally particle-sorted. Effect batching is on
+uses `sortMode` (default `"distance"`); an explicit `sort(camera, "oldest" | "youngest" | "none" | "distance")` overrides it. Sorting reuses scratch storage. `"none"` restores dense simulation order. With multiple meshes, order is preserved within each variant; variants and different emitters are not globally particle-sorted on the default instanced path. The explicit global sorting path described below handles heterogeneous normal-alpha particles. Effect batching is on
 by default and merges **compatible additive emitters under the same effect**,
 including compatible trails. It reuses aggregate buffers and checks geometry,
 shader, texture, atlas, stretch, blend and depth settings. Borrowed custom materials
@@ -579,8 +580,7 @@ System `maxParticles` is a hard **reserved capacity** budget across all owned
 effects, including child emitters. It rejects over-budget creation before retaining
 resources; it does not evict running effects. Disposal releases reservations.
 This provides predictable memory/particle bounds rather than a first-come-per-frame
-allocation policy. GPU simulation, arbitrary mesh collision, cross-effect/alpha
-batching and a visual node editor remain outside this implementation.
+allocation policy. GPU simulation, arbitrary mesh collision, cross-effect draw batching and a visual node editor remain outside this implementation.
 
 Disposal is idempotent, detaches owned scene objects and releases geometry/material
 resources. Borrowed textures, shader materials, cameras and parents are not disposed. Mutation after
@@ -606,3 +606,121 @@ events, transforms, sorting, trails, budgets, graph validation and resource owne
 `pnpm verify:particles` adds real Chromium shader compilation and visible output
 for the 20 atlas presets and six module experiments, control interactions, mobile
 navigation and GPU resource stability/disposal. CI runs both and retains screenshots.
+
+
+## Observed motion and configurable drag
+
+`interpolateMotion: true` samples scheduled births between the previous and current
+presentation transforms. Translation/scale interpolate linearly; rotations use
+quaternion slerp. Emitter `setTransform`, parent movement and custom reference
+frames participate. Local-space particles still follow their reference; world-space
+particles keep their sampled world birth locations. Paused observations update the
+reference without emitting along paused movement. Manual `emit()` uses the current
+transform. Prewarm has no observed motion interval. The option defaults to false
+to preserve existing effects; recorded replay can reconstruct these observations.
+Interpolated simulation frames must remain invertible, including intermediate scale.
+
+```ts
+const sparks = createParticleEmitter(scene, {
+  rate: 120, simulationSpace: "world", interpolateMotion: true,
+  drag: {
+    coefficient: [{ time: 0, value: 0.1 }, { time: 1, value: 1.5 }],
+    multiplyBySize: true,
+    multiplyByVelocity: true,
+  },
+});
+```
+
+Numeric `drag` retains the analytic fast path. The object form selects fixed-step
+simulation; `coefficient` accepts a constant or a seeded lifetime curve pair.
+Size multiplication uses scalar birth size times the lifetime size curve, excluding
+independent axes. Velocity multiplication uses the physical speed at step start.
+The effective coefficient is sampled at step start and exponential drag is integrated
+for that step. These options modify resistance, independently of the speed-limit
+module's excess-velocity damping.
+
+## Billboard orientation and camera motion
+
+Billboard `alignment` can be `"view"` (default camera plane), `"facing"` (toward the
+camera position), `"world"` (world XY axes), `"local"` (simulation-frame XY axes), or
+`"velocity"` (normal along effective particle velocity). `allowRoll: false` uses
+world up for view/facing/velocity billboards instead of following camera roll.
+World/local alignments already define their own axes. Particle spin still applies.
+These options are for `kind: "billboard"`; horizontal/vertical modes retain their
+existing semantics. Zero velocity and parallel up directions have stable fallbacks.
+
+Stretched billboards accept `cameraScale`: relative view velocity subtracts camera
+translation velocity multiplied by this value before the usual `velocityScale` is
+applied. Its default is 0. Camera-dependent stretching retains individual draws so its observation callback runs even in otherwise compatible additive effects. Camera observations use presentation timestamps and are
+cached per camera, so repeated viewport passes do not overwrite the velocity with
+zero. The first observation has zero camera velocity. Borrowed ShaderMaterials
+implement their own vertex behavior; these controls apply to built-in/PBR materials.
+
+## Particle lights and illuminated trails
+
+```ts
+const embers = createParticleEmitter(scene, {
+  lights: {
+    maxLights: 4, ratio: 0.25, intensity: 2, range: 3,
+    intensityOverLife: [{ time: 0, value: 1 }, { time: 1, value: 0 }],
+    rangeOverLife: [{ time: 0, value: 1 }, { time: 1, value: 0.5 }],
+    sizeAffectsRange: false, alphaAffectsIntensity: true,
+  },
+});
+const ribbonMaterial = new THREE.MeshStandardMaterial({
+  roughness: 0.6, depthWrite: false, side: THREE.DoubleSide,
+});
+const ribbon = createParticleEmitter(scene, {
+  trails: { mode: "ribbon", width: 0.1, castShadow: true, receiveShadow: true },
+  runtime: { trailMaterial: ribbonMaterial, trailTexture: streakTexture },
+});
+```
+
+Lights are real scene PointLights, with a fixed pool of 1–32 per emitter (default
+4). `ratio` selects particles using their stable seeded factor; the oldest eligible
+birth IDs receive slots when the pool is full. Color follows the rendered particle
+tint. Intensity/range curves are lifetime multipliers and support seeded pairs.
+Unused slots keep intensity zero so light counts and shader programs remain stable.
+The configured pool still contributes to the scene's light shader cost. Particle
+lights do not cast shadows; the emitter owns and disposes them. Existing scene
+lighting must use a material that responds to lights. `activeLightCount` reports
+assigned slots, and object resource counts include the light pool.
+
+`runtime.trailMaterial` borrows a MeshStandardMaterial and creates owned PBR/depth/
+distance adapters. Trails and ribbons provide UVs, normals and tangents; their
+camera-facing geometry follows the viewing or shadow camera. Normal maps and
+scene lights work on the generated strip. `trails.castShadow` and `receiveShadow`
+are independent of particle-body shadow flags. Configure the scene light's shadow
+bias as usual to avoid self-shadowing on thin strips. Disposing the emitter leaves
+the borrowed material and textures intact. Built-in unlit trails remain the default.
+
+## Exact sorting across emitters and meshes
+
+```ts
+emitter.sort(camera, "distance", { scope: "global", maxParticles: 512 });
+effect.sort(camera, "distance", { scope: "global", maxParticles: 1024 });
+system.sort(camera, { scope: "global", maxParticles: 2048 });
+```
+
+This optional path sorts normal-alpha particle centers across mesh variants and,
+for an effect/system, across its emitters/effects. Public integer `renderOrder`
+remains the primary priority; camera depth orders particles within each priority.
+Materials and textures can differ. Source camera layers are preserved, and excluded layers do not consume the sort budget. Additive particles and trail segments retain
+their existing rendering path. Arbitrary shader displacement and intersecting
+triangles cannot be resolved from center depth alone.
+
+Exact heterogeneous ordering costs one draw per particle. The global path reuses
+proxy meshes and bounded instance buffers; it never silently exceeds `maxParticles`
+(default 2048, maximum 4096). Exceeding the limit throws and leaves ordinary draws
+available. Base geometry, textures and materials are borrowed from their sources.
+Source changes, clearing, replay and disposal invalidate prepared ordering; call
+sort after updates/camera movement and before rendering. Culling after sorting
+hides the corresponding proxies without losing their order. Calling the usual
+emitter/effect sort, or system sort with `scope: "emitter"`, restores instancing.
+Global scope supports distance sorting; age sorting remains within each emitter.
+
+The existing atlas demonstrates these modules without another listing page:
+Ember turbulence uses camera-facing alignment, Orbital current uses varying drag,
+Ribbon flight uses motion interpolation and lit shadow-casting strips, and Crystal
+impact uses particle lights. In Crystal impact's focus view, **Refine overlapping
+crystals** toggles the more expensive global sorting path.

@@ -6,26 +6,33 @@ import { createStandardMaterial } from "./standard-material.js";
 import { usesAxes } from "./variation.js";
 import { triangles } from "./shapes.js";
 import type { createSpace } from "./space.js";
+import { createAlphaSort } from "./alpha-sort.js";
+import { createLights } from "./lights.js";
 import { meshVariants } from "./mesh-variants.js";
 
 /** @internal */
 export function createRenderer(parent: THREE.Object3D, options: ParticleEmitterOptions, capacity: number, columns: number, rows: number, simulation: ReturnType<typeof createSpace>) {
     const render = options.renderer ? { ...options.renderer } : { kind: "billboard" as const };
     const initialRenderOrder = integer(options.renderOrder ?? 0, -1000000, 1000000, "renderOrder");
-    const common = ["pivot", "flip", "minScreenSize", "maxScreenSize"];
+    const common = ["alignment", "allowRoll", "pivot", "flip", "minScreenSize", "maxScreenSize"];
     const pivot = vector(render.pivot ?? { x: 0, y: 0, z: 0 }, "renderer pivot");
     const flip = vector(render.flip ?? { x: 0, y: 0, z: 0 }, "renderer flip");
     for (const value of flip) number(value, 0, 1, "flip probability");
     const minimum = number(render.minScreenSize ?? 0, 0, 1, "minScreenSize"), maximum = number(render.maxScreenSize ?? 1, minimum, 1, "maxScreenSize");
     const screenSize = render.minScreenSize !== undefined || render.maxScreenSize !== undefined;
     const meshes = render.kind === "mesh" ? meshVariants(render, capacity) : undefined;
+    const alignment = render.alignment ?? "view", allowRoll = render.allowRoll ?? true;
+    if (!["view", "facing", "world", "local", "velocity"].includes(alignment)) throw new TypeError("Invalid billboard alignment");
+    if (typeof allowRoll !== "boolean") throw new TypeError("allowRoll must be boolean");
+    if (render.kind !== "billboard" && (render.alignment !== undefined || render.allowRoll !== undefined)) throw new TypeError("alignment and allowRoll require billboard rendering");
+    let cameraScale = 0;
     let lengthScale = 1, velocityScale = 0.1, meshRadius = Math.SQRT1_2;
     let data: ReturnType<typeof triangles> | undefined;
     switch (render.kind) {
         case "billboard": case "horizontal": case "vertical": record(render, ["kind", ...common], "renderer"); break;
         case "stretched":
-            record(render, ["kind", "lengthScale", "velocityScale", ...common], "renderer");
-            lengthScale = number(render.lengthScale ?? 1, 0, 1e6, "lengthScale"); velocityScale = number(render.velocityScale ?? 0.1, 0, 1e6, "velocityScale"); break;
+            record(render, ["kind", "lengthScale", "velocityScale", "cameraScale", ...common], "renderer");
+            cameraScale = number(render.cameraScale ?? 0, 0, 1e6, "cameraScale"); lengthScale = number(render.lengthScale ?? 1, 0, 1e6, "lengthScale"); velocityScale = number(render.velocityScale ?? 0.1, 0, 1e6, "velocityScale"); break;
         case "mesh":
             record(render, ["kind", "positions", "indices", "uvs", "normals", "meshes", ...common], "renderer"); data = meshes![0]!.data; meshRadius = Math.max(...meshes!.map(m => m.radius));
             for (let i = 0; i < data.positions.length; i += 3) meshRadius = Math.max(meshRadius, Math.hypot(data.positions[i]!, data.positions[i + 1]!, data.positions[i + 2]!)); break;
@@ -41,14 +48,15 @@ export function createRenderer(parent: THREE.Object3D, options: ParticleEmitterO
     const lightColor = new THREE.Color(number(light?.color ?? 0xffffff, 0, 0xffffff, "light color"));
     const soft = options.runtime?.softParticles;
     const camera = soft?.camera as THREE.PerspectiveCamera | THREE.OrthographicCamera | undefined;
-    const attributeCount = 6 + (render.flip ? 1 : 0) + (render.kind === "mesh" || render.kind === "stretched" ? 1 : 0) + (usesAxes(options) ? 2 : 0) + (options.spriteSheet?.blend ? 1 : 0) + (options.customAttributes?.length ?? 0);
+    const attributeCount = 6 + (render.flip ? 1 : 0) + (render.kind === "mesh" || render.kind === "stretched" || alignment === "velocity" ? 1 : 0) + (usesAxes(options) ? 2 : 0) + (options.spriteSheet?.blend ? 1 : 0) + (options.customAttributes?.length ?? 0);
     if (attributeCount > 16) throw new TypeError("particle renderer exceeds the portable limit of 16 vertex attributes");
+    const lights = createLights(parent, options, simulation);
     const trails = createTrails(options, capacity);
     const world = options.simulationSpace === "world";
     const centers = new THREE.InstancedBufferAttribute(new Float32Array(capacity * 3), 3).setUsage(THREE.DynamicDrawUsage);
     const appearances = new THREE.InstancedBufferAttribute(new Float32Array(capacity * 4), 4).setUsage(THREE.DynamicDrawUsage);
     const dimensions = new THREE.InstancedBufferAttribute(new Float32Array(capacity * 3), 3).setUsage(THREE.DynamicDrawUsage);
-    const velocities = render.kind !== "stretched" && render.kind !== "mesh" ? undefined : new THREE.InstancedBufferAttribute(new Float32Array(capacity * 3), 3).setUsage(THREE.DynamicDrawUsage);
+    const velocities = render.kind !== "stretched" && render.kind !== "mesh" && alignment !== "velocity" ? undefined : new THREE.InstancedBufferAttribute(new Float32Array(capacity * 3), 3).setUsage(THREE.DynamicDrawUsage);
     const attribute = (size: number) => new THREE.InstancedBufferAttribute(new Float32Array(capacity * size), size).setUsage(THREE.DynamicDrawUsage);
     const axes = !!(usesAxes(options));
     const scales = axes ? attribute(3) : undefined, rotations = axes ? attribute(3) : undefined;
@@ -119,13 +127,13 @@ export function createRenderer(parent: THREE.Object3D, options: ParticleEmitterO
         blending: options.blending === "additive" ? THREE.AdditiveBlending : THREE.NormalBlending,
         side: !render.flip && (render.kind === "billboard" || render.kind === "stretched") ? THREE.FrontSide : THREE.DoubleSide,
         uniforms: {
-            particlePivot: { value: pivot }, screenLimits: { value: new THREE.Vector2(minimum, maximum) }, particleDiameter: { value: render.kind === "mesh" ? 2 * meshRadius : 1 },
+            cameraVelocity: { value: new THREE.Vector3() }, cameraScale: { value: cameraScale }, particlePivot: { value: pivot }, screenLimits: { value: new THREE.Vector2(minimum, maximum) }, particleDiameter: { value: render.kind === "mesh" ? 2 * meshRadius : 1 },
             lightDirection: { value: direction.normalize() }, lightColor: { value: lightColor }, lightPower: { value: new THREE.Vector2(ambient, intensity) },
             sceneDepth: { value: soft?.depthTexture ?? null }, depthCamera: { value: new THREE.Vector4(camera?.near ?? 0.1, camera?.far ?? 1000, soft?.fadeDistance ?? 0.5, camera instanceof THREE.PerspectiveCamera ? 1 : 0) }, depthViewport: { value: new THREE.Vector4(soft?.origin?.x ?? 0, soft?.origin?.y ?? 0, soft?.width ?? 1, soft?.height ?? 1) },
             particleMap: { value: options.texture ?? null }, sheet: { value: new THREE.Vector2(columns, rows) }, stretch: { value: new THREE.Vector2(lengthScale, velocityScale) } },
-        defines: { ...(flips ? { PARTICLE_FLIP: 1 } : {}), ...(screenSize ? { SCREEN_SIZE: 1 } : {}), ...(axes ? { AXES: 1 } : {}), ...(atlas ? { FRAME_BLEND: 1 } : {}), ...(soft ? { SOFT_PARTICLES: 1 } : {}), ...(light ? { PARTICLE_LIGHT: 1 } : {}), ...(render.kind === "horizontal" ? { HORIZONTAL: 1 } : {}), ...(render.kind === "vertical" ? { VERTICAL: 1 } : {}), ...(options.texture ? { PARTICLE_TEXTURE: 1 } : {}), ...(world ? { WORLD_SPACE: 1 } : {}), ...(render.kind === "mesh" ? { MESH_PARTICLE: 1 } : {}), ...(render.kind === "stretched" ? { STRETCHED: 1 } : {}) },
+        defines: { ...(alignment !== "view" ? { [`ALIGN_${alignment.toUpperCase()}`]: 1 } : {}), ...(!allowRoll ? { NO_ROLL: 1 } : {}), ...(flips ? { PARTICLE_FLIP: 1 } : {}), ...(screenSize ? { SCREEN_SIZE: 1 } : {}), ...(axes ? { AXES: 1 } : {}), ...(atlas ? { FRAME_BLEND: 1 } : {}), ...(soft ? { SOFT_PARTICLES: 1 } : {}), ...(light ? { PARTICLE_LIGHT: 1 } : {}), ...(render.kind === "horizontal" ? { HORIZONTAL: 1 } : {}), ...(render.kind === "vertical" ? { VERTICAL: 1 } : {}), ...(options.texture ? { PARTICLE_TEXTURE: 1 } : {}), ...(world ? { WORLD_SPACE: 1 } : {}), ...(render.kind === "mesh" ? { MESH_PARTICLE: 1 } : {}), ...(render.kind === "stretched" ? { STRETCHED: 1 } : {}) },
         vertexShader: `
-            uniform vec3 particlePivot;
+            uniform vec3 particlePivot, cameraVelocity; uniform float cameraScale;
             uniform vec2 screenLimits; uniform float particleDiameter;
             #ifdef PARTICLE_FLIP
                 attribute vec3 particleFlip;
@@ -150,7 +158,7 @@ export function createRenderer(parent: THREE.Object3D, options: ParticleEmitterO
             attribute vec3 particleCenter;
             attribute vec4 particleAppearance;
             attribute vec3 particleDimensions;
-            #if defined(STRETCHED) || defined(MESH_PARTICLE)
+            #if defined(STRETCHED) || defined(MESH_PARTICLE) || defined(ALIGN_VELOCITY)
                 attribute vec3 particleVelocity;
             #endif
             uniform vec2 sheet;
@@ -181,7 +189,7 @@ export function createRenderer(parent: THREE.Object3D, options: ParticleEmitterO
                     float parentScale = length(modelMatrix[0].xyz);
                 #endif
                 #ifdef STRETCHED
-                    vec3 velocity = basis * particleVelocity;
+                    vec3 velocity = basis * particleVelocity - mat3(viewMatrix) * cameraVelocity * cameraScale;
                     vec2 direction = length(velocity.xy) > 0.00001 ? normalize(velocity.xy) : vec2(0.0, 1.0);
                     vec2 sideways = vec2(direction.y, -direction.x);
                     offset = sideways * vertexPosition.x * particleDimensions.x * parentScale + direction * vertexPosition.y * (particleDimensions.x * parentScale * stretch.x + length(velocity) * stretch.y);
@@ -211,6 +219,30 @@ export function createRenderer(parent: THREE.Object3D, options: ParticleEmitterO
                     vec3 right = cross(up, vec3(0.0, 0.0, 1.0));
                     if (length(right) < 0.00001) right = vec3(1.0, 0.0, 0.0);
                     viewPosition = (center + vec4((normalize(right) * offset.x + up * offset.y + cross(normalize(right), up) * vertexPosition.z * particleDimensions.x) * parentScale, 0.0));
+                #elif defined(ALIGN_WORLD) || defined(ALIGN_LOCAL)
+                    #ifdef ALIGN_WORLD
+                        mat3 axesBasis = mat3(viewMatrix) * parentScale;
+                    #else
+                        mat3 axesBasis = basis;
+                    #endif
+                    viewPosition = center + vec4(axesBasis * vec3(offset, vertexPosition.z * particleDimensions.x), 0.0);
+                #elif defined(ALIGN_FACING) || defined(ALIGN_VELOCITY) || defined(NO_ROLL)
+                    #ifdef ALIGN_VELOCITY
+                        vec3 facing = length(particleVelocity) > 0.00001 ? normalize(basis * particleVelocity) : vec3(0, 0, 1);
+                    #elif defined(ALIGN_FACING)
+                        vec3 facing = length(center.xyz) > 0.00001 ? normalize(-center.xyz) : vec3(0, 0, 1);
+                    #else
+                        vec3 facing = vec3(0, 0, 1);
+                    #endif
+                    #ifdef NO_ROLL
+                        vec3 referenceUp = mat3(viewMatrix) * vec3(0, 1, 0);
+                    #else
+                        vec3 referenceUp = vec3(0, 1, 0);
+                    #endif
+                    vec3 alignedRight = cross(referenceUp, facing);
+                    if (length(alignedRight) < 0.00001) alignedRight = cross(vec3(1, 0, 0), facing);
+                    alignedRight = normalize(alignedRight); vec3 alignedUp = cross(facing, alignedRight);
+                    viewPosition = center + vec4((alignedRight * offset.x + alignedUp * offset.y + facing * vertexPosition.z * particleDimensions.x) * parentScale, 0.0);
                 #else
                     offset *= parentScale;
                     viewPosition = (center + vec4(offset, vertexPosition.z * particleDimensions.x * parentScale, 0.0));
@@ -234,6 +266,10 @@ export function createRenderer(parent: THREE.Object3D, options: ParticleEmitterO
                         #endif
                     #elif defined(VERTICAL)
                         vNormal = normalize(right) * faceNormal.x + up * faceNormal.y + cross(normalize(right), up) * faceNormal.z;
+                    #elif defined(ALIGN_WORLD) || defined(ALIGN_LOCAL)
+                        vNormal = axesBasis * faceNormal;
+                    #elif defined(ALIGN_FACING) || defined(ALIGN_VELOCITY) || defined(NO_ROLL)
+                        vNormal = alignedRight * faceNormal.x + alignedUp * faceNormal.y + facing * faceNormal.z;
                     #else
                         vNormal = faceNormal;
                     #endif
@@ -253,6 +289,7 @@ export function createRenderer(parent: THREE.Object3D, options: ParticleEmitterO
     if (standard) { if (flips) standard.material.side = THREE.DoubleSide; mesh.customDepthMaterial = standard.depth; mesh.customDistanceMaterial = standard.distance; mesh.onBeforeRender = (_renderer, _scene, camera) => standard.update(camera, mesh); mesh.onBeforeShadow = (_renderer, _object, _camera, shadowCamera) => standard.update(shadowCamera, mesh); } mesh.name = "three-game-kit-particles"; mesh.frustumCulled = false; mesh.visible = false;
     mesh.userData.particleCustomMaterial = !!options.runtime?.material;
     const attributes = [centers, appearances, dimensions, ...(velocities ? [velocities] : []), ...(scales && rotations ? [scales, rotations] : []), ...(atlas ? [atlas] : []), ...(flips ? [flips] : []), ...customAttributes];
+    const alphaSort = createAlphaSort();
     const variants = [{ mesh, geometry, attributes }, ...(meshes?.slice(1).map(entry => {
         const g = new THREE.InstancedBufferGeometry(); g.setIndex(entry.data.indices);
         g.setAttribute("position", new THREE.Float32BufferAttribute(entry.data.positions, 3));
@@ -280,26 +317,45 @@ export function createRenderer(parent: THREE.Object3D, options: ParticleEmitterO
         }
         for (const entry of variants) { entry.mesh.visible = entry.geometry.instanceCount > 0; for (const a of entry.attributes) dirty(a, entry.geometry.instanceCount); }
     }
-    function setRenderOrder(order: number) { integer(order, -1000000, 1000000, "renderOrder"); for (const e of variants) e.mesh.renderOrder = order; if (trails) trails.mesh.renderOrder = order; }
+    function setRenderOrder(order: number) { integer(order, -1000000, 1000000, "renderOrder"); for (const e of variants) { e.mesh.userData.particleSortReset?.(); e.mesh.renderOrder = order; } if (trails) trails.mesh.renderOrder = order; }
     setRenderOrder(initialRenderOrder);
     for (const entry of variants) {
-        entry.mesh.userData.particleCustomMaterial = !!options.runtime?.material || simulation.independent || variants.length > 1;
+        entry.mesh.userData.particleCustomMaterial = !!options.runtime?.material || simulation.independent || variants.length > 1 || cameraScale > 0;
         entry.mesh.onBeforeRender = (_r, _s, c) => { simulation.apply(entry.mesh); standard?.update(c, entry.mesh); };
-        entry.mesh.onBeforeShadow = (_r, _o, _c, c) => { simulation.apply(entry.mesh); standard?.update(c, entry.mesh); };
+        entry.mesh.onBeforeShadow = (_r, _o, viewCamera, c) => { simulation.apply(entry.mesh); updateCamera(viewCamera); standard?.update(c, entry.mesh); };
+        entry.mesh.userData.particleFrame = () => { simulation.update(); return simulation.matrix; };
         parent.add(entry.mesh);
     }
-    if (trails) { trails.mesh.userData.particleCustomMaterial = simulation.independent; parent.add(trails.mesh); trails.mesh.onBeforeRender = () => simulation.apply(trails.mesh); }
+    if (trails) { trails.mesh.userData.particleCustomMaterial ||= simulation.independent; parent.add(trails.mesh); trails.mesh.onBeforeRender = (_r, _s, c) => { simulation.apply(trails.mesh); trails.update(c, trails.mesh); }; trails.mesh.onBeforeShadow = (_r, _o, _c, c) => { simulation.apply(trails.mesh); trails.update(c, trails.mesh); }; }
 
+    let presentationTime = 0;
+    const cameraStates = new WeakMap<THREE.Camera, { time: number; position: THREE.Vector3; velocity: THREE.Vector3 }>();
+    const cameraPosition = new THREE.Vector3();
+    function updateCamera(camera: THREE.Camera) {
+        if (!cameraScale) return;
+        cameraPosition.setFromMatrixPosition(camera.matrixWorld);
+        let state = cameraStates.get(camera);
+        if (!state) { state = { time: presentationTime, position: cameraPosition.clone(), velocity: new THREE.Vector3() }; cameraStates.set(camera, state); }
+        if (state.time !== presentationTime) { const dt = presentationTime - state.time; state.velocity.copy(cameraPosition).sub(state.position).multiplyScalar(dt > 0 ? 1000 / dt : 0); state.position.copy(cameraPosition); state.time = presentationTime; }
+        material.uniforms.cameraVelocity!.value.copy(state.velocity);
+    }
+    for (const entry of variants) entry.mesh.onBeforeRender = (_r, _s, c) => { simulation.apply(entry.mesh); updateCamera(c); standard?.update(c, entry.mesh); };
     const bounds = new THREE.Box3(), point = new THREE.Vector3(), sphere = new THREE.Sphere(), frustum = new THREE.Frustum(), matrix = new THREE.Matrix4();
     let culled = false;
     function dirty(a: THREE.InstancedBufferAttribute, count: number) { a.clearUpdateRanges(); if (count) { a.addUpdateRange(0, count * a.itemSize); a.needsUpdate = true; } }
     return {
+        globalSort(camera: THREE.Camera, options: import("./types.js").ParticleSortOptions) { alphaSort.sort(camera, variants.map(e => e.mesh), options); },
+        beginLights() { for (const entry of variants) entry.mesh.userData.particleSortReset?.(); lights?.begin(); },
+        light(_i: number, id: number, age: number, random: number, p: THREE.Vector3, color: THREE.Color, alpha: number, size: number) { lights?.particle(id, age, random, p, color, alpha, size); },
+        setPresentationTime(time: number) { presentationTime = time; },
+        get activeLightCount() { return lights?.activeCount ?? 0; },
+        get geometryCount() { return alphaSort.count + variants.length + (trails ? 1 : 0); },
         setRenderOrder,
         sorted(order: ArrayLike<number>) { if (variants.length === 1) return; choiceScratch.set(displayChoices); for (let i = 0; i < order.length; i++) displayChoices[i] = choiceScratch[order[i]!]!; gather(); },
         geometry, material, mesh, attributes, centers, appearances, dimensions, velocities, scales, rotations, atlas, customAttributes,
         get culled() { return culled; },
-        get resourceCount() { return variants.length + (trails ? 1 : 0); },
-        get materialCount() { return (trails ? 1 : 0) + (standard ? 4 : options.runtime?.material ? 0 : 1); },
+        get resourceCount() { return alphaSort.count + variants.length + (trails ? 1 : 0) + (lights?.count ?? 0); },
+        get materialCount() { return (trails?.materialCount ?? 0) + (standard ? 4 : options.runtime?.material ? 0 : 1); },
         get activeTrailCount() { return trails?.activeTrailCount ?? 0; },
         clear() { trails?.clear(); },
         setDepthSource(texture: THREE.Texture, width: number, height: number, origin = { x: 0, y: 0 }) {
@@ -343,10 +399,10 @@ export function createRenderer(parent: THREE.Object3D, options: ParticleEmitterO
             }
             bounds.expandByScalar(padding);
             bounds.getBoundingSphere(sphere); matrix.multiplyMatrices(camera.projectionMatrix, camera.matrixWorldInverse); frustum.setFromProjectionMatrix(matrix);
-            culled = bounds.isEmpty() || (!screenSize && !frustum.intersectsSphere(sphere));
-            for (const entry of variants) entry.mesh.visible = !culled && entry.geometry.instanceCount > 0; if (trails) trails.mesh.visible = !culled && trails.mesh.geometry.instanceCount > 0;
+            culled = bounds.isEmpty() || (!screenSize && !cameraScale && !frustum.intersectsSphere(sphere));
+            for (const entry of variants) { const visible = !culled && entry.geometry.instanceCount > 0; if (entry.mesh.userData.particleSortCull) { entry.mesh.userData.particleSortCull(visible); entry.mesh.visible = false; } else entry.mesh.visible = visible; } if (trails) trails.mesh.visible = !culled && trails.mesh.geometry.instanceCount > 0;
             return !culled;
         },
-        dispose() { for (const entry of variants) { entry.mesh.removeFromParent(); entry.geometry.dispose(); } standard?.dispose(); if (standard || !options.runtime?.material) { material.dispose(); material.uniforms.particleMap!.value = null; material.uniforms.sceneDepth!.value = null; } trails?.dispose(); },
+        dispose() { for (const entry of variants) entry.mesh.userData.particleSortReset?.(); alphaSort.dispose(); lights?.dispose(); for (const entry of variants) { entry.mesh.removeFromParent(); entry.geometry.dispose(); } standard?.dispose(); if (standard || !options.runtime?.material) { material.dispose(); material.uniforms.particleMap!.value = null; material.uniforms.sceneDepth!.value = null; } trails?.dispose(); },
     };
 }

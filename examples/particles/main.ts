@@ -47,6 +47,7 @@ function select(id: PresetId | null): void {
     selected = id;
     document.body.classList.toggle("focused", selected !== null);
     focus.hidden = selected === null;
+    document.querySelector<HTMLElement>("#depth-sort-control")!.hidden = selected !== "shards";
     gallery.closest("main")!.inert = selected !== null;
     if (preset) {
         document.querySelector("#focus-title")!.textContent = preset.name;
@@ -86,6 +87,7 @@ function render(deltaMs: number): void {
         renderer.setViewport(rect.left, innerHeight - rect.bottom, rect.width, rect.height);
         renderer.setScissor(left, innerHeight - bottom, right - left, bottom - top);
         effect.prepareRender?.(renderer);
+        if (selected === "shards" && document.querySelector<HTMLInputElement>("#depth-sort")!.checked) effect.sortDepth?.();
         renderer.render(effect.scene, effect.camera);
         renderedIds.push(view.preset.id);
         visibleParticleCount += effect.emitters.reduce((n, e) => n + e.inspect().activeParticleCount, 0);
@@ -126,6 +128,7 @@ document.querySelector<HTMLInputElement>("#speed")!.addEventListener("input", ev
     speed = Number((event.target as HTMLInputElement).value);
     document.querySelector("#speed-value")!.textContent = `${speed}×`;
 }, listenerOptions);
+document.querySelector("#depth-sort")!.addEventListener("change", () => render(0), listenerOptions);
 document.querySelector("#back")!.addEventListener("click", () => select(null), listenerOptions);
 document.querySelector("#next")!.addEventListener("click", () => moveSelection(1), listenerOptions);
 document.querySelector(".brand")!.addEventListener("click", event => { event.preventDefault(); select(null); scrollTo({ top: 0 }); }, listenerOptions);

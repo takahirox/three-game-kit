@@ -53,6 +53,13 @@ export function createMotion(options: ParticleEmitterOptions) {
         }
     }
     if (new Set(colliders.map(c => c.id)).size !== colliders.length) throw new TypeError("collider IDs must be unique");
+    if (options.drag !== undefined && typeof options.drag !== "number") record(options.drag, ["coefficient", "multiplyBySize", "multiplyByVelocity"], "drag");
+    const dragInput = typeof options.drag === "object" ? options.drag : undefined;
+    if (dragInput) record(dragInput, ["coefficient", "multiplyBySize", "multiplyByVelocity"], "drag");
+    for (const flag of [dragInput?.multiplyBySize, dragInput?.multiplyByVelocity]) if (flag !== undefined && typeof flag !== "boolean") throw new TypeError("drag multipliers must be boolean");
+    const coefficient = dragInput?.coefficient;
+    const dragCurve = dragInput ? distribution(typeof coefficient === "number" ? [{ time: 0, value: coefficient }, { time: 1, value: coefficient }] : coefficient!, 0, 1e6, "drag coefficient") : undefined;
+    const bySize = dragInput?.multiplyBySize ?? false, byVelocity = dragInput?.multiplyByVelocity ?? false;
     const stepMs = number(options.simulationStepMs ?? 1000 / 60, 1, 100, "simulationStepMs");
     const limitInput = options.limitVelocity;
     if (limitInput !== undefined && typeof limitInput !== "number") record(limitInput, ["speed", "axes", "dampen"], "limitVelocity");
@@ -79,11 +86,12 @@ export function createMotion(options: ParticleEmitterOptions) {
             if (orbital) { orbit.set(orbital[0]!.sample(t, r), orbital[1]!.sample(t, r), orbital[2]!.sample(t, r)); delta.copy(p).sub(orbitalOffset); v.add(orbit.cross(delta)); }
             if (radial) v.addScaledVector(delta.copy(p).sub(orbitalOffset).normalize(), radial.sample(t, r));
         },
-        enabled: !!(options.angularVelocityAxesOverLife || options.angularVelocityAxesBySpeed || velocity || force || noise || orbital || radial || modifier || options.inheritVelocityMode === "current" || options.inheritVelocityOverLife || fields.length || collision || options.limitVelocity !== undefined || options.runtime?.update || options.triggers?.length), stepMs, maxSteps,
+        enabled: !!(dragCurve || options.angularVelocityAxesOverLife || options.angularVelocityAxesBySpeed || velocity || force || noise || orbital || radial || modifier || options.inheritVelocityMode === "current" || options.inheritVelocityOverLife || fields.length || collision || options.limitVelocity !== undefined || options.runtime?.update || options.triggers?.length), stepMs, maxSteps,
         initialVelocity(v: THREE.Vector3, random = 0) { if (velocity) for (let k = 0; k < 3; k++) { const c = velocity[k]; if (c) v.setComponent(k, v.getComponent(k) + c.sample(0, random)); } limit(v, 0, random, 0); },
         /** Returns collision/kill flags. p and v are reusable caller-owned scratch vectors. */
-        step(p: THREE.Vector3, v: THREE.Vector3, dtMs: number, ageMs: number, lifetimeMs: number, seed: number, acceleration: THREE.Vector3, drag: number): number {
+        step(p: THREE.Vector3, v: THREE.Vector3, dtMs: number, ageMs: number, lifetimeMs: number, seed: number, acceleration: THREE.Vector3, drag: number, size = 1): number {
             const dt = dtMs / 1000, t0 = Math.min(1, ageMs / lifetimeMs), t1 = Math.min(1, (ageMs + dtMs) / lifetimeMs);
+            if (dragCurve) drag = Math.min(1e12, dragCurve.sample(t0, seed / 4294967296) * (bySize ? size : 1) * (byVelocity ? v.length() : 1));
             f.copy(acceleration);
             for (let k = 0; k < 3; k++) {
                 const fc = force?.[k], vc = velocity?.[k];
