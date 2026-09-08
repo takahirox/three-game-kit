@@ -179,12 +179,12 @@ export function createParticleEmitter(parent: ParticleSceneParent, options: Part
         if (!done) { completed = false; return; }
         if (!completed) { completed = true; runtime.onComplete?.(); }
     }
-    function updateInherited(i: number, age: number, commit: boolean) {
+    function updateInherited(i: number, age: number, commit: boolean, apply = true) {
         if (!changingInherit) return;
         const factor = inheritVelocity * inheritCurve.sample(age / lifetime[i]!, noiseSeeds[i]! / 4294967296);
         for (let k = 0; k < 3; k++) {
             const index = i * 3 + k, next = (inheritMode === "current" ? inherited.getComponent(k) : inheritedAtBirth[index]!) * factor;
-            v.setComponent(k, v.getComponent(k) + next - inheritedApplied[index]!);
+            if (apply) v.setComponent(k, v.getComponent(k) + next - inheritedApplied[index]!);
             if (commit) inheritedApplied[index] = next;
         }
     }
@@ -212,11 +212,12 @@ export function createParticleEmitter(parent: ParticleSceneParent, options: Part
             droppedSimulationMs = Math.min(Number.MAX_SAFE_INTEGER, droppedSimulationMs + skipped); steps = motion.maxSteps;
         }
         for (let n = 0; n < steps; n++) {
+            const step = Math.min(motion.stepMs, lifeEnd[i]! - current);
             updateInherited(i, current, true);
-            if (variation.integrated) { motion.reportVelocity(eventVelocity.copy(v), p, current, lifetime[i]!, noiseSeeds[i]!); variation.step(i, current, lifetime[i]!, motion.stepMs, eventVelocity.length(), noiseSeeds[i]! / 4294967296); }
-            const flags = motion.step(p, v, motion.stepMs, current, lifetime[i]!, noiseSeeds[i]!, acceleration, drag);
-            current += motion.stepMs; ages[i] = current;
-            customStep(i, current, motion.stepMs);
+            if (variation.integrated) { motion.reportVelocity(eventVelocity.copy(v), p, current, lifetime[i]!, noiseSeeds[i]!); variation.step(i, current, lifetime[i]!, step, eventVelocity.length(), noiseSeeds[i]! / 4294967296); }
+            const flags = motion.step(p, v, step, current, lifetime[i]!, noiseSeeds[i]!, acceleration, drag);
+            current += step; ages[i] = current;
+            customStep(i, current, step);
             renderer.sample(i, p, born[i]! + current);
             if (!collisionStep(flags, i, current)) return false;
         }
@@ -338,7 +339,12 @@ export function createParticleEmitter(parent: ParticleSceneParent, options: Part
         for (let i = active - 1; i >= 0; i--) {
             if (!evaluate(i, elapsed)) { remove(i, evaluatedDeathTime); expired = addCount(expired, 1); continue; }
             const age = elapsed - born[i]!;
-            if (motion.enabled && age > ages[i]!) customStep(i, age, age - ages[i]!);
+            if (motion.enabled && age > ages[i]!) {
+                const remainder = age - ages[i]!;
+                if (variation.integrated) { motion.reportVelocity(eventVelocity.copy(v), p, age, lifetime[i]!, noiseSeeds[i]!); variation.step(i, ages[i]!, lifetime[i]!, remainder, eventVelocity.length(), noiseSeeds[i]! / 4294967296); }
+                updateInherited(i, ages[i]!, true, false); ages[i] = age;
+                customStep(i, age, remainder);
+            }
             p.toArray(positions, i * 3); v.toArray(velocities, i * 3); ages[i] = age;
         }
         next.enabled = true; motion = next; upload();

@@ -769,3 +769,19 @@ test("local inheritance observes parent movement and sub-emitter size/rotation i
     close(child.geometry.getAttribute("particleScale").getX(0), 2); close(child.geometry.getAttribute("particleScale").getY(0), 3);
     const r = child.geometry.getAttribute("particleRotation"); close(r.getX(0), 0.4); close(r.getZ(0), Math.PI / 2); effect.dispose();
 });
+
+test("dynamic input replacement commits fractional angular and inherited-velocity previews without a jump", () => {
+    const constant = value => [{ time: 0, value }, { time: 1, value }];
+    const s = setup({ speed: 0, lifetimeMs: 2000, inheritVelocity: 1, inheritVelocityMode: "current", simulationStepMs: 100, angularVelocity3D: { x: 2 }, angularVelocityAxesOverLife: { x: constant(2) } });
+    s.emitter.present(0); s.emitter.emit(1); s.emitter.setTransform({ x: 0.05, y: 0, z: 0 }); s.emitter.present(50);
+    close(s.attr("particleRotation").getX(0), 0.2); close(s.centers()[0], 0.05);
+    s.emitter.setCollision({ colliders: [] }); close(s.attr("particleRotation").getX(0), 0.2); close(s.centers()[0], 0.05);
+    s.emitter.present(100); close(s.centers()[0], 0.05); close(s.attr("particleRotation").getX(0), 0.4); s.emitter.dispose();
+});
+
+test("collision lifetime loss ends at the shortened fractional deadline during catch-up", () => {
+    const s = setup({ speed: 0, lifetimeMs: 1000, velocity: { x: 0, y: -1, z: 0 }, position: { x: 0, y: 0.05, z: 0 }, simulationStepMs: 10, maxSubSteps: 128, events: true,
+        collision: { colliders: [{ kind: "plane", normal: { x: 0, y: 1, z: 0 }, offset: 0 }], bounce: 1, lifetimeLoss: 0.495 } });
+    s.emitter.emit(1); s.emitter.present(0); s.emitter.present(1000);
+    const death = s.emitter.drainEvents().find(e => e.kind === "death"); close(death.timeMs, 505); assert.equal(s.emitter.inspect().activeParticleCount, 0); s.emitter.dispose();
+});
