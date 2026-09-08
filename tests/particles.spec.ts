@@ -1,14 +1,14 @@
 import { expect, test } from "@playwright/test";
 
-test("all twenty-six presets render, switch, and release their bounded GPU resources", async ({ page }) => {
+test("all thirty presets render, switch, and release their bounded GPU resources", async ({ page }) => {
     const errors: string[] = [];
     page.on("pageerror", error => errors.push(error.message));
     page.on("console", message => { if (message.type() === "error") errors.push(message.text()); });
     await page.goto("/examples/particles/index.html?test=1");
     await page.waitForFunction(() => "__particles" in window);
-    await expect(page.locator(".card")).toHaveCount(26);
+    await expect(page.locator(".card")).toHaveCount(30);
     const initial = await page.evaluate(() => (window as any).__particles.inspect());
-    expect(initial.initializedCount).toBeLessThan(26);
+    expect(initial.initializedCount).toBeLessThan(30);
     expect(initial.renderedIds.length).toBeGreaterThan(1);
     await page.screenshot({ path: "test-results/particles-workshop.png" });
 
@@ -25,17 +25,17 @@ test("all twenty-six presets render, switch, and release their bounded GPU resou
         expect(result.renderedIds, result.id).toEqual([result.id]);
         expect(result.bright, `${result.id} visible pixels`).toBeGreaterThan(20);
         expect(result.calls, result.id).toBeGreaterThan(0);
-        expect(result.calls, `${result.id} draw budget`).toBeLessThanOrEqual(result.id === "shards" ? 7 : 5);
-        if (["turbulence", "orbital-current", "comet", "shards", "cascade", "surface"].includes(result.id)) {
+        expect(result.calls, `${result.id} draw budget`).toBeLessThanOrEqual(({ shards: 7, "silk-orbit": 8, "gilded-fountain": 6, "lantern-garden": 15, "opal-bloom": 51 } as Record<string, number>)[result.id] ?? 5);
+        if (["turbulence", "orbital-current", "comet", "shards", "cascade", "surface", "silk-orbit", "gilded-fountain", "lantern-garden", "opal-bloom"].includes(result.id)) {
             expect(result.triangles, result.id).toBeGreaterThanOrEqual(result.particles * 2);
         } else expect(result.triangles, result.id).toBe(result.particles * 2);
     }
     const populated = await page.evaluate(() => (window as any).__particles.inspect());
-    expect(populated.initializedCount).toBe(26);
+    expect(populated.initializedCount).toBe(30);
     // Eight shared sprites, opaque depth/color, shadow depth/color, and Three.js's renderer-owned DFG lookup texture.
     // Comet also owns a shadow depth/color pair.
     expect(populated.textures).toBeLessThanOrEqual(15);
-    expect(populated.geometries).toBeLessThanOrEqual(80);
+    expect(populated.geometries).toBeLessThanOrEqual(148);
     await page.evaluate(() => { const api = (window as any).__particles; for (const id of api.inspect().presetIds) api.select(id); });
     const reused = await page.evaluate(() => (window as any).__particles.inspect());
     expect(reused.geometries).toBe(populated.geometries);
@@ -77,7 +77,7 @@ test("mobile gallery scrolls to the remaining effects and supports focus navigat
     expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBe(390);
     await page.screenshot({ path: "test-results/particles-mobile.png" });
     await page.getByRole("button", { name: "Next effect" }).click();
-    await expect(page.locator("#focus-title")).toHaveText("Solar flare");
+    await expect(page.locator("#focus-title")).toHaveText("Celestial silk");
     await page.getByRole("button", { name: "All experiments" }).click();
     await expect(page.locator("#focus")).toBeHidden();
 });
@@ -108,18 +108,20 @@ test("authored formations remain populated beyond their original particle lifeti
 });
 
 test("new module effects share the atlas gallery, controls and resource lifecycle", async ({ page }) => {
+    // Ten simultaneous scenes over two full lifecycles on software WebGL.
+    test.setTimeout(90_000);
     const errors: string[] = [];
     page.on("pageerror", error => errors.push(error.message));
     page.on("console", message => { if (message.type() === "error") errors.push(message.text()); });
-    await page.setViewportSize({ width: 1500, height: 1300 });
+    await page.setViewportSize({ width: 1500, height: 2100 });
     await page.goto("/examples/particles/index.html?test=1");
     await page.waitForFunction(() => "__particles" in window);
-    await page.getByRole("button", { name: "New 6", exact: true }).click();
-    await expect(page.locator(".card:visible")).toHaveCount(6);
-    await expect(page.locator(".new-badge")).toHaveCount(6);
+    await page.getByRole("button", { name: "New 10", exact: true }).click();
+    await expect(page.locator(".card:visible")).toHaveCount(10);
+    await expect(page.locator(".new-badge")).toHaveCount(10);
     await expect(page).toHaveURL(/particles\/index\.html/);
     const initial = await page.evaluate(() => (window as any).__particles.inspect());
-    expect(initial.renderedIds).toEqual(["turbulence", "orbital-current", "comet", "shards", "cascade", "surface"]);
+    expect(initial.renderedIds).toEqual(["turbulence", "orbital-current", "comet", "shards", "cascade", "surface", "silk-orbit", "gilded-fountain", "lantern-garden", "opal-bloom"]);
     expect(initial.effects.find((e: any) => e.id === "surface").drawSavings).toBe(1);
     await page.screenshot({ path: "test-results/particles-new-effects.png", fullPage: true });
     await page.getByRole("button", { name: "Pause", exact: true }).click();
@@ -136,22 +138,22 @@ test("new module effects share the atlas gallery, controls and resource lifecycl
     await page.evaluate(() => { const api = (window as any).__particles; for (let t = 2016; t <= 7000; t += 80) api.present(t); });
     const later = await page.evaluate(() => (window as any).__particles.inspect());
     expect(later.speed).toBe(2);
-    expect(restarted.initializedCount).toBe(6);
+    expect(restarted.initializedCount).toBe(10);
     // WebGL allocates geometry only on its first visible draw; exercise a full
     // event cycle before comparing the next cycle's resource counts.
-    // A second weighted crystal geometry also participates in the shadow pass.
-    expect(later.geometries).toBeLessThanOrEqual(16);
+    // Native modules (16) + scene/trail geometries (20) + 48 bounded alpha proxies.
+    expect(later.geometries).toBeLessThanOrEqual(84);
     await page.evaluate(() => { const api = (window as any).__particles; for (let t = 7016; t <= 12000; t += 80) api.present(t); });
     const repeated = await page.evaluate(() => (window as any).__particles.inspect());
     expect(repeated.geometries).toBe(later.geometries); expect(repeated.programs).toBe(later.programs);
     for (const emitter of later.emitters) expect(emitter.activeParticleCount).toBeLessThanOrEqual(emitter.capacity);
     await page.locator('[data-id="shards"]').click();
     await expect(page.locator("#focus-title")).toHaveText("Crystal impact");
-    await expect(page.locator("#focus-index")).toHaveText("24 / 26");
+    await expect(page.locator("#focus-index")).toHaveText("24 / 30");
     await page.keyboard.press("Escape");
-    await expect(page.locator(".card:visible")).toHaveCount(6);
-    await page.getByRole("button", { name: "All effects 26", exact: true }).click();
-    await expect(page.locator(".card:visible")).toHaveCount(26);
+    await expect(page.locator(".card:visible")).toHaveCount(10);
+    await page.getByRole("button", { name: "All effects 30", exact: true }).click();
+    await expect(page.locator(".card:visible")).toHaveCount(30);
     const disposed = await page.evaluate(() => { const api = (window as any).__particles; api.dispose(); api.dispose(); return api.inspect(); });
     expect(disposed.children).toBe(0); expect(disposed.geometries).toBe(0); expect(disposed.programs).toBe(0);
     expect(errors).toEqual([]);
@@ -196,4 +198,38 @@ test("global transparency, billboard alignments, particle lights and PBR trails 
     await page.getByRole("checkbox", { name: "Refine overlapping crystals" }).uncheck();
     expect(await page.evaluate(() => (window as any).__particles.inspect().calls)).toBeLessThanOrEqual(7);
     await page.evaluate(() => (window as any).__particles.dispose());
+});
+
+test("composed showcases stay animated, pause exactly and release lights across restart", async ({ page }) => {
+    test.setTimeout(60_000);
+    const errors: string[] = [];
+    page.on("pageerror", error => errors.push(error.message));
+    page.on("console", message => { if (message.type() === "error") errors.push(message.text()); });
+    await page.goto("/examples/particles/index.html?test=1");
+    await page.waitForFunction(() => "__particles" in window);
+    let timestamp = 0;
+    for (const id of ["silk-orbit", "gilded-fountain", "lantern-garden", "opal-bloom"]) {
+        await page.evaluate(id => (window as any).__particles.select(id), id);
+        for (let i = 0; i < 20; i++) await page.evaluate(t => (window as any).__particles.present(t), timestamp += 40);
+        const before = await page.evaluate(() => (window as any).__particles.inspect());
+        const effect = before.effects.find((e: any) => e.id === id);
+        const lights = effect.emitters.reduce((n: number, e: any) => n + e.activeLightCount, 0);
+        expect(lights, `${id} real particle lights`).toBe(id === "gilded-fountain" ? 4 : id === "lantern-garden" ? 6 : 0);
+        await page.screenshot({ path: `test-results/particles-${id}.png` });
+        await page.getByRole("button", { name: "Pause", exact: true }).click();
+        const pausedPixels = await page.locator("#focus-preview").screenshot();
+        await page.evaluate(t => (window as any).__particles.present(t), timestamp += 400);
+        expect(await page.locator("#focus-preview").screenshot()).toEqual(pausedPixels);
+        await page.getByRole("button", { name: /Burst/ }).click();
+        const burst = await page.evaluate(() => (window as any).__particles.inspect());
+        expect(burst.particles).toBeGreaterThan(before.particles);
+        if (id === "opal-bloom") expect(burst.calls).toBeLessThanOrEqual(51);
+        await page.getByRole("button", { name: /Restart/ }).click();
+        const restarted = await page.evaluate(() => (window as any).__particles.inspect());
+        expect(restarted.effects.find((e: any) => e.id === id).emitters.reduce((n: number, e: any) => n + e.activeLightCount, 0)).toBe(lights);
+        await page.getByRole("button", { name: "Play", exact: true }).click();
+    }
+    const disposed = await page.evaluate(() => { const api = (window as any).__particles; api.dispose(); return api.inspect(); });
+    expect(disposed.geometries).toBe(0); expect(disposed.children).toBe(0); expect(disposed.programs).toBe(0);
+    expect(errors).toEqual([]);
 });

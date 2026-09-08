@@ -595,16 +595,17 @@ add packaging complexity without an independent dependency/runtime boundary.
 `vfx` continues to delegate bursts to this engine; its existing trail and popup
 commands retain their semantics. Native particle trails are a separate capability.
 
-The [particle atlas](../../examples/particles/README.md) contains 26 effects in one
-gallery. Its six **NEW** effects demonstrate native
+The [particle atlas](../../examples/particles/README.md) contains 30 effects in one
+gallery. Its ten **NEW** effects demonstrate native
 curved emission, soft intersections, dynamic forces/colliders, persistent ribbons,
 lit 3D shards, probabilistic cascades, deforming surface emission and batching with the same cards, focus view and playback
-controls as the original 20 effects. The **New** filter selects these six.
+controls as the original 20 effects. The **New** filter selects these ten. Four composed showcases add PBR silk, a lit crystal fountain,
+a lantern garden and depth-sorted translucent petals.
 
 `pnpm verify` covers deterministic sampling, playback, shapes, motion, collision,
 events, transforms, sorting, trails, budgets, graph validation and resource ownership.
 `pnpm verify:particles` adds real Chromium shader compilation and visible output
-for the 20 atlas presets and six module experiments, control interactions, mobile
+for the 20 atlas presets and ten module/showcase experiments, control interactions, mobile
 navigation and GPU resource stability/disposal. CI runs both and retains screenshots.
 
 

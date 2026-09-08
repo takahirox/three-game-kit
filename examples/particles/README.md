@@ -1,7 +1,7 @@
 # Particle atlas
 
 Run `pnpm exec vite --host 127.0.0.1`, then open `/examples/particles/index.html`.
-The gallery contains **26 animated effects** made with the public
+The gallery contains **30 animated effects** made with the public
 `@three-game-kit/client/particles` API:
 
 | Fire | Cosmic | Magic | Energy | Nature |
@@ -12,9 +12,10 @@ The gallery contains **26 animated effects** made with the public
 | | Meteor shower | Astral sigil | Digital rain | Toxic garden |
 | | Warp speed | | | |
 | Ember turbulence · NEW | Ribbon flight · NEW | Prismatic forge · NEW | Orbital current · NEW | Crystal impact · NEW |
-| Midnight cascade · NEW | | | | |
+| Midnight cascade · NEW | Celestial silk · NEW | | | Lantern garden · NEW |
+| Gilded fountain · NEW | | | | Opal bloom · NEW |
 
-Use **New** to filter the six effects marked **NEW**, or filter by category. Click a card to enlarge it, or use **← / →** in the enlarged
+Use **New** to filter the ten effects marked **NEW**, or filter by category. Click a card to enlarge it, or use **← / →** in the enlarged
 view. **Escape** returns to the grid. **Pause / Play** (or Space outside buttons)
 freezes/resumes motion; **Burst** adds short-lived particles, **Restart** resets
 the selected effect or the entire gallery, and the speed slider runs at 0.25–2×.
@@ -26,7 +27,8 @@ render. Authored rings and constellations replay their initial layout before the
 finite particle lifetime expires; temporary user bursts are not replayed. Initialized effects are reused when switching views. Each preset uses
 one to four emitters (with optional native trails and batching), fixed capacities with burst headroom, and eight shared
 procedural textures. Ember turbulence additionally owns a small opaque depth target
-for soft intersections. Alpha smoke/petals use per-emitter sorting. Reduced-motion
+for soft intersections. Alpha smoke/petals use per-emitter sorting. Opal bloom uses exact global sorting
+with a hard budget of 48 translucent petals; other layers remain instanced. Reduced-motion
 preferences start the gallery paused. No external images or packages are needed.
 
 `presets.ts` contains effect compositions and animation paths. `textures.ts`
@@ -34,7 +36,7 @@ generates the shared glow, star, streak, smoke, petal, lightning, ripple and gly
 assets. `main.ts` handles the gallery, clipping, controls and resource ownership.
 
 Run `pnpm verify:particles` for typechecking and Chromium checks. The tests visit
-all 26 effects, check visible output/draw budgets/instance counts, exercise
+all 30 effects, check visible output/draw budgets/instance counts, exercise
 switching, pause, burst, restart, category filters and mobile navigation, and
 verify that resources do not accumulate and are released on disposal. Screenshots
 are written under `test-results/particles-*.png`. If the default test port is
@@ -62,3 +64,22 @@ shared canvas. `presets.ts` contains their serializable definitions and system
 adapter alongside the original compositions. Browser verification covers their
 visible output, native rendering, switching, controls and resource disposal and
 captures `test-results/particles-new-effects.png`.
+
+## Composed showcases
+
+Four additional scenes in `showcases.ts` combine the newer modules:
+
+- **Celestial silk**: three wide PBR ribbons orbit a faceted dark core. Interpolated
+  emitter motion keeps their curves continuous, while orbital dust adds depth.
+- **Gilded fountain**: weighted PBR crystal meshes spin, slow under velocity-dependent
+  drag and bounce off the basin. Four pooled particle lights illuminate the pedestal;
+  stretched sparks and fine trails trace the jets.
+- **Lantern garden**: three wandering spirits cast six pooled particle lights onto
+  sculpted stones. Interpolated motion, octave noise and trails create their tails.
+- **Opal bloom**: at most 48 translucent petals are sorted exactly by depth, with
+  orbital/radial motion, per-axis sizes and a second layer of star trails.
+
+These scenes share the gallery's existing controls, lazy initialization and eight
+textures. Materials and scene geometry are disposed with each effect. The light
+pools are fixed; the garden's stones share a geometry and material. No new page,
+image download or engine dependency is required.

@@ -25,7 +25,7 @@ export function createTextures(): Record<TextureName, THREE.DataTexture> {
                     const noise = 0.7 + 0.15 * Math.sin(u * 15 + Math.sin(v * 13)) + 0.15 * Math.cos(v * 19 - u * 8);
                     alpha = Math.max(0, 1 - r) ** 1.5 * noise; break;
                 }
-                case "petal": alpha = Math.max(0, Math.min(1, (1 - Math.hypot(u * 1.5, v * 0.85)) * 9)); break;
+                case "petal": alpha = Math.max(0, Math.min(1, (1 - Math.hypot(u * 1.5, v * 1.05)) * 5)); break;
                 case "bolt": {
                     const center = Math.sin(v * 13) * 0.16 + Math.sin(v * 27) * 0.07;
                     alpha = Math.exp(-Math.abs(u - center) * 65) * Math.max(0, 1 - Math.abs(v)); break;
