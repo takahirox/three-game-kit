@@ -42,3 +42,14 @@ to a Client Runtime with `createParticleFeature`; call `client.boot()`,
 `client.startPresentation()`, and `client.shutdown()` on the returned runtime.
 See [particle API documentation](../../docs/features/particles.md) for engine
 limits, ownership, overload policy, and simulation-space semantics.
+
+## Native module experiments
+
+Open `/examples/particles/modules.html` for six additional experiments built with
+serializable effect definitions and the public system API: turbulent fire, a
+vortex with trails, a distance-emitting comet, colliding mesh shards, a chained
+firework, and mesh/line emission with shared draws. Pause, restart, burst, speed
+and density controls apply across the six effects. No extra dependencies or assets
+are required. `modules.ts` contains their definitions. Browser verification also
+captures `test-results/particle-modules.png` and checks shader compilation, visible
+pixels and resource reuse/disposal for these modules.

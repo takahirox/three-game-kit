@@ -102,3 +102,32 @@ test("authored formations remain populated beyond their original particle lifeti
     expect(result.after).toEqual(result.before);
     expect(result.again).toEqual(result.before);
 });
+
+test("native modules render trails, mesh particles and event cascades with bounded resources", async ({ page }) => {
+    const errors: string[] = [];
+    page.on("pageerror", error => errors.push(error.message));
+    page.on("console", message => { if (message.type() === "error") errors.push(message.text()); });
+    await page.setViewportSize({ width: 1500, height: 1300 });
+    await page.goto("/examples/particles/modules.html?test=1");
+    await page.waitForFunction(() => "__particleModules" in window);
+    await expect(page.locator("article")).toHaveCount(6);
+    const initial = await page.evaluate(() => (window as any).__particleModules.inspect());
+    for (const effect of initial.effects) expect(effect.activeParticleCount, effect.id).toBeGreaterThan(0);
+    expect(initial.effects.find((e: any) => e.id === "surface").drawSavings).toBe(1);
+    const energy = await page.evaluate(() => (window as any).__particleModules.pixelEnergy());
+    for (const effect of energy) expect(effect.bright, effect.id).toBeGreaterThan(10);
+    await page.screenshot({ path: "test-results/particle-modules.png", fullPage: true });
+    await page.getByRole("button", { name: "Pause", exact: true }).click();
+    const frozen = await page.evaluate(() => { const api = (window as any).__particleModules; const before = api.inspect().time; api.present(2000); return { before, ...api.inspect() }; });
+    expect(frozen.paused).toBe(true); expect(frozen.time).toBe(frozen.before);
+    await page.getByRole("button", { name: "Burst", exact: true }).click();
+    await page.getByRole("button", { name: "Restart", exact: true }).click();
+    await page.getByRole("button", { name: "Play", exact: true }).click();
+    await page.evaluate(() => { const api = (window as any).__particleModules; for (let t = 2016; t <= 7000; t += 16) api.present(t); });
+    const later = await page.evaluate(() => (window as any).__particleModules.inspect());
+    expect(later.geometries).toBe(initial.geometries); expect(later.programs).toBe(initial.programs);
+    for (const effect of later.effects) expect(effect.activeParticleCount).toBeLessThanOrEqual(effect.capacity);
+    const disposed = await page.evaluate(() => { const api = (window as any).__particleModules; api.dispose(); api.dispose(); return api.inspect(); });
+    expect(disposed.children).toBe(0); expect(disposed.geometries).toBe(0); expect(disposed.programs).toBe(0);
+    expect(errors).toEqual([]);
+});

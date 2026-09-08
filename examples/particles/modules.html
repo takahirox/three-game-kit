@@ -1,0 +1,42 @@
+<!doctype html>
+<html lang="ja">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Particle modules — Three Game Kit</title>
+  <style>
+    :root { color-scheme: dark; font-family: system-ui, sans-serif; background: #080c16; color: #e9f2ff; }
+    * { box-sizing: border-box; } body { margin: 0; }
+    header, main, footer { max-width: 1400px; margin: auto; padding: 24px; }
+    header { position: relative; z-index: 2; background: #080c16; }
+    h1 { font-size: clamp(28px, 4vw, 48px); letter-spacing: -.04em; margin: 8px 0; }
+    p { color: #9eaec6; line-height: 1.7; } a { color: #83d9ff; }
+    nav { display: flex; gap: 12px; align-items: center; flex-wrap: wrap; }
+    button, select { background: #16233b; color: #e9f2ff; border: 1px solid #385274; border-radius: 8px; padding: 10px 16px; font: inherit; cursor: pointer; }
+    button:hover { background: #213958; } :focus-visible { outline: 2px solid #83d9ff; outline-offset: 3px; }
+    main { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 20px; padding-top: 0; }
+    article { border: 1px solid #24334a; border-radius: 16px; overflow: hidden; position: relative; }
+    .viewport { height: 300px; } .caption { background: #10192a; padding: 18px; position: relative; z-index: 2; }
+    h2 { font-size: 20px; margin: 0 0 8px; } .caption p { font-size: 13px; margin: 0; min-height: 66px; }
+    canvas { position: fixed; inset: 0; pointer-events: none; z-index: 1; }
+    footer { padding-top: 0; font-size: 13px; }
+    @media(max-width: 1050px) { main { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+    @media(max-width: 620px) { main { grid-template-columns: 1fr; } .viewport { height: 280px; } }
+  </style>
+</head>
+<body>
+  <header>
+    <a href="./index.html">← Particle atlas · 20 effects</a>
+    <h1>Particle modules</h1>
+    <p>乱流、力場、光の尾、立体粒子、衝突、連鎖エフェクト。新しい共通機能を使った6つの実験。</p>
+    <nav aria-label="Playback">
+      <button id="pause">Pause</button><button id="restart">Restart</button><button id="burst">Burst</button>
+      <label>Speed <select id="speed"><option value="0.25">0.25×</option><option value="1" selected>1×</option><option value="2">2×</option></select></label>
+      <label>Density <select id="density"><option value="1">100%</option><option value="0.5">50%</option><option value="0.25">25%</option></select></label>
+    </nav>
+  </header>
+  <main id="experiments"></main>
+  <footer><span id="stats"></span> · <a href="../../docs/features/particles.md">API documentation</a></footer>
+  <script type="module" src="./modules.ts"></script>
+</body>
+</html>
