@@ -19,7 +19,7 @@ const views = PRESETS.map((preset, index) => {
     card.dataset.id = preset.id;
     card.style.setProperty("--effect-color", preset.color);
     card.setAttribute("aria-label", `${preset.name} — ${preset.category}`);
-    card.innerHTML = `<div class="card-head"><span class="card-number">${String(index + 1).padStart(2, "0")}</span><span class="expand">↗</span></div><div class="preview" role="img" aria-label="${preset.name}"></div><div class="card-caption"><h3>${preset.name}</h3><span class="tag">${preset.category}</span></div>`;
+    card.innerHTML = `<div class="card-head"><span class="card-number">${String(index + 1).padStart(2, "0")}${"native" in preset ? ' <span class="new-badge">NEW</span>' : ""}</span><span class="expand">↗</span></div><div class="preview" role="img" aria-label="${preset.name}"></div><div class="card-caption"><h3>${preset.name}</h3><span class="tag">${preset.category}</span></div>`;
     card.onclick = () => select(preset.id);
     gallery.append(card);
     return { preset, card, preview: card.querySelector<HTMLElement>(".preview")!, effect: null as Effect | null };
@@ -53,7 +53,7 @@ function select(id: PresetId | null): void {
         document.querySelector("#focus-category")!.textContent = preset.category + " / PARTICLE EXPERIMENT";
         document.querySelector<HTMLElement>("#focus-category")!.style.color = preset.color;
         document.querySelector("#focus-description")!.textContent = preset.description;
-        document.querySelector("#focus-index")!.textContent = `${String(PRESETS.indexOf(preset) + 1).padStart(2, "0")} / 20`;
+        document.querySelector("#focus-index")!.textContent = `${String(PRESETS.indexOf(preset) + 1).padStart(2, "0")} / ${PRESETS.length}`;
         focusPreview.setAttribute("aria-label", preset.name);
         document.querySelector<HTMLButtonElement>("#back")!.focus({ preventScroll: true });
     } else returnFocus?.focus({ preventScroll: true });
@@ -85,6 +85,7 @@ function render(deltaMs: number): void {
         effect.advance(paused ? 0 : deltaMs * speed, true);
         renderer.setViewport(rect.left, innerHeight - rect.bottom, rect.width, rect.height);
         renderer.setScissor(left, innerHeight - bottom, right - left, bottom - top);
+        effect.prepareRender?.(renderer);
         renderer.render(effect.scene, effect.camera);
         renderedIds.push(view.preset.id);
         visibleParticleCount += effect.emitters.reduce((n, e) => n + e.inspect().activeParticleCount, 0);
@@ -131,7 +132,7 @@ document.querySelector(".brand")!.addEventListener("click", event => { event.pre
 for (const button of document.querySelectorAll<HTMLButtonElement>(".filter")) button.addEventListener("click", () => {
     filter = button.dataset.filter!;
     for (const b of document.querySelectorAll<HTMLButtonElement>(".filter")) { b.classList.toggle("active", b === button); b.setAttribute("aria-pressed", String(b === button)); }
-    for (const view of views) view.card.hidden = filter !== "ALL" && view.preset.category !== filter;
+    for (const view of views) view.card.hidden = filter === "NEW" ? !("native" in view.preset) : filter !== "ALL" && view.preset.category !== filter;
     render(0);
 }, listenerOptions);
 addEventListener("keydown", event => {
@@ -160,6 +161,7 @@ if (testMode) {
             programs: renderer.info.programs?.length ?? 0,
             initializedCount: views.filter(v => v.effect).length,
             children: views.reduce((n, v) => n + (v.effect?.scene.children.length ?? 0), 0),
+            effects: views.filter(v => v.effect).map(v => ({ id: v.preset.id, drawSavings: v.effect!.drawSavings ?? 0, emitters: v.effect!.emitters.map(e => e.inspect()) })),
             emitters: views.flatMap(v => v.effect?.emitters.map(e => e.inspect()) ?? []),
         }),
         pixelEnergy: () => {

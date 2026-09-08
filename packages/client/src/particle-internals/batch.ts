@@ -7,7 +7,7 @@ export function createBatches(parent: THREE.Object3D) {
     for (const child of parent.children) {
         if (!(child instanceof THREE.Mesh) || !(child.geometry instanceof THREE.InstancedBufferGeometry) || !(child.material instanceof THREE.ShaderMaterial)) continue;
         const g = child.geometry, m = child.material;
-        if (m.blending !== THREE.AdditiveBlending) continue;
+        if (child.userData.particleCustomMaterial || m.blending !== THREE.AdditiveBlending || m.defines.SOFT_PARTICLES) continue;
         const key = JSON.stringify({ vertex: m.vertexShader, fragment: m.fragmentShader, defines: m.defines, blending: m.blending, depth: m.depthTest, side: m.side,
             uniforms: Object.fromEntries(Object.entries(m.uniforms).map(([k, u]) => [k, u.value instanceof THREE.Texture ? u.value.uuid : u.value])),
             index: Array.from(g.index?.array ?? []),
