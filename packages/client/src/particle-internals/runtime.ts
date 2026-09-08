@@ -30,6 +30,7 @@ export function createRuntime(options: ParticleEmitterOptions, capacity: number)
         return { name: a.name, size, value, offset };
     });
     const data = new Float32Array(capacity * stride), scratch = new Float32Array(stride);
+    if (options.triggers !== undefined && (!Array.isArray(options.triggers) || options.triggers.length > 32)) throw new TypeError("triggers requires up to 32 unique volumes");
     const triggers = Array.from(options.triggers ?? [], t => {
         record(t, ["id", "volume"], "trigger");
         if (typeof t.id !== "string" || !/^[a-zA-Z0-9_-]{1,64}$/.test(t.id)) throw new TypeError("Invalid trigger id");
@@ -48,15 +49,16 @@ export function createRuntime(options: ParticleEmitterOptions, capacity: number)
         attributes, meshPositions, onComplete, enabled: !!(update || triggers.length),
         birth(i: number) { if (triggers.length) masks[i] = 0; for (const a of attributes) data.set(a.value, i * stride + a.offset); },
         remove(i: number, last: number) { if (stride) data.copyWithin(i * stride, last * stride, (last + 1) * stride); if (triggers.length) masks[i] = masks[last]!; },
-        step(i: number, id: number, age: number, lifetime: number, dt: number, p: THREE.Vector3, v: THREE.Vector3, emit: (kind: ParticleEvent["kind"], triggerId: string) => void) {
+        step(i: number, id: number, age: number, lifetime: number, dt: number, p: THREE.Vector3, v: THREE.Vector3, emit: (kind: ParticleEvent["kind"], triggerId: string) => void, birth?: () => void) {
             if (update) {
                 context.particleId = id; context.ageMs = age; context.lifetimeMs = lifetime; context.deltaMs = dt;
-                context.position.copy(p); context.velocity.copy(v); scratch.set(data.subarray(i * stride, (i + 1) * stride));
+                context.position.copy(p); context.velocity.copy(v); for (let k = 0; k < stride; k++) scratch[k] = data[i * stride + k]!;
                 update(context satisfies ParticleUpdateContext);
                 for (let k = 0; k < 3; k++) { number(context.position.getComponent(k), -1e12, 1e12, "custom position"); number(context.velocity.getComponent(k), -1e12, 1e12, "custom velocity"); }
                 for (let k = 0; k < scratch.length; k++) number(scratch[k]!, -1e12, 1e12, "custom attribute");
                 p.copy(context.position); v.copy(context.velocity); data.set(scratch, i * stride);
             }
+            birth?.();
             let mask = 0;
             for (let k = 0; k < triggers.length; k++) {
                 const inside = triggers[k]!.contains(p), wasInside = !!(masks[i]! & (1 << k));

@@ -160,10 +160,12 @@ test("soft intersections, atlas blending, lighting and custom attributes produce
     await page.goto("/examples/particles/index.html?test=1");
     const result = await page.evaluate(async () => { const module = "/tests/support/particles-rendering.ts"; return (await import(module)).checkParticleRendering(); });
     expect(result.faded[0]).toBeGreaterThan(40); expect(result.faded[0]).toBeLessThan(65);
+    expect(result.perspectiveFaded[0]).toBeGreaterThan(40); expect(result.perspectiveFaded[0]).toBeLessThan(65);
     expect(result.solid[0]).toBeGreaterThan(245);
     expect(result.blended[0]).toBeGreaterThan(120); expect(result.blended[0]).toBeLessThan(135);
     expect(result.blended[2]).toBeGreaterThan(120); expect(result.blended[2]).toBeLessThan(135);
     expect(result.litFront[0]).toBeGreaterThan(240); expect(result.litBack[0]).toBeLessThan(5);
+    expect(result.tiltedLight[0]).toBeGreaterThan(120); expect(result.tiltedLight[0]).toBeLessThan(135);
     expect(result.customPixel[0]).toBeGreaterThan(120); expect(result.customPixel[0]).toBeLessThan(135);
     expect(result.borrowedDisposals).toBe(0); expect(result.remaining.geometries).toBe(0); expect(result.remaining.textures).toBe(0);
     expect(errors).toEqual([]);

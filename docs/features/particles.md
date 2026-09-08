@@ -142,6 +142,8 @@ particle's current appearance; rotation adds a radian offset. Velocity limits
 apply at birth and each numerical step. Sprite FPS overrides lifetime-based
 `cycles`; `row` restricts animation/wrapping to that row and may be `"random"`.
 `startFrame` can be fractional; `blend` interpolates adjacent atlas samples.
+Manual `emit(count, { color })` overrides the initial palette for that burst; an explicit
+`setParameters({ color })` switches future births to that constant color.
 
 ## Runtime scene inputs, callbacks and seeking
 
@@ -180,8 +182,9 @@ steps. Fractional render previews do not invoke it. Its vectors and flattened
 attribute array are reused scratch values; do not retain them. Names must begin
 with `custom` followed by an uppercase letter and be unique. Attributes contain
 1–4 components and the complete renderer must fit the portable 16-attribute GPU
-limit. Outputs must be finite. Callbacks cannot reenter the emitter; callback
-errors propagate. Deterministic callbacks should derive state from the supplied
+limit. Outputs must be finite. Update callbacks cannot reenter the emitter; callback
+errors propagate. Completion callbacks run after the update/routing operation and
+may dispose the completed emitter or effect. Deterministic callbacks should derive state from the supplied
 particle context instead of external frame counts.
 
 Emitter `runtime.onComplete` and effect/system `onComplete` notify once when

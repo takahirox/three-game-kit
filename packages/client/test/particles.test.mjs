@@ -589,3 +589,66 @@ test("simulation LOD reduces update frequency and offscreen pause resumes withou
     effect.setTransform(xyz(1000)); system.present(200); close(effect.inspect().emitters[0].state.elapsedMs, 100);
     effect.setTransform(xyz()); system.present(300); close(effect.inspect().emitters[0].state.elapsedMs, 200); system.dispose();
 });
+
+test("collision-killed trails expire relative to the contact step, including long catch-up frames", () => {
+    const a = setup({ capacity: 2, velocity: xyz(1), lifetimeMs: 2000, simulationStepMs: 10, opacityOverLife: constant(1),
+        collision: { colliders: [{ kind: "plane", normal: xyz(-1), offset: -0.2 }], response: "kill" },
+        trails: { segments: 16, intervalMs: 10, persistMs: 100 } });
+    a.emitter.emit(1); a.emitter.present(0); a.emitter.present(100); a.emitter.present(500);
+    assert.equal(a.emitter.inspect().activeParticleCount, 0); assert.equal(a.emitter.inspect().activeTrailCount, 0);
+    assert.equal(a.emitter.inspect().completed, true); a.emitter.dispose();
+});
+
+test("borrowed materials are excluded from owned resource counts and callback failures clean up prewarm", () => {
+    const material = new THREE.ShaderMaterial(), a = setup({ runtime: { material } });
+    assert.equal(a.emitter.inspect().liveResourceCounts.materials, 0); a.emitter.dispose(); material.dispose();
+    const scene = new THREE.Group();
+    assert.throws(() => createParticleEmitter(scene, { rate: 10, prewarmMs: 200, runtime: { update() { throw new Error("callback failure"); } } }), /callback failure/);
+    assert.equal(scene.children.length, 0);
+    const b = setup({ events: true, triggers: [{ id: "origin", volume: { kind: "sphere", center: xyz(), radius: 1 } }], runtime: { update(p) { p.position.x = 0.5; } } });
+    b.emitter.emit(1); const events = b.emitter.drainEvents(); assert.deepEqual(events.map(e => e.kind), ["birth", "enter"]); assert.equal(events[0].position.x, 0.5); b.emitter.dispose();
+});
+
+test("renderer, atlas and borrowed-resource ownership choices are copied from mutable authoring options", () => {
+    const material = new THREE.ShaderMaterial(), runtime = { material }, spriteSheet = { columns: 4, rows: 2, row: 0, fps: 1 }, renderer = { kind: "billboard" };
+    const a = setup({ runtime, spriteSheet, renderer, speed: 0, lifetimeMs: 2000 });
+    delete runtime.material; spriteSheet.row = 1; spriteSheet.fps = 20; renderer.kind = "mesh";
+    a.emitter.emit(1); a.emitter.present(0); a.emitter.present(1000); assert.equal(a.attr("particleDimensions").getZ(0), 1);
+    let disposals = 0; material.addEventListener("dispose", () => disposals++); a.emitter.dispose(); assert.equal(disposals, 0); material.dispose();
+});
+
+test("completion callbacks can release standalone emitters and system-owned effects after routing", () => {
+    let standalone;
+    standalone = setup({ lifetimeMs: 100, runtime: { onComplete() { standalone.emitter.dispose(); } } });
+    standalone.emitter.emit(1); standalone.emitter.present(0); standalone.emitter.present(100); assert.equal(standalone.emitter.inspect().disposed, true);
+    const camera = new THREE.PerspectiveCamera(), scene = new THREE.Group(); let effect, called = 0;
+    const system = createParticleSystem(scene, { camera, cull: true, onComplete() { called++; effect.dispose(); } });
+    effect = system.createEffect(defineParticleEffect({ emitters: [{ id: "main", options: { bursts: [{ timeMs: 0, count: 1 }], lifetimeMs: 100 } }] }));
+    system.present(0); system.present(100); assert.equal(called, 1); assert.equal(system.inspect().reservedParticles, 0); system.dispose();
+});
+
+test("smooth opacity and paired color/velocity curves use a stable linear-space blend", () => {
+    const a = setup({ seed: 0x80000000, speed: 0, lifetimeMs: 4000,
+        velocityOverLife: { x: { min: constant(1), max: constant(3) } },
+        colorOverLife: { min: constant(0xff0000), max: constant(0x0000ff) },
+        opacityOverLife: [{ time: 0, value: 0, interpolation: "smooth" }, { time: 1, value: 1 }] });
+    a.emitter.emit(1); a.emitter.present(0); a.emitter.present(1000);
+    close(a.centers()[0], 2); close(a.attr("particleAppearance").getX(0), 0.5); close(a.attr("particleAppearance").getZ(0), 0.5); close(a.attr("particleAppearance").getW(0), 0.15625); a.emitter.dispose();
+});
+
+test("emitter completion callbacks in effects run after their final child events have been routed", () => {
+    let effect, childrenAtCompletion = 0;
+    effect = createParticleEffect(new THREE.Group(), defineParticleEffect({ emitters: [
+        { id: "source", options: { lifetimeMs: 100, bursts: [{ timeMs: 0, count: 1 }] } },
+        { id: "child", options: { lifetimeMs: 300 } },
+    ], subEmitters: [{ source: "source", target: "child", event: "death", count: 2 }] }), {
+        runtime: { source: { onComplete() { childrenAtCompletion = effect.inspect().activeParticleCount; effect.dispose(); } } },
+    });
+    effect.present(0); effect.present(100); assert.equal(childrenAtCompletion, 2); assert.equal(effect.inspect().disposed, true);
+});
+
+test("explicit manual and parameter colors take precedence over the randomized initial palette", () => {
+    const a = setup({ startColors: [0xff0000], speed: 0 });
+    a.emitter.emit(1, { color: 0x0000ff }); assert.equal(a.attr("particleAppearance").getZ(0), 1);
+    a.emitter.setParameters({ color: 0x00ff00 }); a.emitter.emit(1); assert.equal(a.attr("particleAppearance").getY(1), 1); a.emitter.dispose();
+});

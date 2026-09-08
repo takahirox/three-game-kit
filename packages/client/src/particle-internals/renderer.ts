@@ -6,7 +6,7 @@ import { triangles } from "./shapes.js";
 
 /** @internal */
 export function createRenderer(parent: THREE.Object3D, options: ParticleEmitterOptions, capacity: number, columns: number, rows: number) {
-    const render = options.renderer ?? { kind: "billboard" };
+    const render = options.renderer ? { ...options.renderer } : { kind: "billboard" as const };
     let lengthScale = 1, velocityScale = 0.1, meshRadius = Math.SQRT1_2;
     let data: ReturnType<typeof triangles> | undefined;
     switch (render.kind) {
@@ -158,7 +158,7 @@ export function createRenderer(parent: THREE.Object3D, options: ParticleEmitterO
                     vec2 direction = length(velocity.xy) > 0.00001 ? normalize(velocity.xy) : vec2(0.0, 1.0);
                     vec2 sideways = vec2(direction.y, -direction.x);
                     offset = sideways * vertexPosition.x * particleDimensions.x * parentScale + direction * vertexPosition.y * (particleDimensions.x * parentScale * stretch.x + length(velocity) * stretch.y);
-                    gl_Position = projectionMatrix * (center + vec4(offset, 0.0, 0.0));
+                    gl_Position = projectionMatrix * (center + vec4(offset, vertexPosition.z * particleDimensions.x * parentScale, 0.0));
                 #elif defined(MESH_PARTICLE)
                     vec3 up = length(particleVelocity) > 0.00001 ? normalize(particleVelocity) : vec3(0.0, 1.0, 0.0);
                     vec3 helper = abs(up.z) < 0.99 ? vec3(0.0, 0.0, 1.0) : vec3(1.0, 0.0, 0.0);
@@ -178,21 +178,28 @@ export function createRenderer(parent: THREE.Object3D, options: ParticleEmitterO
                         #endif
                     #endif
                 #elif defined(HORIZONTAL)
-                    gl_Position = projectionMatrix * (center + vec4(basis * vec3(offset.x, 0.0, offset.y), 0.0));
+                    gl_Position = projectionMatrix * (center + vec4(basis * vec3(offset.x, vertexPosition.z * particleDimensions.x, offset.y), 0.0));
                 #elif defined(VERTICAL)
                     vec3 up = normalize(basis * vec3(0.0, 1.0, 0.0));
                     vec3 right = cross(up, vec3(0.0, 0.0, 1.0));
                     if (length(right) < 0.00001) right = vec3(1.0, 0.0, 0.0);
-                    gl_Position = projectionMatrix * (center + vec4((normalize(right) * offset.x + up * offset.y) * parentScale, 0.0));
+                    gl_Position = projectionMatrix * (center + vec4((normalize(right) * offset.x + up * offset.y + cross(normalize(right), up) * vertexPosition.z * particleDimensions.x) * parentScale, 0.0));
                 #else
                     offset *= parentScale;
-                    gl_Position = projectionMatrix * (center + vec4(offset, 0.0, 0.0));
+                    gl_Position = projectionMatrix * (center + vec4(offset, vertexPosition.z * particleDimensions.x * parentScale, 0.0));
                 #endif
                 #if defined(PARTICLE_LIGHT) && !defined(MESH_PARTICLE)
+                    vec3 faceNormal = vec3(c * vertexNormal.x - s * vertexNormal.y, s * vertexNormal.x + c * vertexNormal.y, vertexNormal.z);
                     #ifdef HORIZONTAL
-                        vNormal = basis * vec3(0.0, 1.0, 0.0);
+                        #ifdef WORLD_SPACE
+                            vNormal = basis * vec3(faceNormal.x, faceNormal.z, faceNormal.y);
+                        #else
+                            vNormal = normalMatrix * vec3(faceNormal.x, faceNormal.z, faceNormal.y);
+                        #endif
+                    #elif defined(VERTICAL)
+                        vNormal = normalize(right) * faceNormal.x + up * faceNormal.y + cross(normalize(right), up) * faceNormal.z;
                     #else
-                        vNormal = vec3(0.0, 0.0, 1.0);
+                        vNormal = faceNormal;
                     #endif
                 #endif
                 #ifdef FRAME_BLEND
@@ -215,6 +222,7 @@ export function createRenderer(parent: THREE.Object3D, options: ParticleEmitterO
         geometry, material, mesh, attributes, centers, appearances, dimensions, velocities, scales, rotations, atlas, customAttributes,
         get culled() { return culled; },
         get resourceCount() { return trails ? 2 : 1; },
+        get materialCount() { return (trails ? 1 : 0) + (options.runtime?.material ? 0 : 1); },
         get activeTrailCount() { return trails?.activeTrailCount ?? 0; },
         clear() { trails?.clear(); },
         setDepthSource(texture: THREE.Texture, width: number, height: number, origin = { x: 0, y: 0 }) {
@@ -241,7 +249,7 @@ export function createRenderer(parent: THREE.Object3D, options: ParticleEmitterO
             for (let i = 0; i < geometry.instanceCount; i++) {
                 point.fromBufferAttribute(centers, i); bounds.expandByPoint(point);
                 const speed = velocities ? Math.hypot(velocities.getX(i), velocities.getY(i), velocities.getZ(i)) : 0;
-                padding = Math.max(padding, dimensions.getX(i) * meshRadius * (scales ? Math.max(scales.getX(i), scales.getY(i), scales.getZ(i)) : 1), render.kind === "stretched" ? (dimensions.getX(i) * (1 + lengthScale) + speed * velocityScale) / 2 : 0);
+                padding = Math.max(padding, dimensions.getX(i) * meshRadius * (scales ? Math.max(scales.getX(i), scales.getY(i), scales.getZ(i)) : 1), render.kind === "stretched" ? (dimensions.getX(i) * (1 + lengthScale) + speed * velocityScale) * (scales ? Math.max(scales.getX(i), scales.getY(i), scales.getZ(i)) : 1) / 2 : 0);
             }
             if (trails) { trails.expand(bounds); padding = Math.max(padding, trails.maxWidth); }
             if (!world) {

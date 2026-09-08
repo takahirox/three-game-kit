@@ -17,6 +17,7 @@ export function createTrails(options: ParticleEmitterOptions, capacity: number) 
     const colorKeys = config.colorOverTrail ? curve(config.colorOverTrail, 0, 0xffffff, "colorOverTrail", true) : undefined;
     const colors = colorKeys?.map(k => new THREE.Color(k.value)), tint = new THREE.Color();
     if (config.textureMode !== undefined && config.textureMode !== "stretch" && config.textureMode !== "tile") throw new TypeError("Invalid trail textureMode");
+    const textureMode = config.textureMode;
     const tileLength = number(config.tileLength ?? 1, 0.000001, 1e6, "trail tileLength");
     const history = new Float32Array(slots * segments * 3), counts = new Uint8Array(slots), heads = new Uint8Array(slots), lastSample = new Float64Array(slots);
     const liveColors = new Float32Array(capacity * 4);
@@ -109,7 +110,7 @@ export function createTrails(options: ParticleEmitterOptions, capacity: number) 
                         tint.setRGB(red, green, blue); if (colorKeys && colors) tintCurve(tint, colorKeys, colors, b);
                         colorB.setXYZW(n, tint.r, tint.g, tint.b, alpha * sample(opacity, b));
                         widths.setXY(n, width * sample(widthKeys, a), width * sample(widthKeys, b));
-                        uvs.setXY(n, config.textureMode === "tile" ? (distance + length) / tileLength : a, config.textureMode === "tile" ? distance / tileLength : b); n++;
+                        uvs.setXY(n, textureMode === "tile" ? (distance + length) / tileLength : a, textureMode === "tile" ? distance / tileLength : b); n++;
                     }
                     distance += length; x = nx; y = ny; z = nz;
                 }

@@ -101,6 +101,7 @@ export function createParticleEffect(parent: ParticleSceneParent, input: Particl
     if (capacity > integer(options.maxParticles ?? 1048576, 1, 1048576, "maxParticles")) throw new RangeError("effect exceeds particle capacity budget");
     const group = new THREE.Group(); group.name = "three-game-kit-particle-effect"; parent.add(group);
     const emitters = new Map<string, ParticleEmitter>();
+    const notifications = new Map<string, () => void>();
     const links = definition.subEmitters ?? [];
     const configs = new Map(definition.emitters.map(e => [e.id, e]));
     const outgoing = new Map(definition.emitters.map(e => [e.id, links.filter(l => l.source === e.id)]));
@@ -113,7 +114,12 @@ export function createParticleEffect(parent: ParticleSceneParent, input: Particl
             const { texture: textureId, ...config } = e.options;
             const texture = textureId === undefined ? undefined : options.textures?.[textureId];
             if (textureId !== undefined && !texture) throw new TypeError(`Missing particle texture: ${textureId}`);
-            emitters.set(e.id, createParticleEmitter(group, { ...config, ...(options.runtime?.[e.id] ? { runtime: options.runtime[e.id] } : {}), ...(texture ? { texture } : {}), ...(links.some(l => l.source === e.id) ? { events: true } : {}) }));
+            const providedRuntime = options.runtime?.[e.id];
+            if (providedRuntime !== undefined) record(providedRuntime, ["update", "meshPositions", "material", "trailTexture", "softParticles", "onComplete"], "runtime");
+            const callback = providedRuntime?.onComplete;
+            if (callback !== undefined && typeof callback !== "function") throw new TypeError("onComplete must be a function");
+            const runtime = providedRuntime ? { ...providedRuntime, ...(callback ? { onComplete: () => { notifications.set(e.id, callback); } } : {}) } : undefined;
+            emitters.set(e.id, createParticleEmitter(group, { ...config, ...(runtime ? { runtime } : {}), ...(texture ? { texture } : {}), ...(links.some(l => l.source === e.id) ? { events: true } : {}) }));
         }
         if (options.batch ?? true) batches = createBatches(group);
     } catch (error) { for (const e of emitters.values()) e.dispose(); group.removeFromParent(); throw error; }
@@ -156,8 +162,11 @@ export function createParticleEffect(parent: ParticleSceneParent, input: Particl
     }
     function checkComplete() {
         for (const e of emitters.values()) emitterAccess.get(e)!.complete();
-        const done = [...emitters.values()].every(e => e.inspect().completed);
-        if (done && !completed) { completed = true; onComplete?.(); } else if (!done) completed = false;
+        const done = [...emitters.values()].every(e => e.inspect().completed), notify = done && !completed;
+        completed = done;
+        const pending = [...notifications]; notifications.clear();
+        for (const [id, callback] of pending) if (!disposed && emitters.get(id)!.inspect().completed) callback();
+        if (!disposed && notify && [...emitters.values()].every(e => e.inspect().completed)) onComplete?.();
     }
     function named(id: string) { const e = emitters.get(id); if (!e) throw new TypeError(`Unknown emitter: ${id}`); return e; }
     const effect: ParticleEffect = Object.freeze({
@@ -191,7 +200,7 @@ export function createParticleEffect(parent: ParticleSceneParent, input: Particl
         setCollision(id: string, collision: ParticleCollisionOptions) { live(); named(id).setCollision(collision); },
         setDepthSource(id: string, texture: ParticleTexture, width: number, height: number, origin?: ParticleVector2) { live(); named(id).setDepthSource(texture, width, height, origin); },
         setMeshPositions(id: string, positions: readonly number[]) { live(); named(id).setMeshPositions(positions); },
-        clear() { live(); for (const e of emitters.values()) { e.clear(); e.drainEvents(); } batches?.update(); },
+        clear() { live(); for (const e of emitters.values()) { e.clear(); e.drainEvents(); } batches?.update(); checkComplete(); },
         restart() { live(); completed = false; for (const e of emitters.values()) e.restart(); batches?.update(); },
         cull(camera: ParticleCamera) { live(); if (!(camera instanceof THREE.Camera)) throw new TypeError("cull camera must be a Three.js Camera"); for (const e of emitters.values()) e.cull(camera); batches?.update(); },
         sort(camera: ParticleCamera) { live(); if (!(camera instanceof THREE.Camera)) throw new TypeError("sort camera must be a Three.js Camera"); for (const e of emitters.values()) { emitterAccess.get(e)!.refresh(); e.sort(camera); } batches?.update(); },
@@ -228,6 +237,16 @@ export function createParticleSystem(parent: ParticleSceneParent, options: Parti
     const maxParticles = integer(options.maxParticles ?? 65536, 1, 1048576, "maxParticles");
     const camera = options.camera as THREE.Camera | undefined, culling = options.cull ?? false, batch = options.batch ?? true;
     const textures = options.textures === undefined ? undefined : { ...options.textures };
+    let runtime: ParticleEffectOptions["runtime"];
+    if (options.runtime !== undefined) {
+        record(options.runtime, Object.keys(options.runtime), "runtime registry");
+        runtime = Object.fromEntries(Object.entries(options.runtime).map(([id, value]) => {
+            record(value, ["update", "meshPositions", "material", "trailTexture", "softParticles", "onComplete"], "runtime");
+            return [id, { ...value, ...(value.softParticles ? { softParticles: { ...value.softParticles } } : {}) }];
+        }));
+    }
+    const onComplete = options.onComplete;
+    if (onComplete !== undefined && typeof onComplete !== "function") throw new TypeError("onComplete must be a function");
     if (typeof batch !== "boolean") throw new TypeError("batch must be boolean");
     if (options.camera !== undefined && !(options.camera instanceof THREE.Camera)) throw new TypeError("system camera must be a Three.js Camera");
     if (options.cull !== undefined && typeof options.cull !== "boolean") throw new TypeError("cull must be boolean");
@@ -246,7 +265,7 @@ export function createParticleSystem(parent: ParticleSceneParent, options: Parti
         createEffect(definition: ParticleEffectDefinition) {
             live(); const host = new THREE.Group(); parent.add(host);
             let effect: ParticleEffect;
-            try { effect = createParticleEffect(host, definition, { ...(textures ? { textures } : {}), ...(options.runtime ? { runtime: options.runtime } : {}), ...(options.onComplete ? { onComplete: options.onComplete } : {}), batch, maxParticles: Math.max(1, maxParticles - reserved) }); }
+            try { effect = createParticleEffect(host, definition, { ...(textures ? { textures } : {}), ...(runtime ? { runtime } : {}), ...(onComplete ? { onComplete } : {}), batch, maxParticles: Math.max(1, maxParticles - reserved) }); }
             catch (error) { host.removeFromParent(); throw error; }
             const capacity = effect.inspect().capacity;
             if (reserved + capacity > maxParticles) { effect.dispose(); host.removeFromParent(); throw new RangeError("system exceeds particle capacity budget"); }
@@ -269,11 +288,11 @@ export function createParticleSystem(parent: ParticleSceneParent, options: Parti
                 let hidden = false;
                 if (camera && offscreen === "pause") {
                     effect.cull(camera); const info = effect.inspect();
-                    hidden = info.activeParticleCount > 0 && info.emitters.every(e => e.state.culled);
+                    hidden = info.emitters.some(e => e.state.activeParticleCount + e.state.activeTrailCount > 0) && info.emitters.every(e => e.state.culled);
                 }
                 if (!hidden && !paused) state.clock += delta;
                 if (timestampMs - state.lastTick >= interval) { effect.present(state.clock); state.lastTick = timestampMs; }
-                if (camera && culling) effect.cull(camera);
+                if (camera && culling && effects.has(effect)) effect.cull(camera);
             }
         },
         pause() { live(); paused = true; for (const e of effects.keys()) e.pause(); },

@@ -11,10 +11,16 @@ export function checkParticleRendering() {
     const plane = new THREE.Mesh(new THREE.PlaneGeometry(4, 4), new THREE.MeshBasicMaterial()); plane.position.z = -0.2; opaque.add(plane);
     renderer.setRenderTarget(depth); renderer.render(opaque, camera);
     const pixels = new Uint8Array(4), flat = [{ time: 0, value: 1 }, { time: 1, value: 1 }];
-    function pixel() { renderer.setRenderTarget(target); renderer.setViewport(8, 8, 64, 64); renderer.setScissorTest(false); renderer.clear(); renderer.render(scene, camera); renderer.readRenderTargetPixels(target, 40, 40, 1, 1, pixels); return Array.from(pixels); }
+    function pixel(renderCamera: THREE.Camera = camera) { renderer.setRenderTarget(target); renderer.setViewport(8, 8, 64, 64); renderer.setScissorTest(false); renderer.clear(); renderer.render(scene, renderCamera); renderer.readRenderTargetPixels(target, 40, 40, 1, 1, pixels); return Array.from(pixels); }
     const soft = createParticleEmitter(scene, { size: 1, speed: 0, opacityOverLife: flat,
         runtime: { softParticles: { depthTexture: depth.depthTexture, camera, width: 64, height: 64, origin: { x: 8, y: 8 }, fadeDistance: 1 } } });
     soft.emit(1); const faded = pixel(); soft.dispose();
+    const perspective = new THREE.PerspectiveCamera(45, 1, 0.1, 10); perspective.position.z = 3; perspective.updateMatrixWorld();
+    renderer.setRenderTarget(depth); renderer.setViewport(0, 0, 32, 32); renderer.clear(); renderer.render(opaque, perspective);
+    const perspectiveSoft = createParticleEmitter(scene, { size: 1, speed: 0, opacityOverLife: flat,
+        runtime: { softParticles: { depthTexture: depth.depthTexture, camera: perspective, width: 64, height: 64, fadeDistance: 1 } } });
+    perspectiveSoft.setDepthSource(depth.depthTexture, 64, 64, { x: 8, y: 8 });
+    perspectiveSoft.emit(1); const perspectiveFaded = pixel(perspective); perspectiveSoft.dispose();
     const hard = createParticleEmitter(scene, { size: 1, speed: 0, opacityOverLife: flat }); hard.emit(1); const solid = pixel(); hard.dispose();
 
     const atlas = new THREE.DataTexture(new Uint8Array([255, 0, 0, 255, 0, 0, 255, 255]), 2, 1); atlas.needsUpdate = true;
@@ -29,6 +35,8 @@ export function checkParticleRendering() {
         emitter.emit(1); const result = pixel(); emitter.dispose(); return result;
     }
     const litFront = lit(1), litBack = lit(-1);
+    const tilted = createParticleEmitter(scene, { size: 1, speed: 0, opacityOverLife: flat, rotation3D: { y: Math.PI / 3 }, lighting: { ambient: 0, intensity: 1, direction: { x: 0, y: 0, z: 1 } } });
+    tilted.emit(1); const tiltedLight = pixel(); tilted.dispose();
     const material = new THREE.ShaderMaterial({
         vertexShader: `attribute vec3 particleCenter, particleDimensions; attribute float customHeat; varying float heat;
             void main() { heat = customHeat; gl_Position = projectionMatrix * modelViewMatrix * vec4(particleCenter + position * particleDimensions.x, 1.0); }`,
@@ -40,5 +48,5 @@ export function checkParticleRendering() {
     custom.emit(1); custom.present(0); custom.present(500); const customPixel = pixel(); custom.dispose(); const borrowedDisposals = materialDisposals;
     material.dispose(); atlas.dispose(); target.dispose(); depth.dispose(); plane.geometry.dispose(); plane.material.dispose();
     const remaining = { ...renderer.info.memory }; renderer.dispose();
-    return { faded, solid, blended, litFront, litBack, customPixel, borrowedDisposals, remaining };
+    return { faded, perspectiveFaded, solid, blended, litFront, litBack, tiltedLight, customPixel, borrowedDisposals, remaining };
 }

@@ -1,8 +1,7 @@
 import * as THREE from "three";
-import type { ParticleCurveRange, ParticleEmitterOptions, ParticleSpeedCurve, ParticleVectorRange } from "./types.js";
+import type { ParticleCurve, ParticleCurveRange, ParticleEmitterOptions, ParticleSpeedCurve, ParticleVectorRange } from "./types.js";
 import { curve, distribution, integer, number, range, record } from "./validation.js";
 
-const flat = [{ time: 0, value: 1 }, { time: 1, value: 1 }];
 function axes(input: ParticleVectorRange | undefined, fallback: number, min: number) {
     if (input !== undefined) record(input, ["x", "y", "z"], "particle axes");
     return [input?.x, input?.y, input?.z].map(v => range(v ?? fallback, min, 1e6, "particle axis"));
@@ -28,9 +27,13 @@ export function tintCurve(target: THREE.Color, keys: ReturnType<typeof curve>, c
 }
 /** @internal */
 export function colorDistribution(input: ParticleCurveRange, label: string) {
-    const pair = Array.isArray(input) ? { min: input, max: input } : input as { min: ParticleCurveRange; max: ParticleCurveRange };
-    if (!Array.isArray(input)) record(pair, ["min", "max"], label);
-    const a = curve(pair.min as Parameters<typeof curve>[0], 0, 0xffffff, label, true), b = curve(pair.max as Parameters<typeof curve>[0], 0, 0xffffff, label, true);
+    if (Array.isArray(input)) {
+        const keys = curve(input, 0, 0xffffff, label, true), colors = keys.map(k => new THREE.Color(k.value));
+        return (tint: THREE.Color, t: number, _r: number) => tintCurve(tint, keys, colors, t);
+    }
+    const pair = input as { min: ParticleCurve; max: ParticleCurve };
+    record(pair, ["min", "max"], label);
+    const a = curve(pair.min, 0, 0xffffff, label, true), b = curve(pair.max, 0, 0xffffff, label, true);
     const ca = a.map(k => new THREE.Color(k.value)), cb = b.map(k => new THREE.Color(k.value)), left = new THREE.Color(), right = new THREE.Color();
     return (tint: THREE.Color, t: number, r: number) => { left.copy(tint); right.copy(tint); tintCurve(left, a, ca, t); tintCurve(right, b, cb, t); tint.copy(left).lerp(right, r); };
 }
@@ -40,22 +43,22 @@ export function createVariation(options: ParticleEmitterOptions, capacity: numbe
     const axisRanges = [size, rotation, spin];
     const hasAxes = !!(options.sizeAxes || options.rotation3D || options.angularVelocity3D);
     const values = new Float64Array(hasAxes ? capacity * 9 : 0);
-    const angular = distribution(options.angularVelocityOverLife ?? flat, -1e6, 1e6, "angularVelocityOverLife");
+    const angular = options.angularVelocityOverLife === undefined ? undefined : distribution(options.angularVelocityOverLife, -1e6, 1e6, "angularVelocityOverLife");
     const sizeSpeed = speedCurve(options.sizeBySpeed), rotationSpeed = speedCurve(options.rotationBySpeed), colorSpeed = speedCurve(options.colorBySpeed, true);
-    const sheet = options.spriteSheet;
+    const sheet = options.spriteSheet ? { ...options.spriteSheet } : undefined;
     const start = range(sheet?.startFrame ?? 0, 0, columns * rows - 1, "startFrame");
     const fps = sheet?.fps === undefined ? undefined : number(sheet.fps, 0, 1e6, "fps");
     if (sheet?.row !== undefined && sheet.row !== "random") integer(sheet.row, 0, rows - 1, "sprite row");
     if (sheet?.blend !== undefined && typeof sheet.blend !== "boolean") throw new TypeError("sprite blend must be boolean");
     const frames = new Float64Array(sheet ? capacity * 2 : 0);
+    if (options.startColors !== undefined && (!Array.isArray(options.startColors) || !options.startColors.length || options.startColors.length > 256)) throw new TypeError("startColors requires 1–256 colors");
     const palette = options.startColors === undefined ? undefined : Array.from(options.startColors, c => integer(c, 0, 0xffffff, "startColors"));
-    if (palette && (!Array.isArray(options.startColors) || !palette.length || palette.length > 256)) throw new TypeError("startColors requires 1–256 colors");
     const cycles = sheet?.cycles ?? 1;
     function speedT(s: NonNullable<ReturnType<typeof speedCurve>>, speed: number) { return Math.max(0, Math.min(1, (speed - s.limits[0]) / (s.limits[1] - s.limits[0]))); }
     return {
-        hasAxes,
-        birth(i: number, random: () => number, tint: THREE.Color) {
-            if (palette) tint.setHex(palette[Math.floor(random() * palette.length)]!);
+        hasAxes, needsSpeed: !!(sizeSpeed || rotationSpeed || colorSpeed),
+        birth(i: number, random: () => number, tint: THREE.Color, usePalette: boolean) {
+            if (palette && usePalette) tint.setHex(palette[Math.floor(random() * palette.length)]!);
             if (hasAxes) for (let k = 0; k < 3; k++) for (let n = 0; n < 3; n++) {
                 const r = axisRanges[k]![n]!; values[i * 9 + k * 3 + n] = r[0] + random() * (r[1] - r[0]);
             }
@@ -63,12 +66,12 @@ export function createVariation(options: ParticleEmitterOptions, capacity: numbe
         },
         remove(i: number, last: number) { if (hasAxes) values.copyWithin(i * 9, last * 9, last * 9 + 9); if (sheet) frames.copyWithin(i * 2, last * 2, last * 2 + 2); },
         size(speed: number, r: number) { return Math.max(0, sizeSpeed?.values?.sample(speedT(sizeSpeed, speed), r) ?? 1); },
-        angle(_seconds: number, progress: number, lifetime: number, speed: number, r: number, spin: number) {
-            return spin * angular.integral(progress, r) * lifetime / 1000 + (rotationSpeed?.values?.sample(speedT(rotationSpeed, speed), r) ?? 0);
+        angle(seconds: number, progress: number, lifetime: number, speed: number, r: number, spin: number) {
+            return spin * (angular ? angular.integral(progress, r) * lifetime / 1000 : seconds) + (rotationSpeed?.values?.sample(speedT(rotationSpeed, speed), r) ?? 0);
         },
         color(tint: THREE.Color, speed: number, r: number) { colorSpeed?.color?.(tint, speedT(colorSpeed, speed), r); },
         axes(i: number, progress: number, lifetime: number, r: number, scales: THREE.InstancedBufferAttribute, rotations: THREE.InstancedBufferAttribute) {
-            const t = angular.integral(progress, r) * lifetime / 1000;
+            const t = (angular ? angular.integral(progress, r) : progress) * lifetime / 1000;
             scales.setXYZ(i, values[i * 9]!, values[i * 9 + 1]!, values[i * 9 + 2]!);
             rotations.setXYZ(i, values[i * 9 + 3]! + values[i * 9 + 6]! * t, values[i * 9 + 4]! + values[i * 9 + 7]! * t, values[i * 9 + 5]! + values[i * 9 + 8]! * t);
         },
