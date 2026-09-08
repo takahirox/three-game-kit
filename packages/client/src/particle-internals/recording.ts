@@ -9,7 +9,8 @@ type Command = { method: string; args: unknown[]; matrix: Frame; state: Particle
 export function createRecordedEmitter(parent: THREE.Object3D, options: ParticleEmitterOptions, factory: (parent: THREE.Object3D, options: ParticleEmitterOptions) => ParticleEmitter): ParticleEmitter {
     record(options.recording!, ["maxCommands", "maxBytes"], "recording");
     const maxCommands = integer(options.recording!.maxCommands ?? 10000, 1, 1000000, "recording maxCommands"), maxBytes = integer(options.recording!.maxBytes ?? 8 * 1024 * 1024, 1024, 256 * 1024 * 1024, "recording maxBytes");
-    const { recording: _recording, runtime, texture, ...data } = options;
+    const { recording: _recording, runtime: runtimeInput, texture, ...data } = options;
+    const runtime = runtimeInput ? { ...runtimeInput } : undefined;
     const initial = structuredClone(data), initialMatrix = snapshot();
     if ((runtime?.captureState === undefined) !== (runtime?.restoreState === undefined)) throw new TypeError("captureState and restoreState must be paired");
     let inStateHook = false;
@@ -34,6 +35,7 @@ export function createRecordedEmitter(parent: THREE.Object3D, options: ParticleE
     const stateBytes = (state: ParticleRecordedState | undefined) => state === undefined ? 0 : JSON.stringify(state).length * 2;
     function restore(state: ParticleRecordedState | undefined) { if (state !== undefined) { inStateHook = true; try { runtime!.restoreState!(structuredClone(state)); } finally { inStateHook = false; } } }
     let replaying = false, samples: number[][] = [], sampleIndex = 0, commands: Command[] = [], bytes = 0, full = false, until = 0, clock = 0, branch: Command[] | undefined;
+    if (stateBytes(initialState) > maxBytes) throw new RangeError("recording budget cannot hold initial external state");
     let sampleBytes = stateBytes(initialState), overflow = false, executing = false;
     const provider = runtime?.meshPositions, onComplete = runtime?.onComplete;
     const runtimeCopy = runtime ? { ...runtime, ...(runtime.softParticles ? { softParticles: { ...runtime.softParticles, ...(runtime.softParticles.origin ? { origin: { ...runtime.softParticles.origin } } : {}) } } : {}), ...(runtime.meshPositions ? { meshPositions: () => {

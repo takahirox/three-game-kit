@@ -894,3 +894,13 @@ test("render priority changes split compatible batches and reject invalid settin
     assert.equal(scene.children[0].children.filter(m => m.visible).length, 2);
     effect.setRenderOrder("a", 2); assert.equal(effect.inspect().drawSavings, 1); effect.dispose();
 });
+
+test("recorded initial state enforces serialized bytes and captures runtime hook ownership", () => {
+    const scene = new THREE.Group();
+    assert.throws(() => createParticleEmitter(scene, { recording: { maxBytes: 1024 }, runtime: { captureState: () => "\u0000".repeat(400), restoreState() {} } }), RangeError);
+    assert.equal(scene.children.length, 0);
+    let value = 1; const runtime = { captureState: () => value, restoreState: state => { value = state; } };
+    const emitter = createParticleEmitter(scene, { recording: {}, runtime }); emitter.present(0);
+    runtime.captureState = () => 999; runtime.restoreState = () => { throw new Error("replaced hook"); };
+    emitter.present(100); value = 50; emitter.seek(100, "recorded"); assert.equal(value, 1); emitter.dispose();
+});
