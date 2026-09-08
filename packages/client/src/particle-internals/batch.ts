@@ -8,7 +8,7 @@ export function createBatches(parent: THREE.Object3D) {
         if (!(child instanceof THREE.Mesh) || !(child.geometry instanceof THREE.InstancedBufferGeometry) || !(child.material instanceof THREE.ShaderMaterial)) continue;
         const g = child.geometry, m = child.material;
         if (child.userData.particleCustomMaterial || m.blending !== THREE.AdditiveBlending || m.defines.SOFT_PARTICLES) continue;
-        const key = JSON.stringify({ vertex: m.vertexShader, fragment: m.fragmentShader, defines: m.defines, blending: m.blending, depth: m.depthTest, side: m.side,
+        const key = JSON.stringify({ renderOrder: child.renderOrder, vertex: m.vertexShader, fragment: m.fragmentShader, defines: m.defines, blending: m.blending, depth: m.depthTest, side: m.side,
             uniforms: Object.fromEntries(Object.entries(m.uniforms).map(([k, u]) => [k, u.value instanceof THREE.Texture ? u.value.uuid : u.value])),
             index: Array.from(g.index?.array ?? []),
             attributes: Object.fromEntries(Object.entries(g.attributes).map(([k, a]) => [k, a instanceof THREE.InstancedBufferAttribute ? a.itemSize : Array.from(a.array)])),
@@ -29,10 +29,12 @@ export function createBatches(parent: THREE.Object3D) {
         return { sources, geometry, mesh };
     });
     return {
-        drawSavings: batches.reduce((sum, b) => sum + b.sources.length - 1, 0),
+        get drawSavings() { return batches.reduce((sum, b) => sum + (b.sources.every(s => s.renderOrder === b.sources[0]!.renderOrder) ? b.sources.length - 1 : 0), 0); },
         count: batches.length,
         update() {
             for (const b of batches) {
+                if (!b.sources.every(s => s.renderOrder === b.sources[0]!.renderOrder)) { b.mesh.visible = false; continue; }
+                b.mesh.renderOrder = b.sources[0]!.renderOrder;
                 let count = 0;
                 for (const source of b.sources) {
                     if (!source.visible) continue;

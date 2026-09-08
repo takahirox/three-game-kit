@@ -54,7 +54,19 @@ export function createMotion(options: ParticleEmitterOptions) {
     }
     if (new Set(colliders.map(c => c.id)).size !== colliders.length) throw new TypeError("collider IDs must be unique");
     const stepMs = number(options.simulationStepMs ?? 1000 / 60, 1, 100, "simulationStepMs");
-    const limit = number(options.limitVelocity ?? 1e6, 0, 1e6, "limitVelocity");
+    const limitInput = options.limitVelocity;
+    if (limitInput !== undefined && typeof limitInput !== "number") record(limitInput, ["speed", "axes", "dampen"], "limitVelocity");
+    if (typeof limitInput === "object" && limitInput.speed !== undefined && limitInput.axes !== undefined) throw new TypeError("velocity limit chooses speed or axes");
+    const speedInput = typeof limitInput === "number" ? limitInput : limitInput?.speed ?? 1e6;
+    const speedLimit = distribution(typeof speedInput === "number" ? [{ time: 0, value: number(speedInput, 0, 1e6, "limit speed") }, { time: 1, value: speedInput }] : speedInput, 0, 1e6, "limit speed");
+    const axisLimit = typeof limitInput === "object" && limitInput.axes ? vectorDistribution(limitInput.axes, 1e6, 0) : undefined;
+    const dampen = number(typeof limitInput === "object" ? limitInput.dampen ?? 1 : 1, 0, 1, "limit dampen");
+    function limit(v: THREE.Vector3, t: number, r: number, dt: number) {
+        if (limitInput === undefined) return;
+        const amount = dampen === 1 ? 1 : -Math.expm1(Math.log1p(-dampen) * dt * 60);
+        if (axisLimit) for (let k = 0; k < 3; k++) { const max = axisLimit[k]!.sample(t, r), value = v.getComponent(k); v.setComponent(k, value + (Math.max(-max, Math.min(max, value)) - value) * amount); }
+        else { const speed = v.length(), max = speedLimit.sample(t, r); if (speed > max) v.multiplyScalar((speed + (max - speed) * amount) / speed); }
+    }
     const maxSteps = integer(options.maxSubSteps ?? 120, 1, 1024, "maxSubSteps");
     const f = new THREE.Vector3(), delta = new THREE.Vector3(), start = new THREE.Vector3(), normal = new THREE.Vector3(), bestNormal = new THREE.Vector3();
     const projected = new THREE.Vector3(), contact = new THREE.Vector3(), contactNormal = new THREE.Vector3(), noiseValue = new THREE.Vector3(), orbit = new THREE.Vector3(), kinematicStart = new THREE.Vector3();
@@ -68,7 +80,7 @@ export function createMotion(options: ParticleEmitterOptions) {
             if (radial) v.addScaledVector(delta.copy(p).sub(orbitalOffset).normalize(), radial.sample(t, r));
         },
         enabled: !!(options.angularVelocityAxesOverLife || options.angularVelocityAxesBySpeed || velocity || force || noise || orbital || radial || modifier || options.inheritVelocityMode === "current" || options.inheritVelocityOverLife || fields.length || collision || options.limitVelocity !== undefined || options.runtime?.update || options.triggers?.length), stepMs, maxSteps,
-        initialVelocity(v: THREE.Vector3, random = 0) { if (velocity) for (let k = 0; k < 3; k++) { const c = velocity[k]; if (c) v.setComponent(k, v.getComponent(k) + c.sample(0, random)); } if (options.limitVelocity !== undefined) v.clampLength(0, limit); },
+        initialVelocity(v: THREE.Vector3, random = 0) { if (velocity) for (let k = 0; k < 3; k++) { const c = velocity[k]; if (c) v.setComponent(k, v.getComponent(k) + c.sample(0, random)); } limit(v, 0, random, 0); },
         /** Returns collision/kill flags. p and v are reusable caller-owned scratch vectors. */
         step(p: THREE.Vector3, v: THREE.Vector3, dtMs: number, ageMs: number, lifetimeMs: number, seed: number, acceleration: THREE.Vector3, drag: number): number {
             const dt = dtMs / 1000, t0 = Math.min(1, ageMs / lifetimeMs), t1 = Math.min(1, (ageMs + dtMs) / lifetimeMs);
@@ -93,7 +105,7 @@ export function createMotion(options: ParticleEmitterOptions) {
             const integral = x < 0.001 ? dt * dt * (0.5 - x / 6 + x * x / 24 - x * x * x / 120) : (dt - decay) / drag;
             start.copy(p); p.addScaledVector(v, decay).addScaledVector(f, integral);
             v.multiplyScalar(Math.exp(-drag * dt)).addScaledVector(f, decay);
-            if (options.limitVelocity !== undefined) v.clampLength(0, limit);
+            limit(v, t1, seed / 4294967296, dt);
             if (modifier) { delta.copy(p).sub(start); p.copy(start).addScaledVector(delta, modifier.sample((t0 + t1) / 2, seed / 4294967296)); }
             if (orbital) {
                 kinematicStart.copy(p).sub(orbitalOffset);

@@ -6,8 +6,9 @@ import { createMotion } from "./motion.js";
 /** @internal */
 export function createRuntime(options: ParticleEmitterOptions, capacity: number) {
     const input = options.runtime ?? {};
-    record(input, ["update", "meshPositions", "material", "trailTexture", "softParticles", "onComplete"], "runtime");
-    for (const fn of [input.update, input.meshPositions, input.onComplete]) if (fn !== undefined && typeof fn !== "function") throw new TypeError("runtime callbacks must be functions");
+    record(input, ["update", "meshPositions", "material", "trailTexture", "softParticles", "onComplete", "customSimulationSpace", "captureState", "restoreState"], "runtime");
+    if ((input.captureState === undefined) !== (input.restoreState === undefined)) throw new TypeError("captureState and restoreState must be paired");
+    for (const fn of [input.update, input.meshPositions, input.onComplete, input.captureState, input.restoreState]) if (fn !== undefined && typeof fn !== "function") throw new TypeError("runtime callbacks must be functions");
     if (input.meshPositions && options.shape?.kind !== "mesh") throw new TypeError("meshPositions requires a mesh emission shape");
     if (input.material !== undefined && !(input.material instanceof THREE.ShaderMaterial || input.material instanceof THREE.MeshStandardMaterial)) throw new TypeError("runtime material must be a ShaderMaterial or MeshStandardMaterial");
     if (input.trailTexture !== undefined && !(input.trailTexture instanceof THREE.Texture)) throw new TypeError("trailTexture must be a Texture");

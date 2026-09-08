@@ -34,7 +34,8 @@ export interface ParticleEffect {
     restart(): void;
     /** Only affects draws; simulation and sub-emitter events continue. */
     cull(camera: ParticleCamera): void;
-    sort(camera: ParticleCamera): void;
+    sort(camera: ParticleCamera, mode?: import("./types.js").ParticleSortMode): void;
+    setRenderOrder(id: string, order: number): void;
     inspect(): { readonly disposed: boolean; readonly completed: boolean; readonly capacity: number; readonly activeParticleCount: number; readonly drawSavings: number; readonly droppedSubEmitterCount: number; readonly emitters: readonly { readonly id: string; readonly state: ReturnType<ParticleEmitter["inspect"]> }[] };
     dispose(): void;
 }
@@ -119,7 +120,7 @@ export function createParticleEffect(parent: ParticleSceneParent, input: Particl
             const texture = textureId === undefined ? undefined : options.textures?.[textureId];
             if (textureId !== undefined && !texture) throw new TypeError(`Missing particle texture: ${textureId}`);
             const providedRuntime = options.runtime?.[e.id];
-            if (providedRuntime !== undefined) record(providedRuntime, ["update", "meshPositions", "material", "trailTexture", "softParticles", "onComplete"], "runtime");
+            if (providedRuntime !== undefined) record(providedRuntime, ["update", "meshPositions", "material", "trailTexture", "softParticles", "onComplete", "customSimulationSpace", "captureState", "restoreState"], "runtime");
             const callback = providedRuntime?.onComplete;
             if (callback !== undefined && typeof callback !== "function") throw new TypeError("onComplete must be a function");
             const runtime = providedRuntime ? { ...providedRuntime, ...(callback ? { onComplete: () => { notifications.set(e.id, callback); } } : {}) } : undefined;
@@ -152,21 +153,20 @@ export function createParticleEffect(parent: ParticleSceneParent, input: Particl
             const ageMs = Math.max(0, sourceTime - event.timeMs);
             sourcePosition.copy(event.position); sourceVelocity.copy(event.velocity);
             // emit() expects parent-local birth coordinates, even for a world-space target.
-            if (source.options.simulationSpace === "world") sourcePosition.applyMatrix4(inverse);
-            const sourceWorld = source.options.simulationSpace === "world";
+            const sourceSpace = emitterAccess.get(sourceEmitter)!.space(), targetSpace = emitterAccess.get(targetEmitter)!.space();
+            sourcePosition.applyMatrix4(sourceSpace.matrix).applyMatrix4(inverse.copy(targetSpace.birthWorld).invert());
             let rotationOverride: ParticleVector3 | undefined;
             if (link.inheritRotation) {
                 inheritedRotation.setFromEuler(euler.set(event.rotation.x, event.rotation.y, event.rotation.z, "ZYX"));
-                if (sourceWorld !== (target.options.simulationSpace === "world")) {
-                    group.matrixWorld.decompose(sourceVelocity, parentRotation, rotationScale);
-                    if (sourceWorld) parentRotation.invert(); inheritedRotation.premultiply(parentRotation);
-                    sourceVelocity.copy(event.velocity);
-                }
+                sourceSpace.matrix.decompose(sourceVelocity, parentRotation, rotationScale);
+                inheritedRotation.premultiply(parentRotation);
+                targetSpace.matrix.decompose(sourceVelocity, parentRotation, rotationScale);
+                inheritedRotation.premultiply(parentRotation.invert()); sourceVelocity.copy(event.velocity);
                 euler.setFromQuaternion(inheritedRotation, "ZYX"); rotationOverride = { x: euler.x, y: euler.y, z: euler.z };
             }
             const appearance = { ...inheritedAppearance, ...(rotationOverride ? { rotation3D: rotationOverride } : {}) };
             // An explicit target velocity is transformed into simulation space by its emitter.
-            if (sourceWorld) sourceVelocity.applyMatrix3(normalMatrix);
+            sourceVelocity.applyMatrix3(normalMatrix.setFromMatrix4(sourceSpace.matrix)).applyMatrix3(normalMatrix.setFromMatrix4(inverse.copy(targetSpace.velocityWorld).invert()));
             if (link.inheritVelocity) {
                 const r = target.options.rotation;
                 rotation.setFromEuler(euler.set(r?.x ?? 0, r?.y ?? 0, r?.z ?? 0, "XYZ")).invert();
@@ -230,7 +230,8 @@ export function createParticleEffect(parent: ParticleSceneParent, input: Particl
         clear() { live(); for (const e of emitters.values()) { e.clear(); e.drainEvents(); } batches?.update(); checkComplete(); },
         restart() { live(); completed = false; for (const e of emitters.values()) e.restart(); batches?.update(); },
         cull(camera: ParticleCamera) { live(); if (!(camera instanceof THREE.Camera)) throw new TypeError("cull camera must be a Three.js Camera"); for (const e of emitters.values()) e.cull(camera); batches?.update(); },
-        sort(camera: ParticleCamera) { live(); if (!(camera instanceof THREE.Camera)) throw new TypeError("sort camera must be a Three.js Camera"); for (const e of emitters.values()) { emitterAccess.get(e)!.refresh(); e.sort(camera); } batches?.update(); },
+        setRenderOrder(id: string, order: number) { live(); const e = emitters.get(id); if (!e) throw new TypeError("Unknown emitter id"); e.setRenderOrder(order); refresh(); },
+        sort(camera: ParticleCamera, mode?: import("./types.js").ParticleSortMode) { live(); if (!(camera instanceof THREE.Camera)) throw new TypeError("sort camera must be a Three.js Camera"); for (const e of emitters.values()) { emitterAccess.get(e)!.refresh(); e.sort(camera, mode); } batches?.update(); },
         inspect() { return Object.freeze({ disposed, completed, capacity, activeParticleCount: [...emitters.values()].reduce((n, e) => n + e.inspect().activeParticleCount, 0), drawSavings: batches?.drawSavings ?? 0, droppedSubEmitterCount, emitters: [...emitters].map(([id, e]) => ({ id, state: e.inspect() })) }); },
         dispose() { if (disposed) return; disposed = true; batches?.dispose(); for (const e of emitters.values()) e.dispose(); group.removeFromParent(); },
     });
@@ -268,7 +269,7 @@ export function createParticleSystem(parent: ParticleSceneParent, options: Parti
     if (options.runtime !== undefined) {
         record(options.runtime, Object.keys(options.runtime), "runtime registry");
         runtime = Object.fromEntries(Object.entries(options.runtime).map(([id, value]) => {
-            record(value, ["update", "meshPositions", "material", "trailTexture", "softParticles", "onComplete"], "runtime");
+            record(value, ["update", "meshPositions", "material", "trailTexture", "softParticles", "onComplete", "customSimulationSpace", "captureState", "restoreState"], "runtime");
             return [id, { ...value, ...(value.softParticles ? { softParticles: { ...value.softParticles } } : {}) }];
         }));
     }

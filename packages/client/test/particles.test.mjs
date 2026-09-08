@@ -785,3 +785,122 @@ test("collision lifetime loss ends at the shortened fractional deadline during c
     s.emitter.emit(1); s.emitter.present(0); s.emitter.present(1000);
     const death = s.emitter.drainEvents().find(e => e.kind === "death"); close(death.timeMs, 505); assert.equal(s.emitter.inspect().activeParticleCount, 0); s.emitter.dispose();
 });
+
+test("custom simulation space and scaling modes share birth, render and culling transforms", () => {
+    const root = new THREE.Group(), parent = new THREE.Group(), reference = new THREE.Group(); root.add(parent, reference);
+    root.scale.setScalar(3); parent.position.x = 2; parent.scale.setScalar(2); reference.position.x = 10;
+    for (const [mode, expectedScale, expectedBirth] of [["hierarchy", 6, 1], ["local", 2, 1], ["shape", 1, 6]]) {
+        const e = createParticleEmitter(parent, { scalingMode: mode, size: 1, speed: 0, position: { x: 1, y: 0, z: 0 } }); e.emit(1);
+        const mesh = parent.children[0]; close(mesh.geometry.getAttribute("particleCenter").getX(0), expectedBirth);
+        mesh.onBeforeRender(); close(new THREE.Vector3().setFromMatrixScale(mesh.matrixWorld).x, expectedScale); e.dispose();
+    }
+    const e = createParticleEmitter(parent, { simulationSpace: "custom", runtime: { customSimulationSpace: reference }, position: { x: 1, y: 0, z: 0 }, speed: 0 }); e.emit(1);
+    const mesh = parent.children[0]; close(mesh.geometry.getAttribute("particleCenter").getX(0), -6);
+    reference.position.x = 12; mesh.onBeforeRender(); close(new THREE.Vector3(-6, 0, 0).applyMatrix4(mesh.matrixWorld).x, 18);
+    const camera = new THREE.OrthographicCamera(-30, 30, 30, -30, 0.1, 100); camera.position.z = 20; assert.equal(e.cull(camera), true);
+    e.dispose(); assert.throws(() => createParticleEmitter(parent, { simulationSpace: "custom" }), /requires/);
+});
+
+test("weighted meshes preserve data, stable birth flips and dense sorting across removal", () => {
+    const positions = [-1, 0, 0, 1, 0, 0, 0, 1, 0], uvs = [0.2, 0.3, 0.7, 0.4, 0.6, 0.9], normals = [0, 0, 2, 0, 0, 2, 0, 0, 2];
+    const s = setup({ capacity: 100, seed: 37, speed: 0, lifetimeMs: 1000, renderer: { kind: "mesh", flip: { x: 0.5, y: 1, z: 0 }, pivot: { x: 0.2, y: 0, z: 0 }, meshes: [{ positions, uvs, normals, weight: 1 }, { positions: positions.map(v => v * 2), weight: 3 }] } });
+    s.emitter.emit(80); s.emitter.present(0);
+    const drawCounts = () => s.scene.children.map(m => m.geometry.instanceCount);
+    assert.equal(drawCounts().reduce((a, b) => a + b), 80); assert.ok(drawCounts()[1] > drawCounts()[0]);
+    assert.deepEqual(Array.from(s.mesh.geometry.getAttribute("normal").array), [0, 0, 1, 0, 0, 1, 0, 0, 1]); close(s.mesh.geometry.getAttribute("uv").getX(0), 0.2);
+    const before = s.scene.children.map(m => Array.from(m.geometry.getAttribute("particleFlip").array));
+    s.emitter.sort(new THREE.PerspectiveCamera(), "youngest"); s.emitter.sort(new THREE.PerspectiveCamera(), "none");
+    assert.deepEqual(s.scene.children.map(m => Array.from(m.geometry.getAttribute("particleFlip").array)), before);
+    s.emitter.setRenderOrder(17); assert.ok(s.scene.children.every(m => m.renderOrder === 17));
+    s.emitter.present(900); s.emitter.emit(10); s.emitter.present(1000); assert.equal(drawCounts().reduce((a, b) => a + b), 10);
+    s.emitter.dispose(); assert.equal(s.scene.children.length, 0);
+    assert.throws(() => setup({ renderer: { kind: "mesh", positions, normals: [0, 0, 0] } }), /match/);
+    assert.throws(() => setup({ renderer: { kind: "mesh", meshes: [{ positions, weight: 0 }] } }), /weights/);
+});
+
+test("age sorting can be reversed and disabled without changing simulation", () => {
+    const s = setup({ speed: 0, lifetimeMs: 2000 }); s.emitter.present(0); s.emitter.emit(1, { position: { x: 1, y: 0, z: 0 } });
+    s.emitter.present(100); s.emitter.emit(1, { position: { x: 2, y: 0, z: 0 } });
+    const camera = new THREE.PerspectiveCamera(); s.emitter.sort(camera, "youngest"); assert.equal(s.attr("particleCenter").getX(0), 2);
+    s.emitter.sort(camera, "oldest"); assert.equal(s.attr("particleCenter").getX(0), 1);
+    s.emitter.sort(camera, "youngest"); s.emitter.sort(camera, "none"); assert.equal(s.attr("particleCenter").getX(0), 1); s.emitter.dispose();
+});
+
+test("atlas frame curves support reverse playback, speed selection and interpolation", () => {
+    const s = setup({ speed: 0, lifetimeMs: 1000, spriteSheet: { columns: 4, rows: 1, blend: true, frameOverLife: [{ time: 0, value: 3 }, { time: 1, value: 0 }] } });
+    s.emitter.emit(1); s.emitter.present(0); s.emitter.present(500); assert.equal(s.attr("particleDimensions").getZ(0), 1); close(s.attr("particleAtlas").getY(0), 0.5); s.emitter.dispose();
+    const v = setup({ velocity: { x: 2, y: 0, z: 0 }, spriteSheet: { columns: 4, rows: 1, frameBySpeed: { range: [0, 4], curve: [{ time: 0, value: 0 }, { time: 1, value: 3 }] } } }); v.emitter.emit(1); assert.equal(v.attr("particleDimensions").getZ(0), 1); v.emitter.dispose();
+    assert.throws(() => setup({ spriteSheet: { columns: 4, rows: 1, fps: 2, frameOverLife: [{ time: 0, value: 1 }, { time: 1, value: 2 }] } }), /frame|Frame/);
+});
+
+test("velocity limits damp excess speed and constrain individual axes by lifetime", () => {
+    const options = { velocity: { x: 10, y: -8, z: 0 }, simulationStepMs: 1000 / 60, maxSubSteps: 100, lifetimeMs: 3000, renderer: { kind: "stretched" }, limitVelocity: { axes: { x: [{ time: 0, value: 2 }, { time: 1, value: 1 }], y: [{ time: 0, value: 3 }, { time: 1, value: 3 }] }, dampen: 0.5 } };
+    const a = setup(options), b = setup(options); a.emitter.emit(1); b.emitter.emit(1); a.emitter.present(0); b.emitter.present(0);
+    a.emitter.present(100); for (let t = 10; t <= 100; t += 10) b.emitter.present(t);
+    close(a.attr("particleVelocity").getX(0), b.attr("particleVelocity").getX(0)); assert.ok(a.attr("particleVelocity").getX(0) > 1.9 && a.attr("particleVelocity").getX(0) < 2.2); close(a.attr("particleVelocity").getY(0), -3.078125, 0.01); a.emitter.dispose(); b.emitter.dispose();
+});
+
+test("ribbons connect emission order through sorting, deaths and retained endpoints", () => {
+    const s = setup({ speed: 0, lifetimeMs: 200, trails: { mode: "ribbon", ribbonCount: 1, persistMs: 200, width: 0.1 } });
+    s.emitter.present(0); s.emitter.emit(1, { position: { x: 0, y: 0, z: 0 } }); s.emitter.present(100);
+    s.emitter.emit(1, { position: { x: 1, y: 0, z: 0 } }); s.emitter.emit(1, { position: { x: 2, y: 0, z: 0 } });
+    const trail = s.scene.children[1]; assert.equal(trail.geometry.instanceCount, 2); assert.equal(s.emitter.inspect().activeTrailCount, 1);
+    const values = () => Array.from(trail.geometry.getAttribute("segmentStart").array.slice(0, 6)); const initial = values();
+    s.emitter.sort(new THREE.PerspectiveCamera(), "youngest"); assert.deepEqual(values(), initial);
+    s.emitter.present(200); assert.equal(trail.geometry.instanceCount, 2); s.emitter.present(400); assert.equal(trail.geometry.instanceCount, 1);
+    s.emitter.present(500); assert.equal(trail.geometry.instanceCount, 0); s.emitter.dispose();
+});
+
+test("recorded seeking interpolates observed parent motion and restores external callback state", () => {
+    let counter = 0;
+    const s = setup({ recording: {}, simulationSpace: "world", rateOverDistance: 1, speed: 0, lifetimeMs: 3000, simulationStepMs: 100, maxSubSteps: 100,
+        runtime: { captureState: () => ({ counter }), restoreState: value => { counter = value.counter; }, update: p => { counter++; p.attributes[0] = counter; } }, customAttributes: [{ name: "customCount", size: 1 }] });
+    s.emitter.present(0); s.scene.position.x = 10; s.emitter.present(1000); const end = counter;
+    counter = 9000; s.emitter.seek(500, "recorded"); assert.equal(s.emitter.inspect().activeParticleCount, 5); assert.ok(counter < end); close(s.scene.position.x, 10);
+    s.emitter.seek(1000, "recorded"); assert.equal(counter, end); s.emitter.dispose();
+    assert.throws(() => setup({ recording: {}, runtime: { captureState: () => ({ value: Infinity }), restoreState() {} } }), /finite/);
+});
+
+test("independent reference trails are never combined into a parent-space batch", () => {
+    const scene = new THREE.Group(), a = new THREE.Group(), b = new THREE.Group(); scene.add(a, b); b.position.x = 5;
+    const definition = { emitters: ["a", "b"].map(id => ({ id, options: { simulationSpace: "custom", blending: "additive", velocity: { x: 1, y: 0, z: 0 }, trails: { width: 0.1 } } })) };
+    const effect = createParticleEffect(scene, definition, { runtime: { a: { customSimulationSpace: a }, b: { customSimulationSpace: b } } });
+    effect.emit("a", 1); effect.emit("b", 1); effect.present(0); effect.present(100);
+    assert.equal(effect.inspect().drawSavings, 0); effect.dispose();
+});
+
+test("recorded boundaries do not restore future inputs and full journals capture branched inputs", () => {
+    let input = 1;
+    const s = setup({ recording: { maxCommands: 4 }, speed: 0, simulationStepMs: 100, lifetimeMs: 1000,
+        runtime: { captureState: () => input, restoreState: state => { input = state; }, update: p => { p.velocity.x = input; } } });
+    s.emitter.emit(1); s.emitter.present(0); input = 7; s.emitter.present(100);
+    s.emitter.seek(0, "recorded"); assert.equal(input, 1);
+    s.emitter.seek(100, "recorded"); input = 8; s.emitter.present(200); s.emitter.present(300); assert.equal(s.emitter.inspect().recordingFull, true);
+    s.emitter.seek(100, "recorded"); input = 9; s.emitter.present(200); s.emitter.seek(200, "recorded"); assert.equal(input, 9); s.emitter.dispose();
+});
+
+test("sub-emitter routing converts custom reference coordinates and inherited velocity", () => {
+    const scene = new THREE.Group(), a = new THREE.Group(), b = new THREE.Group(); a.position.x = 10; a.rotation.z = Math.PI / 2; b.position.x = 20; scene.add(a, b);
+    const effect = createParticleEffect(scene, { emitters: ["a", "b"].map(id => ({ id, options: { simulationSpace: "custom", velocity: { x: 1, y: 0, z: 0 }, renderer: { kind: "stretched" } } })), subEmitters: [{ source: "a", target: "b", event: "birth", count: 1, inheritVelocity: 1 }] }, { runtime: { a: { customSimulationSpace: a }, b: { customSimulationSpace: b } } });
+    effect.emit("a", 1); effect.present(0); const mesh = scene.children[2].children[1];
+    close(mesh.geometry.getAttribute("particleCenter").getX(0), -20); close(mesh.geometry.getAttribute("particleVelocity").getX(0), 1); close(mesh.geometry.getAttribute("particleVelocity").getY(0), 0);
+    effect.dispose();
+});
+
+test("render priority changes split compatible batches and reject invalid settings before attachment", () => {
+    const scene = new THREE.Group(); assert.throws(() => createParticleEmitter(scene, { renderOrder: NaN, trails: {} }), TypeError); assert.equal(scene.children.length, 0);
+    const effect = createParticleEffect(scene, { emitters: ["a", "b"].map(id => ({ id, options: { blending: "additive" } })) }); effect.emit("a", 1); effect.emit("b", 1);
+    effect.setRenderOrder("b", 2); assert.equal(effect.inspect().drawSavings, 0);
+    assert.equal(scene.children[0].children.filter(m => m.visible).length, 2);
+    effect.setRenderOrder("a", 2); assert.equal(effect.inspect().drawSavings, 1); effect.dispose();
+});
+
+test("recorded initial state enforces serialized bytes and captures runtime hook ownership", () => {
+    const scene = new THREE.Group();
+    assert.throws(() => createParticleEmitter(scene, { recording: { maxBytes: 1024 }, runtime: { captureState: () => "\u0000".repeat(400), restoreState() {} } }), RangeError);
+    assert.equal(scene.children.length, 0);
+    let value = 1; const runtime = { captureState: () => value, restoreState: state => { value = state; } };
+    const emitter = createParticleEmitter(scene, { recording: {}, runtime }); emitter.present(0);
+    runtime.captureState = () => 999; runtime.restoreState = () => { throw new Error("replaced hook"); };
+    emitter.present(100); value = 50; emitter.seek(100, "recorded"); assert.equal(value, 1); emitter.dispose();
+});

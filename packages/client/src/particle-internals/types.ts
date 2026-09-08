@@ -28,7 +28,26 @@ export interface ParticleUpdateContext {
     /** Components declared by customAttributes, in declaration order. */
     readonly attributes: Float32Array;
 }
+export type ParticleRecordedState = null | boolean | number | string | readonly ParticleRecordedState[] | { readonly [key: string]: ParticleRecordedState };
+export type ParticleSortMode = "distance" | "oldest" | "youngest" | "none";
+export interface ParticleVelocityLimit {
+    readonly speed?: number | ParticleCurveRange;
+    readonly axes?: ParticleVectorCurve;
+    /** Fraction of excess velocity removed per 1/60 second; 1 clamps immediately. */
+    readonly dampen?: number;
+}
+export interface ParticleMeshData {
+    readonly positions: readonly number[];
+    readonly indices?: readonly number[];
+    readonly uvs?: readonly number[];
+    readonly normals?: readonly number[];
+}
 export interface ParticleRuntimeOptions {
+    /** Borrowed reference object when simulationSpace is custom. */
+    readonly customSimulationSpace?: ParticleSceneParent;
+    /** Paired JSON-state hooks used by recorded playback. */
+    readonly captureState?: () => ParticleRecordedState;
+    readonly restoreState?: (state: ParticleRecordedState) => void;
     /** Called at birth and after committed simulation steps, never for render previews. */
     readonly update?: (particle: ParticleUpdateContext) => void;
     /** Supply current mesh vertices, including skinned vertices, before an emission batch. */
@@ -68,6 +87,8 @@ export interface ParticleCollisionOptions {
     readonly lifetimeLoss?: number;
 }
 export interface ParticleTrailOptions {
+    readonly mode?: "particle" | "ribbon";
+    readonly ribbonCount?: number;
     /** Fixed ring-buffer samples per particle (2–64). */
     readonly segments?: number;
     readonly intervalMs?: number;
@@ -80,11 +101,20 @@ export interface ParticleTrailOptions {
     readonly textureMode?: "stretch" | "tile";
     readonly tileLength?: number;
 }
-export type ParticleRendererOptions =
+export type ParticleRendererOptions = {
+    /** Offset in unscaled geometry coordinates, applied before rotation. */
+    readonly pivot?: ParticleVector3;
+    /** Per-axis probability of mirroring the geometry at birth. */
+    readonly flip?: ParticleVector3;
+    /** Bounds on nominal particle diameter as a fraction of viewport height. */
+    readonly minScreenSize?: number;
+    readonly maxScreenSize?: number;
+} & (
     | { readonly kind: "billboard" }
     | { readonly kind: "horizontal" | "vertical" }
     | { readonly kind: "stretched"; readonly lengthScale?: number; readonly velocityScale?: number }
-    | { readonly kind: "mesh"; readonly positions: readonly number[]; readonly indices?: readonly number[] };
+    | ({ readonly kind: "mesh" } & (ParticleMeshData | { readonly meshes: readonly (ParticleMeshData & { readonly weight?: number })[] }))
+);
 export interface ParticleParameters {
     /** Scales automatic emission density; 0 suppresses births. */
     readonly emissionScale?: number;
@@ -130,7 +160,8 @@ export interface ParticleEmitterOptions {
     /** Rotation in radians, XYZ Euler order. Applies to shape and initial velocity. */
     readonly rotation?: ParticleVector3;
     readonly shape?: ParticleShape;
-    readonly simulationSpace?: "local" | "world";
+    readonly simulationSpace?: "local" | "world" | "custom";
+    readonly scalingMode?: "hierarchy" | "local" | "shape";
     readonly lifetimeMs?: ParticleRange;
     readonly speed?: ParticleRange;
     /** Replaces shape-derived velocity; rotated at birth, in units/second. */
@@ -149,11 +180,13 @@ export interface ParticleEmitterOptions {
     readonly forceFields?: readonly ParticleForceField[];
     readonly collision?: ParticleCollisionOptions;
     readonly triggers?: readonly ParticleTrigger[];
-    readonly limitVelocity?: number;
+    readonly limitVelocity?: number | ParticleVelocityLimit;
     /** Optional numerical modules use a fixed step; excess catch-up steps are dropped. */
     readonly simulationStepMs?: number;
     readonly maxSubSteps?: number;
     readonly renderer?: ParticleRendererOptions;
+    readonly sortMode?: ParticleSortMode;
+    readonly renderOrder?: number;
     readonly trails?: ParticleTrailOptions;
     /** Event records are allocated only when enabled; drainEvents clears the bounded queue. */
     readonly events?: boolean;
@@ -193,7 +226,7 @@ export interface ParticleEmitterOptions {
     /** Opt-in bounded history for manual emissions, settings and parent motion. */
     readonly recording?: { readonly maxCommands?: number; readonly maxBytes?: number };
     /** Sprite sheet cells run left-to-right, bottom-to-top over each particle's life. */
-    readonly spriteSheet?: { readonly columns: number; readonly rows: number; readonly cycles?: number; readonly startFrame?: ParticleRange; readonly fps?: number; readonly row?: number | "random"; readonly blend?: boolean };
+    readonly spriteSheet?: { readonly columns: number; readonly rows: number; readonly cycles?: number; readonly startFrame?: ParticleRange; readonly fps?: number; readonly row?: number | "random"; readonly blend?: boolean; readonly frameOverLife?: ParticleCurveRange; readonly frameBySpeed?: ParticleSpeedCurve };
 }
 export interface ParticleEmission {
     readonly sizeAxes?: ParticleVector3;
@@ -248,13 +281,14 @@ export interface ParticleEmitter {
     setForceFields(fields: readonly ParticleForceField[]): void;
     setCollision(collision: ParticleCollisionOptions): void;
     setTriggers(triggers: readonly ParticleTrigger[]): void;
+    setRenderOrder(order: number): void;
     setDepthSource(texture: ParticleTexture, width: number, height: number, origin?: ParticleVector2): void;
     setMeshPositions(positions: readonly number[]): void;
     drainEvents(): readonly ParticleEvent[];
     /** Refresh conservative world-space bounds and hide draws outside the camera frustum. */
     cull(camera: ParticleCamera): boolean;
     /** Optional back-to-front alpha sorting. Call after present/camera movement and before rendering. */
-    sort(camera: ParticleCamera): void;
+    sort(camera: ParticleCamera, mode?: ParticleSortMode): void;
     /** Removes live particles without rewinding the clock, schedule, or random sequence. */
     clear(): void;
     /** Clears particles and restarts automatic emission and the seed sequence at the last presentation time. */
