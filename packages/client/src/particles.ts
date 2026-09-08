@@ -20,7 +20,7 @@ const flat: ParticleCurve = [{ time: 0, value: 1 }, { time: 1, value: 1 }];
 const fade: ParticleCurve = [{ time: 0, value: 1 }, { time: 1, value: 0 }];
 const zero = { x: 0, y: 0, z: 0 };
 
-/** Fixed-capacity CPU simulation and one instanced billboard draw per emitter. */
+/** Seeded, fixed-capacity simulation with optional motion, collision, renderer and trail modules. */
 export function createParticleEmitter(parent: ParticleSceneParent, options: ParticleEmitterOptions = {}): ParticleEmitter {
     if (!(parent instanceof THREE.Object3D)) throw new TypeError("Particle parent must be a Three.js Object3D");
     record(options, ["capacity", "seed", "rate", "durationMs", "bursts", "position", "rotation", "shape", "simulationSpace", "lifetimeMs", "speed", "acceleration", "drag", "size", "angle", "angularVelocity", "color", "sizeOverLife", "opacityOverLife", "colorOverLife", "blending", "depthTest", "texture", "spriteSheet", "loop", "startDelayMs", "prewarmMs", "timeScale", "rateOverDistance", "velocity", "inheritVelocity", "velocityOverLife", "forceOverLife", "noise", "forceFields", "collision", "simulationStepMs", "maxSubSteps", "renderer", "trails", "events", "eventCapacity"], "Particle options");
@@ -34,8 +34,7 @@ export function createParticleEmitter(parent: ParticleSceneParent, options: Part
     const size = range(options.size ?? 0.1, 0, MAX_VALUE, "size");
     const angle = range(options.angle ?? 0, -MAX_VALUE, MAX_VALUE, "angle");
     const spin = range(options.angularVelocity ?? 0, -MAX_VALUE, MAX_VALUE, "angularVelocity");
-    const initialColor = integer(options.color ?? 0xffffff, 0, 0xffffff, "color");
-    let baseColor = initialColor;
+    let baseColor = integer(options.color ?? 0xffffff, 0, 0xffffff, "color");
     let emissionScale = 1, sizeScale = 1, speedScale = 1, densityRemainder = 0;
     let timeScale = number(options.timeScale ?? 1, 0, 100, "timeScale"), paused = false;
     const delay = number(options.startDelayMs ?? 0, 0, MAX_TIME, "startDelayMs");
@@ -269,7 +268,7 @@ export function createParticleEmitter(parent: ParticleSceneParent, options: Part
                     distanceRemainder = total - count; skip(count - attempts); expireAt(elapsed); upload();
                 }
             }
-            if (paused) renderer.upload(active);
+            if (paused) upload();
             previousOrigin.copy(observedOrigin); hasPreviousOrigin = true;
         },
         emit(count: number, overrides: ParticleEmission = {}): number { const accepted = emitInternal(count, overrides); expireAt(elapsed); upload(); return accepted; },
@@ -334,7 +333,7 @@ export function createParticleEmitter(parent: ParticleSceneParent, options: Part
     emitterAccess.set(api, {
         emit: emitInternal,
         flush() { live(); expireAt(elapsed); upload(); },
-        refresh() { live(); renderer.upload(active); },
+        refresh() { live(); upload(); },
     });
     if (initialPrewarm) advance(initialPrewarm);
     return api;

@@ -136,6 +136,8 @@ saved with `JSON.stringify` and reused after `JSON.parse`.
 
 Effects provide named manual `emit`, group `setTransform`, `pause`, `play`,
 `setEmitting`, `setTimeScale`, `prewarm`, `clear`, `restart`, and `setParameters`.
+`sort(camera)` sorts each emitter for alpha rendering; call `cull(camera)` afterward
+when both are used.
 `emissionScale` is 0–1 automatic density, while `sizeScale`, `speedScale` (0–100)
 and `color` affect future births, including manual emissions. Existing particles
 retain their sampled appearance and velocity. A system's distance LOD owns the

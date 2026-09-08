@@ -40,9 +40,10 @@ const cards = presets.map(preset => {
     const effect = system.createEffect(defineParticleEffect(preset.definition));
     return { id: preset.id, viewport: article.querySelector(".viewport")!, scene, system, effect };
 });
-let time = 0, lastTime: number | undefined, paused = matchMedia("(prefers-reduced-motion: reduce)").matches, speed = 1, frame = 0, disposed = false;
+let time = 0, clock = 0, lastTime: number | undefined, paused = matchMedia("(prefers-reduced-motion: reduce)").matches, speed = 1, frame = 0, disposed = false;
 const pause = document.querySelector<HTMLButtonElement>("#pause")!;
 pause.textContent = paused ? "Play" : "Pause";
+for (const card of cards) if (paused) card.system.pause();
 function draw() {
     if (disposed) return;
     const w = innerWidth, h = innerHeight; renderer.setSize(w, h, false); renderer.setScissorTest(false); renderer.clear(); renderer.setScissorTest(true);
@@ -59,25 +60,26 @@ function draw() {
 }
 function present(timestamp: number) {
     const delta = lastTime === undefined ? 0 : Math.max(0, Math.min(100, timestamp - lastTime)); lastTime = timestamp;
+    clock += delta;
     if (!paused) time += delta * speed;
     for (const card of cards) {
         if (card.id === "comet") card.effect.setTransform(P(Math.sin(time / 900) * 1.6, Math.cos(time / 650) * 0.8, Math.sin(time / 1200) * 0.5));
-        card.system.present(time);
+        card.system.present(clock);
     }
     draw();
 }
-function restart() { for (const card of cards) card.effect.restart(); present(lastTime ?? 0); }
+function restart() { time = 0; for (const card of cards) { card.effect.restart(); if (paused) card.system.pause(); } present(lastTime ?? 0); }
 function burst() { for (const card of cards) card.effect.emit("main", card.id === "cascade" ? 1 : 16); draw(); }
-pause.addEventListener("click", () => { paused = !paused; pause.textContent = paused ? "Play" : "Pause"; });
+pause.addEventListener("click", () => { paused = !paused; pause.textContent = paused ? "Play" : "Pause"; for (const card of cards) { if (paused) card.system.pause(); else card.system.play(); } });
 document.querySelector("#restart")!.addEventListener("click", restart); document.querySelector("#burst")!.addEventListener("click", burst);
-document.querySelector<HTMLSelectElement>("#speed")!.addEventListener("change", e => { speed = Number((e.target as HTMLSelectElement).value); });
+document.querySelector<HTMLSelectElement>("#speed")!.addEventListener("change", e => { speed = Number((e.target as HTMLSelectElement).value); for (const card of cards) card.system.setTimeScale(speed); });
 document.querySelector<HTMLSelectElement>("#density")!.addEventListener("change", e => { for (const card of cards) card.effect.setParameters({ emissionScale: Number((e.target as HTMLSelectElement).value) }); });
 addEventListener("resize", draw); addEventListener("scroll", draw, { passive: true });
 function dispose() { if (disposed) return; disposed = true; cancelAnimationFrame(frame); for (const card of cards) card.system.dispose(); renderer.dispose(); renderer.domElement.remove(); }
 addEventListener("pagehide", dispose, { once: true });
 const testMode = new URLSearchParams(location.search).has("test");
 if (testMode) {
-    paused = false;
+    paused = false; pause.textContent = "Pause"; for (const card of cards) card.system.play();
     (window as unknown as { __particleModules: unknown }).__particleModules = {
         present, draw, dispose, burst, restart,
         pixelEnergy: () => cards.map(card => {

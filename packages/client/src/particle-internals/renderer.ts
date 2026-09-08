@@ -203,8 +203,14 @@ export function createRenderer(parent: THREE.Object3D, options: ParticleEmitterO
             if (trail && trailStarts && trailEnds) for (let i = 0; i < trail.geometry.instanceCount; i++) {
                 bounds.expandByPoint(point.fromBufferAttribute(trailStarts, i)); bounds.expandByPoint(point.fromBufferAttribute(trailEnds, i)); padding = Math.max(padding, width);
             }
+            if (!world) {
+                bounds.applyMatrix4(parent.matrixWorld);
+                // Frobenius norm bounds any stretch/shear, including billboard offsets
+                // whose camera-facing orientation is independent of the parent axes.
+                const e = parent.matrixWorld.elements;
+                padding *= Math.hypot(e[0]!, e[1]!, e[2]!, e[4]!, e[5]!, e[6]!, e[8]!, e[9]!, e[10]!);
+            }
             bounds.expandByScalar(padding);
-            if (!world) bounds.applyMatrix4(parent.matrixWorld);
             bounds.getBoundingSphere(sphere); matrix.multiplyMatrices(camera.projectionMatrix, camera.matrixWorldInverse); frustum.setFromProjectionMatrix(matrix);
             culled = bounds.isEmpty() || !frustum.intersectsSphere(sphere);
             mesh.visible = !culled && geometry.instanceCount > 0; if (trail) trail.visible = !culled && trail.geometry.instanceCount > 0;

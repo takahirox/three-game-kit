@@ -408,3 +408,51 @@ test("systems enforce aggregate capacity, release reservations, propagate playba
     system.dispose(); system.dispose(); assert.equal(system.inspect().reservedParticles, 0); assert.equal(scene.children.length, 0);
     assert.throws(() => system.createEffect(definition), /disposed/);
 });
+
+test("billboard culling remains conservative under nonuniform parent scaling", () => {
+    const x = setup({ size: 1, speed: 0 }); x.scene.scale.set(10, 0.01, 0.01); x.scene.position.y = 5;
+    x.emitter.emit(1); const camera = new THREE.PerspectiveCamera(60, 1, 0.1, 100); camera.position.z = 5;
+    // Center is outside the view, but the world-sized billboard extends into it.
+    assert.equal(x.emitter.cull(camera), true); x.emitter.dispose();
+});
+
+test("paused sorting retains trail colors and effect sorting preserves additive batch visibility", () => {
+    const x = setup({ capacity: 4, trails: { segments: 4, intervalMs: 10 }, velocity: P(1), lifetimeMs: 5000 });
+    x.emitter.emit(1, { position: P(0, 1, -1), color: 0xff0000 }); x.emitter.emit(1, { position: P(0, 2, -2), color: 0x00ff00 });
+    x.emitter.present(0); x.emitter.present(100); x.emitter.sort(new THREE.PerspectiveCamera()); x.emitter.pause(); x.emitter.present(200);
+    const trail = x.scene.children[1], start = trail.geometry.getAttribute("segmentStart"), color = trail.geometry.getAttribute("particleAppearance");
+    for (let i = 0; i < trail.geometry.instanceCount; i++) { if (start.getY(i) === 1) { close(color.getX(i), 1); close(color.getY(i), 0); } else { close(color.getX(i), 0); close(color.getY(i), 1); } }
+    x.emitter.dispose();
+    const scene = new THREE.Group(), effect = createParticleEffect(scene, { emitters: [
+        { id: "a", options: { capacity: 4, blending: "additive", bursts: [{ timeMs: 0, count: 1 }] } },
+        { id: "b", options: { capacity: 4, blending: "additive", bursts: [{ timeMs: 0, count: 1 }] } },
+    ] });
+    effect.present(0); effect.sort(new THREE.PerspectiveCamera()); assert.equal(scene.children[0].children.filter(c => c.visible).length, 1);
+    assert.equal(scene.children[0].children.at(-1).geometry.instanceCount, 2); effect.dispose();
+});
+
+test("collision friction reduces tangential velocity and reports contact positions", () => {
+    const x = setup({ position: P(0, 0.05), velocity: P(2, -10), simulationStepMs: 10, events: true,
+        collision: { colliders: [{ kind: "plane", normal: P(0, 1), offset: 0 }], bounce: 0.5, friction: 0.25 } });
+    x.emitter.emit(1); x.emitter.present(0); x.emitter.present(10);
+    const event = x.emitter.drainEvents().find(e => e.kind === "collision");
+    close(event.position.y, 0, 0.00001); close(event.velocity.x, 1.5); close(event.velocity.y, 5); x.emitter.dispose();
+});
+
+test("loop schedule remains deterministic for fractional periods and rates", () => {
+    for (const durationMs of [17.3, 100, 101.7]) {
+        const options = { capacity: 4096, durationMs, rate: 173.2, loop: true, bursts: [{ timeMs: 0, count: 2 }, { timeMs: durationMs, count: 1 }], lifetimeMs: 5000 };
+        const a = setup(options), b = setup(options); a.emitter.present(0); b.emitter.present(0); a.emitter.present(1000);
+        for (let t = 5; t <= 1000; t += 5) b.emitter.present(t);
+        assert.deepEqual(a.centers(), b.centers()); assert.equal(a.emitter.inspect().droppedParticleCount, 0); a.emitter.dispose(); b.emitter.dispose();
+    }
+});
+
+test("particle Feature accepts an owned system and releases nested effects on shutdown", async () => {
+    const scene = new THREE.Group(), system = createParticleSystem(scene);
+    system.createEffect({ emitters: [{ id: "a", options: { rate: 10 } }] });
+    const frameSource = createDeterministicPresentationFrameSource();
+    const client = createClientRuntime({ frameSource, features: [createParticleFeature({ emitters: [system] })] });
+    assert.equal((await client.boot()).state, "running"); client.startPresentation(); frameSource.deliver(0); frameSource.deliver(100);
+    assert.equal(system.inspect().activeParticleCount, 1); await client.shutdown(); assert.equal(scene.children.length, 0); assert.equal(system.inspect().disposed, true);
+});

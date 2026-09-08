@@ -27,6 +27,7 @@ export interface ParticleEffect {
     restart(): void;
     /** Only affects draws; simulation and sub-emitter events continue. */
     cull(camera: ParticleCamera): void;
+    sort(camera: ParticleCamera): void;
     inspect(): { readonly disposed: boolean; readonly capacity: number; readonly activeParticleCount: number; readonly drawSavings: number; readonly droppedSubEmitterCount: number; readonly emitters: readonly { readonly id: string; readonly state: ReturnType<ParticleEmitter["inspect"]> }[] };
     dispose(): void;
 }
@@ -46,7 +47,10 @@ function cloneData(value: unknown, depth = 0): unknown {
         if (value.length > 196608) throw new TypeError("definition array is too large");
         return Object.freeze(Array.from(value, v => cloneData(v, depth + 1)));
     }
-    if (value && Object.getPrototypeOf(value) === Object.prototype) return Object.freeze(Object.fromEntries(Object.entries(value).map(([k, v]) => [k, cloneData(v, depth + 1)])));
+    if (value && Object.getPrototypeOf(value) === Object.prototype) {
+        if (Object.getOwnPropertySymbols(value).length) throw new TypeError("effect definitions cannot contain symbol keys");
+        return Object.freeze(Object.fromEntries(Object.entries(value).map(([k, v]) => [k, cloneData(v, depth + 1)])));
+    }
     throw new TypeError("effect definitions must contain plain JSON data without null");
 }
 
@@ -89,6 +93,8 @@ export function createParticleEffect(parent: ParticleSceneParent, input: Particl
     const group = new THREE.Group(); group.name = "three-game-kit-particle-effect"; parent.add(group);
     const emitters = new Map<string, ParticleEmitter>();
     const links = definition.subEmitters ?? [];
+    const configs = new Map(definition.emitters.map(e => [e.id, e]));
+    const outgoing = new Map(definition.emitters.map(e => [e.id, links.filter(l => l.source === e.id)]));
     const ordered: string[] = [], visited = new Set<string>();
     function order(id: string) { if (visited.has(id)) return; visited.add(id); for (const link of links) if (link.source === id) order(link.target); ordered.unshift(id); }
     for (const e of definition.emitters) order(e.id);
@@ -104,29 +110,31 @@ export function createParticleEffect(parent: ParticleSceneParent, input: Particl
     } catch (error) { for (const e of emitters.values()) e.dispose(); group.removeFromParent(); throw error; }
     let disposed = false, droppedSubEmitterCount = 0;
     const routed = new Map<string, number>();
-    const sourcePosition = new THREE.Vector3(), sourceVelocity = new THREE.Vector3(), inverse = new THREE.Matrix4(), normalMatrix = new THREE.Matrix3(), rotation = new THREE.Quaternion();
+    const sourcePosition = new THREE.Vector3(), sourceVelocity = new THREE.Vector3(), inverse = new THREE.Matrix4(), normalMatrix = new THREE.Matrix3(), rotation = new THREE.Quaternion(), euler = new THREE.Euler();
     function live() { if (disposed) throw new Error("Particle effect has been disposed"); }
     function route(id: string) {
-        const source = definition.emitters.find(e => e.id === id)!;
-        const events = emitters.get(id)!.drainEvents();
-        for (const event of events) for (const link of links) if (link.source === id && link.event === event.kind) {
-            const target = definition.emitters.find(e => e.id === link.target)!;
+        const source = configs.get(id)!, sourceEmitter = emitters.get(id)!;
+        const events = sourceEmitter.drainEvents(), sourceLinks = outgoing.get(id)!;
+        if (!sourceLinks.length || !events.length) return;
+        const sourceTime = sourceEmitter.inspect().elapsedMs;
+        group.updateWorldMatrix(true, false); inverse.copy(group.matrixWorld).invert(); normalMatrix.setFromMatrix4(inverse);
+        for (const event of events) for (const link of sourceLinks) if (link.event === event.kind) {
+            const target = configs.get(link.target)!;
             const targetEmitter = emitters.get(link.target)!;
             const remaining = (target.options.capacity ?? 1024) - (routed.get(link.target) ?? 0), count = Math.min(link.count, remaining);
             droppedSubEmitterCount = Math.min(Number.MAX_SAFE_INTEGER, droppedSubEmitterCount + link.count - count);
             if (!count) continue;
             routed.set(link.target, (routed.get(link.target) ?? 0) + count);
-            const ageMs = Math.max(0, emitters.get(id)!.inspect().elapsedMs - event.timeMs);
+            const ageMs = Math.max(0, sourceTime - event.timeMs);
             sourcePosition.copy(event.position); sourceVelocity.copy(event.velocity);
             // emit() expects parent-local birth coordinates, even for a world-space target.
-            group.updateWorldMatrix(true, false); inverse.copy(group.matrixWorld).invert();
             if (source.options.simulationSpace === "world") sourcePosition.applyMatrix4(inverse);
             const sourceWorld = source.options.simulationSpace === "world";
             // An explicit target velocity is transformed into simulation space by its emitter.
-            if (sourceWorld) sourceVelocity.applyMatrix3(normalMatrix.setFromMatrix4(inverse));
+            if (sourceWorld) sourceVelocity.applyMatrix3(normalMatrix);
             if (link.inheritVelocity) {
                 const r = target.options.rotation;
-                rotation.setFromEuler(new THREE.Euler(r?.x ?? 0, r?.y ?? 0, r?.z ?? 0)).invert();
+                rotation.setFromEuler(euler.set(r?.x ?? 0, r?.y ?? 0, r?.z ?? 0)).invert();
                 sourceVelocity.applyQuaternion(rotation).multiplyScalar(link.inheritVelocity);
                 emitterAccess.get(targetEmitter)!.emit(count, { position: sourcePosition, velocity: sourceVelocity }, ageMs);
             } else emitterAccess.get(targetEmitter)!.emit(count, { position: sourcePosition }, ageMs);
@@ -156,6 +164,7 @@ export function createParticleEffect(parent: ParticleSceneParent, input: Particl
         clear() { live(); for (const e of emitters.values()) { e.clear(); e.drainEvents(); } batches?.update(); },
         restart() { live(); for (const e of emitters.values()) e.restart(); batches?.update(); },
         cull(camera: ParticleCamera) { live(); if (!(camera instanceof THREE.Camera)) throw new TypeError("cull camera must be a Three.js Camera"); for (const e of emitters.values()) e.cull(camera); batches?.update(); },
+        sort(camera: ParticleCamera) { live(); if (!(camera instanceof THREE.Camera)) throw new TypeError("sort camera must be a Three.js Camera"); for (const e of emitters.values()) { emitterAccess.get(e)!.refresh(); e.sort(camera); } batches?.update(); },
         inspect() { return Object.freeze({ disposed, capacity, activeParticleCount: [...emitters.values()].reduce((n, e) => n + e.inspect().activeParticleCount, 0), drawSavings: batches?.drawSavings ?? 0, droppedSubEmitterCount, emitters: [...emitters].map(([id, e]) => ({ id, state: e.inspect() })) }); },
         dispose() { if (disposed) return; disposed = true; batches?.dispose(); for (const e of emitters.values()) e.dispose(); group.removeFromParent(); },
     });
@@ -185,12 +194,15 @@ export function createParticleSystem(parent: ParticleSceneParent, options: Parti
     if (!(parent instanceof THREE.Object3D)) throw new TypeError("system parent must be a Three.js Object3D");
     record(options, ["textures", "maxParticles", "batch", "camera", "cull", "lod"], "system options");
     const maxParticles = integer(options.maxParticles ?? 65536, 1, 1048576, "maxParticles");
+    const camera = options.camera as THREE.Camera | undefined, culling = options.cull ?? false, batch = options.batch ?? true;
+    const textures = options.textures === undefined ? undefined : { ...options.textures };
+    if (typeof batch !== "boolean") throw new TypeError("batch must be boolean");
     if (options.camera !== undefined && !(options.camera instanceof THREE.Camera)) throw new TypeError("system camera must be a Three.js Camera");
     if (options.cull !== undefined && typeof options.cull !== "boolean") throw new TypeError("cull must be boolean");
     if ((options.cull || options.lod) && !options.camera) throw new TypeError("culling and LOD require a camera");
     if (options.lod !== undefined && (!Array.isArray(options.lod) || options.lod.length > 16)) throw new TypeError("LOD requires at most 16 bands");
     let previousDistance = -1;
-    const lod = (options.lod ?? []).map(l => { record(l, ["distance", "emissionScale"], "LOD"); const distance = number(l.distance, 0, 1e6, "LOD distance"); if (distance <= previousDistance) throw new TypeError("LOD distances must increase"); previousDistance = distance; return { distance, emissionScale: number(l.emissionScale, 0, 1, "LOD emissionScale") }; });
+    const lod = Array.from(options.lod ?? [], l => { record(l, ["distance", "emissionScale"], "LOD"); const distance = number(l.distance, 0, 1e6, "LOD distance"); if (distance <= previousDistance) throw new TypeError("LOD distances must increase"); previousDistance = distance; return { distance, emissionScale: number(l.emissionScale, 0, 1, "LOD emissionScale") }; });
     const effects = new Map<ParticleEffect, THREE.Group>();
     let disposed = false, reserved = 0, lastTime: number | null = null, paused = false, scale = 1;
     const cameraPosition = new THREE.Vector3(), effectPosition = new THREE.Vector3();
@@ -199,7 +211,7 @@ export function createParticleSystem(parent: ParticleSceneParent, options: Parti
         createEffect(definition: ParticleEffectDefinition) {
             live(); const host = new THREE.Group(); parent.add(host);
             let effect: ParticleEffect;
-            try { effect = createParticleEffect(host, definition, { ...(options.textures ? { textures: options.textures } : {}), ...(options.batch === undefined ? {} : { batch: options.batch }), maxParticles: Math.max(1, maxParticles - reserved) }); }
+            try { effect = createParticleEffect(host, definition, { ...(textures ? { textures } : {}), batch, maxParticles: Math.max(1, maxParticles - reserved) }); }
             catch (error) { host.removeFromParent(); throw error; }
             const capacity = effect.inspect().capacity;
             if (reserved + capacity > maxParticles) { effect.dispose(); host.removeFromParent(); throw new RangeError("system exceeds particle capacity budget"); }
@@ -211,7 +223,6 @@ export function createParticleSystem(parent: ParticleSceneParent, options: Parti
         },
         present(timestampMs: number) {
             live(); number(timestampMs, 0, Number.MAX_SAFE_INTEGER, "presentation time"); if (lastTime !== null && timestampMs < lastTime) throw new TypeError("Particle system time must be monotonic"); lastTime = timestampMs;
-            const camera = options.camera as THREE.Camera | undefined;
             if (camera) camera.getWorldPosition(cameraPosition);
             for (const [effect, host] of effects) {
                 if (lod.length) {
@@ -219,7 +230,7 @@ export function createParticleSystem(parent: ParticleSceneParent, options: Parti
                     let density = 1; for (const band of lod) if (distance >= band.distance) density = band.emissionScale;
                     effect.setParameters({ emissionScale: density });
                 }
-                effect.present(timestampMs); if (camera && options.cull) effect.cull(camera);
+                effect.present(timestampMs); if (camera && culling) effect.cull(camera);
             }
         },
         pause() { live(); paused = true; for (const e of effects.keys()) e.pause(); },

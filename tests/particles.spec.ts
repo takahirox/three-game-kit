@@ -120,13 +120,16 @@ test("native modules render trails, mesh particles and event cascades with bound
     await page.getByRole("button", { name: "Pause", exact: true }).click();
     const frozen = await page.evaluate(() => { const api = (window as any).__particleModules; const before = api.inspect().time; api.present(2000); return { before, ...api.inspect() }; });
     expect(frozen.paused).toBe(true); expect(frozen.time).toBe(frozen.before);
+    for (const effect of frozen.effects) for (const emitter of effect.emitters) expect(emitter.state.paused).toBe(true);
     await page.getByRole("button", { name: "Burst", exact: true }).click();
     await page.getByRole("button", { name: "Restart", exact: true }).click();
     await page.getByRole("button", { name: "Play", exact: true }).click();
-    await page.evaluate(() => { const api = (window as any).__particleModules; for (let t = 2016; t <= 7000; t += 16) api.present(t); });
+    await page.getByLabel("Speed", { exact: true }).selectOption("2");
+    await page.getByLabel("Density", { exact: true }).selectOption("0.5");
+    await page.evaluate(() => { const api = (window as any).__particleModules; for (let t = 2016; t <= 7000; t += 80) api.present(t); });
     const later = await page.evaluate(() => (window as any).__particleModules.inspect());
     expect(later.geometries).toBe(initial.geometries); expect(later.programs).toBe(initial.programs);
-    for (const effect of later.effects) expect(effect.activeParticleCount).toBeLessThanOrEqual(effect.capacity);
+    for (const effect of later.effects) { expect(effect.activeParticleCount).toBeLessThanOrEqual(effect.capacity); for (const emitter of effect.emitters) expect(emitter.state.timeScale).toBe(2); }
     const disposed = await page.evaluate(() => { const api = (window as any).__particleModules; api.dispose(); api.dispose(); return api.inspect(); });
     expect(disposed.children).toBe(0); expect(disposed.geometries).toBe(0); expect(disposed.programs).toBe(0);
     expect(errors).toEqual([]);
