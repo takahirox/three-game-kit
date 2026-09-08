@@ -904,3 +904,77 @@ test("recorded initial state enforces serialized bytes and captures runtime hook
     runtime.captureState = () => 999; runtime.restoreState = () => { throw new Error("replaced hook"); };
     emitter.present(100); value = 50; emitter.seek(100, "recorded"); assert.equal(value, 1); emitter.dispose();
 });
+
+test("observed motion interpolates scheduled birth translations and rotations, preserving local space", () => {
+    const options = { interpolateMotion: true, simulationSpace: "world", rate: 4, speed: 0, lifetimeMs: 2000, position: { x: 1, y: 0, z: 0 } };
+    const s = setup(options); s.emitter.present(0); s.scene.position.x = 4; s.scene.rotation.z = Math.PI; s.emitter.present(1000);
+    const positions = s.centers(); close(positions[0], 1 + Math.SQRT1_2); close(positions[1], Math.SQRT1_2); close(positions[3], 2); close(positions[4], 1); close(positions[9], 3); s.emitter.dispose();
+    const local = setup({ ...options, simulationSpace: "local" }); local.emitter.present(0); local.scene.position.x = 4; local.emitter.present(1000); assert.deepEqual(local.centers(), [1, 0, 0, 1, 0, 0, 1, 0, 0, 1, 0, 0]); local.emitter.dispose();
+});
+
+test("motion interpolation is partition invariant for linear observed paths and pauses discard movement", () => {
+    const options = { interpolateMotion: true, simulationSpace: "world", rate: 10, speed: 0, lifetimeMs: 3000, recording: {} };
+    const coarse = setup(options), fine = setup(options); coarse.emitter.present(0); fine.emitter.present(0);
+    coarse.scene.position.x = 10; coarse.emitter.present(1000); for (let t = 100; t <= 1000; t += 100) { fine.scene.position.x = t / 100; fine.emitter.present(t); }
+    assert.deepEqual(coarse.centers(), fine.centers()); coarse.emitter.seek(500, "recorded"); assert.equal(coarse.emitter.inspect().activeParticleCount, 5);
+    const replayed = coarse.scene.children[0].geometry.getAttribute("particleCenter"); close(replayed.getX(0), 1); close(replayed.getX(4), 5);
+    fine.emitter.pause(); fine.scene.position.x = 100; fine.emitter.present(2000); fine.emitter.play(); fine.emitter.present(2100); close(fine.attr("particleCenter").getX(10), 100); coarse.emitter.dispose(); fine.emitter.dispose();
+});
+
+test("drag curves and size/velocity multipliers reduce velocity on fixed steps", () => {
+    const options = { velocity: { x: 10, y: 0, z: 0 }, size: 2, lifetimeMs: 3000, simulationStepMs: 100, renderer: { kind: "stretched" }, drag: { coefficient: [{ time: 0, value: 1 }, { time: 1, value: 2 }], multiplyBySize: true, multiplyByVelocity: true } };
+    const a = setup(options), b = setup(options); a.emitter.emit(1); b.emitter.emit(1); a.emitter.present(0); b.emitter.present(0); a.emitter.present(200); b.emitter.present(100); b.emitter.present(200);
+    close(a.attr("particleVelocity").getX(0), b.attr("particleVelocity").getX(0)); assert.ok(a.attr("particleVelocity").getX(0) < 2); a.emitter.dispose(); b.emitter.dispose();
+    assert.throws(() => setup({ drag: true }), TypeError); assert.throws(() => setup({ drag: { coefficient: -1 } }), TypeError);
+});
+
+test("camera stretching samples presentation time once per camera, with independent multi-view history", () => {
+    const s = setup({ renderer: { kind: "stretched", cameraScale: 1 } }); const camera = new THREE.PerspectiveCamera(); camera.updateMatrixWorld();
+    s.emitter.present(0); s.mesh.onBeforeRender(null, null, camera); camera.position.x = 2; camera.updateMatrixWorld(); s.emitter.present(1000); s.mesh.onBeforeRender(null, null, camera);
+    close(s.mesh.material.uniforms.cameraVelocity.value.x, 2); s.mesh.onBeforeRender(null, null, camera); close(s.mesh.material.uniforms.cameraVelocity.value.x, 2);
+    s.mesh.onBeforeRender(null, null, new THREE.PerspectiveCamera()); close(s.mesh.material.uniforms.cameraVelocity.value.x, 0); s.emitter.dispose();
+    for (const alignment of ["facing", "world", "local", "velocity"]) { const s = setup({ renderer: { kind: "billboard", alignment, allowRoll: false } }); s.emitter.dispose(); }
+    assert.throws(() => setup({ renderer: { kind: "mesh", positions: [0, 0, 0, 1, 0, 0, 0, 1, 0], alignment: "view" } }), /billboard/);
+});
+
+test("particle lights are bounded, follow color/age/space, and release their fixed pool", () => {
+    const s = setup({ speed: 0, size: 2, lifetimeMs: 1000, color: 0xff0000, lights: { maxLights: 2, intensity: 4, range: 3, sizeAffectsRange: true, alphaAffectsIntensity: true } }); s.scene.position.x = 5;
+    s.emitter.emit(8); s.emitter.present(0); const lights = s.scene.children.filter(o => o.isPointLight); assert.equal(lights.length, 2); assert.equal(s.emitter.inspect().activeLightCount, 2);
+    close(lights[0].matrixWorld.elements[12], 5); close(lights[0].distance, 6); close(lights[0].color.r, 1); s.emitter.present(500); close(lights[0].intensity, 2);
+    const objects = s.emitter.inspect().liveResourceCounts; assert.equal(objects.objects, 3); assert.equal(objects.geometries, 1);
+    s.emitter.clear(); assert.equal(s.emitter.inspect().activeLightCount, 0); assert.ok(lights.every(l => l.intensity === 0)); s.emitter.dispose(); assert.equal(s.scene.children.length, 0);
+    assert.throws(() => setup({ lights: { maxLights: 33 } }), TypeError);
+});
+
+test("lit trails own adapted PBR/shadow materials while preserving the borrowed source", () => {
+    const material = new THREE.MeshStandardMaterial(); let disposed = 0; material.addEventListener("dispose", () => disposed++);
+    const s = setup({ velocity: { x: 1, y: 0, z: 0 }, trails: { castShadow: true, receiveShadow: true }, runtime: { trailMaterial: material } });
+    s.emitter.emit(1); s.emitter.present(0); s.emitter.present(100); const trail = s.scene.children[1]; assert.ok(trail.material.isMeshStandardMaterial); assert.ok(trail.geometry.getAttribute("normal")); assert.ok(trail.geometry.getAttribute("tangent")); assert.ok(trail.customDepthMaterial); assert.equal(trail.castShadow, true);
+    assert.equal(s.emitter.inspect().liveResourceCounts.materials, 5); s.emitter.dispose(); assert.equal(disposed, 0); material.dispose();
+});
+
+test("global alpha sorting interleaves mesh variants and emitters, enforces a draw budget and restores fast draws", () => {
+    const scene = new THREE.Group(), camera = new THREE.PerspectiveCamera(); camera.position.z = 10;
+    const effect = createParticleEffect(scene, { emitters: ["red", "blue"].map((id, i) => ({ id, options: { speed: 0, color: i ? 0x0000ff : 0xff0000 } })) });
+    effect.emit("red", 1, { position: { x: 0, y: 0, z: -1 } }); effect.emit("red", 1, { position: { x: 0, y: 0, z: 1 } }); effect.emit("blue", 1);
+    effect.sort(camera, "distance", { scope: "global", maxParticles: 3 }); const group = scene.children[0]; const proxies = group.children.filter(o => o.name === "three-game-kit-particle-alpha" && o.visible).sort((a, b) => a.renderOrder - b.renderOrder);
+    assert.equal(proxies.length, 3); assert.deepEqual(proxies.map(m => m.geometry.getAttribute("particleAppearance").getX(0)), [1, 0, 1]);
+    assert.throws(() => effect.sort(camera, "distance", { scope: "global", maxParticles: 2 }), RangeError); assert.equal(group.children.filter(o => o.name === "three-game-kit-particles" && o.visible).length, 2);
+    effect.sort(camera, "distance", { scope: "global" }); effect.present(0); assert.equal(group.children.filter(o => o.name === "three-game-kit-particle-alpha" && o.visible).length, 0); effect.dispose(); assert.equal(scene.children.length, 0);
+});
+
+test("global sorting spans system-owned effects and tears down its proxy geometries", () => {
+    const scene = new THREE.Group(), system = createParticleSystem(scene), camera = new THREE.PerspectiveCamera();
+    for (let i = 0; i < 2; i++) { const e = system.createEffect({ emitters: [{ id: "main", options: { speed: 0 } }] }); e.emit("main", 2); }
+    system.sort(camera); let proxies = 0; scene.traverse(o => { if (o.name === "three-game-kit-particle-alpha" && o.visible) proxies++; }); assert.equal(proxies, 4);
+    system.dispose(); assert.equal(scene.children.length, 0);
+});
+
+test("global sorting remains active through culling and does not dispose borrowed vertex buffers", () => {
+    const s = setup({ speed: 0 }); s.emitter.emit(3);
+    const camera = new THREE.OrthographicCamera(-1, 1, 1, -1, 0.1, 10); camera.position.z = 3;
+    s.emitter.sort(camera, "distance", { scope: "global" }); const proxies = s.scene.children.filter(o => o.name === "three-game-kit-particle-alpha");
+    s.emitter.cull(camera); assert.ok(proxies.every(o => o.visible)); assert.equal(s.mesh.visible, false);
+    camera.position.x = 100; s.emitter.cull(camera); assert.ok(proxies.every(o => !o.visible)); camera.position.x = 0; s.emitter.cull(camera); assert.ok(proxies.every(o => o.visible));
+    s.emitter.clear(); s.emitter.emit(1); s.emitter.sort(camera, "distance", { scope: "global", maxParticles: 1 }); assert.equal(s.scene.children.filter(o => o.name === "three-game-kit-particle-alpha").length, 1); s.emitter.dispose();
+});

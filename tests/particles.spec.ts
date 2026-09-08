@@ -33,7 +33,8 @@ test("all twenty-six presets render, switch, and release their bounded GPU resou
     const populated = await page.evaluate(() => (window as any).__particles.inspect());
     expect(populated.initializedCount).toBe(26);
     // Eight shared sprites, opaque depth/color, shadow depth/color, and Three.js's renderer-owned DFG lookup texture.
-    expect(populated.textures).toBeLessThanOrEqual(13);
+    // Comet also owns a shadow depth/color pair.
+    expect(populated.textures).toBeLessThanOrEqual(15);
     expect(populated.geometries).toBeLessThanOrEqual(80);
     await page.evaluate(() => { const api = (window as any).__particles; for (const id of api.inspect().presetIds) api.select(id); });
     const reused = await page.evaluate(() => (window as any).__particles.inspect());
@@ -139,7 +140,7 @@ test("new module effects share the atlas gallery, controls and resource lifecycl
     // WebGL allocates geometry only on its first visible draw; exercise a full
     // event cycle before comparing the next cycle's resource counts.
     // A second weighted crystal geometry also participates in the shadow pass.
-    expect(later.geometries).toBeLessThanOrEqual(15);
+    expect(later.geometries).toBeLessThanOrEqual(16);
     await page.evaluate(() => { const api = (window as any).__particles; for (let t = 7016; t <= 12000; t += 80) api.present(t); });
     const repeated = await page.evaluate(() => (window as any).__particles.inspect());
     expect(repeated.geometries).toBe(later.geometries); expect(repeated.programs).toBe(later.programs);
@@ -177,4 +178,22 @@ test("soft intersections, atlas blending, lighting and custom attributes produce
     expect(result.customPixel[0]).toBeGreaterThan(120); expect(result.customPixel[0]).toBeLessThan(135);
     expect(result.borrowedDisposals).toBe(0); expect(result.remaining.geometries).toBe(0); expect(result.remaining.textures).toBe(1); // Renderer-owned DFG LUT, not an emitter resource.
     expect(errors).toEqual([]);
+});
+
+test("global transparency, billboard alignments, particle lights and PBR trails render correctly", async ({ page }) => {
+    const errors: string[] = []; page.on("console", message => { if (message.type() === "error") errors.push(message.text()); });
+    await page.goto("/examples/particles/index.html?test=1");
+    const result = await page.evaluate(async () => { const path = "/tests/support/particles-rendering.ts"; return (await import(path)).checkParticleExtensions(); });
+    expect(result.sorted[0]).toBeGreaterThan(150); expect(result.sorted[0]).toBeLessThan(170); expect(result.sorted[2]).toBeGreaterThan(55); expect(result.sorted[2]).toBeLessThan(75);
+    expect(result.restored[0]).toBeGreaterThan(120); expect(result.restored[0]).toBeLessThan(135); expect(result.restored[2]).toBeLessThan(5);
+    for (const rgba of result.orientations) expect(rgba[0]).toBeGreaterThan(200);
+    expect(result.trailLit[0]).toBeGreaterThan(30); expect(result.trailDark[0]).toBeLessThan(5);
+    expect(result.lightOn[0]).toBeGreaterThan(30); expect(result.lightOff[0]).toBeLessThan(5);
+    expect(result.remaining.geometries).toBe(0); expect(result.remaining.textures).toBe(1); expect(errors).toEqual([]);
+    await page.evaluate(() => (window as any).__particles.select("shards"));
+    await page.getByRole("checkbox", { name: "Refine overlapping crystals" }).check();
+    expect(await page.evaluate(() => (window as any).__particles.inspect().calls)).toBeGreaterThan(7);
+    await page.getByRole("checkbox", { name: "Refine overlapping crystals" }).uncheck();
+    expect(await page.evaluate(() => (window as any).__particles.inspect().calls)).toBeLessThanOrEqual(7);
+    await page.evaluate(() => (window as any).__particles.dispose());
 });

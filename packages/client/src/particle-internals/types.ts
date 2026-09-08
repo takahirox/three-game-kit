@@ -30,6 +30,27 @@ export interface ParticleUpdateContext {
 }
 export type ParticleRecordedState = null | boolean | number | string | readonly ParticleRecordedState[] | { readonly [key: string]: ParticleRecordedState };
 export type ParticleSortMode = "distance" | "oldest" | "youngest" | "none";
+export interface ParticleDrag {
+    readonly coefficient: number | ParticleCurveRange;
+    readonly multiplyBySize?: boolean;
+    readonly multiplyByVelocity?: boolean;
+}
+export interface ParticleLights {
+    readonly maxLights?: number;
+    readonly ratio?: number;
+    readonly intensity?: number;
+    readonly range?: number;
+    readonly intensityOverLife?: ParticleCurveRange;
+    readonly rangeOverLife?: ParticleCurveRange;
+    readonly sizeAffectsRange?: boolean;
+    readonly alphaAffectsIntensity?: boolean;
+}
+export interface ParticleSortOptions {
+    /** Global sorting is an opt-in exact, one-draw-per-particle path for normal-alpha particles. */
+    readonly scope?: "emitter" | "global";
+    /** Hard limit, 1–4096, default 2048; exceeding it throws without hiding ordinary draws. */
+    readonly maxParticles?: number;
+}
 export interface ParticleVelocityLimit {
     readonly speed?: number | ParticleCurveRange;
     readonly axes?: ParticleVectorCurve;
@@ -55,6 +76,7 @@ export interface ParticleRuntimeOptions {
     /** Borrowed ShaderMaterial, or MeshStandardMaterial adapted for scene lighting and shadows. */
     readonly material?: ParticleMaterial;
     readonly trailTexture?: ParticleTexture;
+    readonly trailMaterial?: { readonly isMeshStandardMaterial: boolean };
     /** Depth from an opaque-only pass in the same camera and viewport; never the active render target. */
     readonly softParticles?: { readonly depthTexture: ParticleTexture; readonly camera: ParticleCamera; readonly width: number; readonly height: number; readonly origin?: ParticleVector2; readonly fadeDistance?: number };
     readonly onComplete?: () => void;
@@ -87,6 +109,8 @@ export interface ParticleCollisionOptions {
     readonly lifetimeLoss?: number;
 }
 export interface ParticleTrailOptions {
+    readonly castShadow?: boolean;
+    readonly receiveShadow?: boolean;
     readonly mode?: "particle" | "ribbon";
     readonly ribbonCount?: number;
     /** Fixed ring-buffer samples per particle (2–64). */
@@ -102,6 +126,8 @@ export interface ParticleTrailOptions {
     readonly tileLength?: number;
 }
 export type ParticleRendererOptions = {
+    readonly alignment?: "view" | "facing" | "world" | "local" | "velocity";
+    readonly allowRoll?: boolean;
     /** Offset in unscaled geometry coordinates, applied before rotation. */
     readonly pivot?: ParticleVector3;
     /** Per-axis probability of mirroring the geometry at birth. */
@@ -112,7 +138,7 @@ export type ParticleRendererOptions = {
 } & (
     | { readonly kind: "billboard" }
     | { readonly kind: "horizontal" | "vertical" }
-    | { readonly kind: "stretched"; readonly lengthScale?: number; readonly velocityScale?: number }
+    | { readonly kind: "stretched"; readonly lengthScale?: number; readonly velocityScale?: number; readonly cameraScale?: number }
     | ({ readonly kind: "mesh" } & (ParticleMeshData | { readonly meshes: readonly (ParticleMeshData & { readonly weight?: number })[] }))
 );
 export interface ParticleParameters {
@@ -193,7 +219,10 @@ export interface ParticleEmitterOptions {
     readonly eventCapacity?: number;
     readonly acceleration?: ParticleVector3;
     /** Linear drag in inverse seconds; integrated analytically. */
-    readonly drag?: number;
+    readonly drag?: number | ParticleDrag;
+    readonly lights?: ParticleLights;
+    /** Interpolate observed emitter transforms at scheduled birth times. Default false preserves existing timing. */
+    readonly interpolateMotion?: boolean;
     readonly size?: ParticleRange;
     readonly angle?: ParticleRange;
     readonly angularVelocity?: ParticleRange;
@@ -259,6 +288,7 @@ export interface ParticleInspection {
     readonly expiredParticleCount: number;
     readonly completed: boolean;
     readonly activeTrailCount: number;
+    readonly activeLightCount: number;
     readonly liveResourceCounts: { readonly objects: number; readonly geometries: number; readonly materials: number };
 }
 export interface ParticleEmitter {
@@ -288,7 +318,7 @@ export interface ParticleEmitter {
     /** Refresh conservative world-space bounds and hide draws outside the camera frustum. */
     cull(camera: ParticleCamera): boolean;
     /** Optional back-to-front alpha sorting. Call after present/camera movement and before rendering. */
-    sort(camera: ParticleCamera, mode?: ParticleSortMode): void;
+    sort(camera: ParticleCamera, mode?: ParticleSortMode, options?: ParticleSortOptions): void;
     /** Removes live particles without rewinding the clock, schedule, or random sequence. */
     clear(): void;
     /** Clears particles and restarts automatic emission and the seed sequence at the last presentation time. */

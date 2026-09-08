@@ -1,13 +1,15 @@
 import * as THREE from "three";
 import type { ParticleEmitterOptions } from "./types.js";
 import { curve, integer, number, record, sample } from "./validation.js";
+import { createStandardMaterial } from "./standard-material.js";
 import { tintCurve } from "./variation.js";
 
 /** @internal */
 export function createTrails(options: ParticleEmitterOptions, capacity: number) {
     const config = options.trails;
     if (!config) return undefined;
-    record(config, ["mode", "ribbonCount", "segments", "intervalMs", "width", "widthOverTrail", "colorOverTrail", "opacityOverTrail", "persistMs", "textureMode", "tileLength"], "trails");
+    record(config, ["castShadow", "receiveShadow", "mode", "ribbonCount", "segments", "intervalMs", "width", "widthOverTrail", "colorOverTrail", "opacityOverTrail", "persistMs", "textureMode", "tileLength"], "trails");
+    for (const flag of [config.castShadow, config.receiveShadow]) if (flag !== undefined && typeof flag !== "boolean") throw new TypeError("trail shadow flags must be boolean");
     const ribbon = config.mode === "ribbon";
     if (config.mode !== undefined && !["particle", "ribbon"].includes(config.mode)) throw new TypeError("Invalid trail mode");
     const ribbonCount = integer(config.ribbonCount ?? 1, 1, 16, "ribbonCount");
@@ -32,16 +34,19 @@ export function createTrails(options: ParticleEmitterOptions, capacity: number) 
     let retained = 0, activeTrailCount = 0;
     const g = new THREE.InstancedBufferGeometry(); g.setIndex([0, 1, 2, 0, 2, 3]);
     g.setAttribute("position", new THREE.Float32BufferAttribute([0, -0.5, 0, 1, -0.5, 0, 1, 0.5, 0, 0, 0.5, 0], 3));
+    g.setAttribute("uv", new THREE.Float32BufferAttribute([0, 0, 1, 0, 1, 1, 0, 1], 2));
+    g.setAttribute("normal", new THREE.Float32BufferAttribute([0, 0, 1, 0, 0, 1, 0, 0, 1, 0, 0, 1], 3));
+    g.setAttribute("tangent", new THREE.Float32BufferAttribute([1, 0, 0, 1, 1, 0, 0, 1, 1, 0, 0, 1, 1, 0, 0, 1], 4));
     const attr = (name: string, size: number) => { const a = new THREE.InstancedBufferAttribute(new Float32Array(limit * size), size).setUsage(THREE.DynamicDrawUsage); g.setAttribute(name, a); return a; };
     const starts = attr("segmentStart", 3), finishes = attr("segmentEnd", 3), colorA = attr("segmentColorA", 4), colorB = attr("segmentColorB", 4), widths = attr("segmentWidths", 2), uvs = attr("segmentUv", 2);
     const world = options.simulationSpace === "world";
     const m = new THREE.ShaderMaterial({ transparent: true, depthWrite: false, depthTest: options.depthTest ?? true, blending: options.blending === "additive" ? THREE.AdditiveBlending : THREE.NormalBlending, side: THREE.DoubleSide,
-        uniforms: { particleMap: { value: options.runtime?.trailTexture ?? null } }, defines: { ...(world ? { WORLD_SPACE: 1 } : {}), ...(options.runtime?.trailTexture ? { PARTICLE_TEXTURE: 1 } : {}) },
+        uniforms: { particleMap: { value: options.runtime?.trailTexture ?? null } }, defines: { TRAIL: 1, ...(world ? { WORLD_SPACE: 1 } : {}), ...(options.runtime?.trailTexture ? { PARTICLE_TEXTURE: 1 } : {}) },
         vertexShader: `
             attribute vec3 segmentStart, segmentEnd;
             attribute vec4 segmentColorA, segmentColorB;
             attribute vec2 segmentWidths, segmentUv;
-            varying vec2 vUv; varying vec4 vColor;
+            varying vec2 vParticleUv, vQuadUv; varying vec4 vAppearance; varying vec3 vNormal; vec3 particleViewTangent;
             void main() {
                 #ifdef WORLD_SPACE
                     vec4 a = viewMatrix * vec4(segmentStart, 1.0), b = viewMatrix * vec4(segmentEnd, 1.0);
@@ -55,13 +60,15 @@ export function createTrails(options: ParticleEmitterOptions, capacity: number) 
                 vec4 center = mix(a, b, position.x);
                 center.xy += side * position.y * mix(segmentWidths.x, segmentWidths.y, position.x) * scale;
                 gl_Position = projectionMatrix * center;
-                vUv = vec2(mix(segmentUv.x, segmentUv.y, position.x), position.y + 0.5);
-                vColor = mix(segmentColorA, segmentColorB, position.x);
+                vNormal = vec3(0, 0, 1); particleViewTangent = length(d) > 0.00001 ? normalize(vec3(d, 0)) : vec3(1, 0, 0);
+                vQuadUv = uv;
+                vParticleUv = vec2(mix(segmentUv.x, segmentUv.y, position.x), position.y + 0.5);
+                vAppearance = mix(segmentColorA, segmentColorB, position.x);
             }`,
-        fragmentShader: `uniform sampler2D particleMap; varying vec2 vUv; varying vec4 vColor;
-            void main() { vec4 color = vColor;
+        fragmentShader: `uniform sampler2D particleMap; varying vec2 vParticleUv, vQuadUv; varying vec4 vAppearance; varying vec3 vNormal; vec3 particleViewTangent;
+            void main() { vec4 color = vAppearance;
                 #ifdef PARTICLE_TEXTURE
-                    color *= texture2D(particleMap, vUv);
+                    color *= texture2D(particleMap, vParticleUv);
                 #endif
                 if (color.a <= 0.001) discard; gl_FragColor = color;
                 #include <tonemapping_fragment>
@@ -69,10 +76,16 @@ export function createTrails(options: ParticleEmitterOptions, capacity: number) 
             }`,
     });
     g.instanceCount = 0;
-    const mesh = new THREE.Mesh(g, m); mesh.name = "three-game-kit-particle-trails"; mesh.frustumCulled = false; mesh.visible = false;
+    const standard = options.runtime?.trailMaterial instanceof THREE.MeshStandardMaterial ? createStandardMaterial(options.runtime.trailMaterial, m) : undefined;
+    const mesh = new THREE.Mesh(g, standard?.material ?? m);
+    mesh.castShadow = config.castShadow ?? false; mesh.receiveShadow = config.receiveShadow ?? false;
+    if (standard) { mesh.customDepthMaterial = standard.depth; mesh.customDistanceMaterial = standard.distance; mesh.userData.particleCustomMaterial = true; }
+ mesh.name = "three-game-kit-particle-trails"; mesh.frustumCulled = false; mesh.visible = false;
     function copy(from: number, to: number) { orderDirty = true; identities[to] = identities[from]!; counts[to] = counts[from]!; heads[to] = heads[from]!; lastSample[to] = lastSample[from]!; history.copyWithin(to * segments * 3, from * segments * 3, (from + 1) * segments * 3); }
     const point = new THREE.Vector3();
     return {
+        update(camera: THREE.Camera, object: THREE.Object3D) { standard?.update(camera, object); },
+        materialCount: standard ? 4 : 1,
         mesh, starts, finishes, maxWidth: width * Math.max(...widthKeys.map(k => k.value)),
         get activeTrailCount() { return activeTrailCount; },
         clear() { orderDirty = true; retained = 0; activeTrailCount = 0; counts.fill(0); g.instanceCount = 0; mesh.visible = false; },
@@ -156,6 +169,6 @@ export function createTrails(options: ParticleEmitterOptions, capacity: number) 
             for (const a of [starts, finishes, colorA, colorB, widths, uvs]) { a.clearUpdateRanges(); if (n) { a.addUpdateRange(0, n * a.itemSize); a.needsUpdate = true; } }
         },
         expand(bounds: THREE.Box3) { for (let i = 0; i < g.instanceCount; i++) { bounds.expandByPoint(point.fromBufferAttribute(starts, i)); bounds.expandByPoint(point.fromBufferAttribute(finishes, i)); } },
-        dispose() { mesh.removeFromParent(); g.dispose(); m.dispose(); m.uniforms.particleMap!.value = null; },
+        dispose() { mesh.removeFromParent(); g.dispose(); standard?.dispose(); m.dispose(); m.uniforms.particleMap!.value = null; },
     };
 }

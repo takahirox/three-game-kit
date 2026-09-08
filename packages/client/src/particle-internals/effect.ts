@@ -3,6 +3,7 @@ import { createParticleEmitter } from "../particles.js";
 import type { ParticleCamera, ParticleVector2, ParticleForceField, ParticleCollisionOptions, ParticleRuntimeOptions, ParticleEmission, ParticleEmitter, ParticleEmitterOptions, ParticleEvent, ParticleParameters, ParticleSceneParent, ParticleTexture, ParticleVector3, ParticleTrigger } from "./types.js";
 import { integer, number, record, vector } from "./validation.js";
 import { emitterAccess } from "./access.js";
+import { createAlphaSort } from "./alpha-sort.js";
 import { createBatches } from "./batch.js";
 
 export interface ParticleEffectDefinition {
@@ -34,7 +35,7 @@ export interface ParticleEffect {
     restart(): void;
     /** Only affects draws; simulation and sub-emitter events continue. */
     cull(camera: ParticleCamera): void;
-    sort(camera: ParticleCamera, mode?: import("./types.js").ParticleSortMode): void;
+    sort(camera: ParticleCamera, mode?: import("./types.js").ParticleSortMode, options?: import("./types.js").ParticleSortOptions): void;
     setRenderOrder(id: string, order: number): void;
     inspect(): { readonly disposed: boolean; readonly completed: boolean; readonly capacity: number; readonly activeParticleCount: number; readonly drawSavings: number; readonly droppedSubEmitterCount: number; readonly emitters: readonly { readonly id: string; readonly state: ReturnType<ParticleEmitter["inspect"]> }[] };
     dispose(): void;
@@ -113,6 +114,7 @@ export function createParticleEffect(parent: ParticleSceneParent, input: Particl
     const ordered: string[] = [], visited = new Set<string>();
     function order(id: string) { if (visited.has(id)) return; visited.add(id); for (const link of links) if (link.source === id) order(link.target); ordered.unshift(id); }
     for (const e of definition.emitters) order(e.id);
+    const alphaSort = createAlphaSort();
     let batches: ReturnType<typeof createBatches> | undefined;
     try {
         for (const e of definition.emitters) {
@@ -120,7 +122,7 @@ export function createParticleEffect(parent: ParticleSceneParent, input: Particl
             const texture = textureId === undefined ? undefined : options.textures?.[textureId];
             if (textureId !== undefined && !texture) throw new TypeError(`Missing particle texture: ${textureId}`);
             const providedRuntime = options.runtime?.[e.id];
-            if (providedRuntime !== undefined) record(providedRuntime, ["update", "meshPositions", "material", "trailTexture", "softParticles", "onComplete", "customSimulationSpace", "captureState", "restoreState"], "runtime");
+            if (providedRuntime !== undefined) record(providedRuntime, ["update", "meshPositions", "material", "trailTexture", "trailMaterial", "softParticles", "onComplete", "customSimulationSpace", "captureState", "restoreState"], "runtime");
             const callback = providedRuntime?.onComplete;
             if (callback !== undefined && typeof callback !== "function") throw new TypeError("onComplete must be a function");
             const runtime = providedRuntime ? { ...providedRuntime, ...(callback ? { onComplete: () => { notifications.set(e.id, callback); } } : {}) } : undefined;
@@ -231,9 +233,9 @@ export function createParticleEffect(parent: ParticleSceneParent, input: Particl
         restart() { live(); completed = false; for (const e of emitters.values()) e.restart(); batches?.update(); },
         cull(camera: ParticleCamera) { live(); if (!(camera instanceof THREE.Camera)) throw new TypeError("cull camera must be a Three.js Camera"); for (const e of emitters.values()) e.cull(camera); batches?.update(); },
         setRenderOrder(id: string, order: number) { live(); const e = emitters.get(id); if (!e) throw new TypeError("Unknown emitter id"); e.setRenderOrder(order); refresh(); },
-        sort(camera: ParticleCamera, mode?: import("./types.js").ParticleSortMode) { live(); if (!(camera instanceof THREE.Camera)) throw new TypeError("sort camera must be a Three.js Camera"); for (const e of emitters.values()) { emitterAccess.get(e)!.refresh(); e.sort(camera, mode); } batches?.update(); },
+        sort(camera: ParticleCamera, mode?: import("./types.js").ParticleSortMode, sortOptions: import("./types.js").ParticleSortOptions = {}) { live(); if (!(camera instanceof THREE.Camera)) throw new TypeError("sort camera must be a Three.js Camera"); for (const e of emitters.values()) { emitterAccess.get(e)!.refresh(); e.sort(camera, mode, { scope: "emitter" }); } batches?.update(); if (sortOptions.scope === "global") { if (mode !== undefined && mode !== "distance" && mode !== "none") throw new TypeError("global sorting requires distance mode"); if (mode !== "none") alphaSort.sort(camera, [group], sortOptions); } else { record(sortOptions, ["scope", "maxParticles"], "sort options"); if (sortOptions.scope !== undefined && sortOptions.scope !== "emitter") throw new TypeError("Invalid sorting scope"); } },
         inspect() { return Object.freeze({ disposed, completed, capacity, activeParticleCount: [...emitters.values()].reduce((n, e) => n + e.inspect().activeParticleCount, 0), drawSavings: batches?.drawSavings ?? 0, droppedSubEmitterCount, emitters: [...emitters].map(([id, e]) => ({ id, state: e.inspect() })) }); },
-        dispose() { if (disposed) return; disposed = true; batches?.dispose(); for (const e of emitters.values()) e.dispose(); group.removeFromParent(); },
+        dispose() { if (disposed) return; disposed = true; alphaSort.dispose(); batches?.dispose(); for (const e of emitters.values()) e.dispose(); group.removeFromParent(); },
     });
     batches?.update();
     return effect;
@@ -248,6 +250,7 @@ export interface ParticleSystemOptions extends ParticleEffectOptions {
     readonly offscreenSimulation?: "continue" | "pause";
 }
 export interface ParticleSystem {
+    sort(camera: ParticleCamera, options?: import("./types.js").ParticleSortOptions): void;
     createEffect(definition: ParticleEffectDefinition): ParticleEffect;
     present(timestampMs: number): void;
     pause(): void;
@@ -269,7 +272,7 @@ export function createParticleSystem(parent: ParticleSceneParent, options: Parti
     if (options.runtime !== undefined) {
         record(options.runtime, Object.keys(options.runtime), "runtime registry");
         runtime = Object.fromEntries(Object.entries(options.runtime).map(([id, value]) => {
-            record(value, ["update", "meshPositions", "material", "trailTexture", "softParticles", "onComplete", "customSimulationSpace", "captureState", "restoreState"], "runtime");
+            record(value, ["update", "meshPositions", "material", "trailTexture", "trailMaterial", "softParticles", "onComplete", "customSimulationSpace", "captureState", "restoreState"], "runtime");
             return [id, { ...value, ...(value.softParticles ? { softParticles: { ...value.softParticles } } : {}) }];
         }));
     }
@@ -285,11 +288,13 @@ export function createParticleSystem(parent: ParticleSceneParent, options: Parti
     if (offscreen === "pause" && !culling) throw new TypeError("offscreen pause requires culling");
     let previousDistance = -1;
     const lod = Array.from(options.lod ?? [], l => { record(l, ["distance", "emissionScale", "updateIntervalMs"], "LOD"); const distance = number(l.distance, 0, 1e6, "LOD distance"); if (distance <= previousDistance) throw new TypeError("LOD distances must increase"); previousDistance = distance; return { distance, emissionScale: number(l.emissionScale, 0, 1, "LOD emissionScale"), updateIntervalMs: number(l.updateIntervalMs ?? 0, 0, 1000, "LOD updateIntervalMs") }; });
+    const systemSort = createAlphaSort();
     const effects = new Map<ParticleEffect, { host: THREE.Group; clock: number; lastTick: number }>();
     let disposed = false, reserved = 0, lastTime: number | null = null, paused = false, scale = 1;
     const cameraPosition = new THREE.Vector3(), effectPosition = new THREE.Vector3();
     function live() { if (disposed) throw new Error("Particle system has been disposed"); }
     return Object.freeze({
+        sort(camera: ParticleCamera, sortOptions: import("./types.js").ParticleSortOptions = { scope: "global" }) { live(); if (!(camera instanceof THREE.Camera)) throw new TypeError("sort camera must be a Camera"); for (const effect of effects.keys()) effect.sort(camera); if (sortOptions.scope === "emitter") { systemSort.reset(); return; } systemSort.sort(camera, [...effects.values()].map(e => e.host), sortOptions); },
         createEffect(definition: ParticleEffectDefinition) {
             live(); const host = new THREE.Group(); parent.add(host);
             let effect: ParticleEffect;
@@ -328,6 +333,6 @@ export function createParticleSystem(parent: ParticleSceneParent, options: Parti
         setTimeScale(value: number) { live(); scale = number(value, 0, 100, "timeScale"); for (const e of effects.keys()) e.setTimeScale(scale); },
         clear() { live(); for (const e of effects.keys()) e.clear(); },
         inspect() { return Object.freeze({ disposed, effectCount: effects.size, reservedParticles: reserved, maxParticles, activeParticleCount: [...effects.keys()].reduce((n, e) => n + e.inspect().activeParticleCount, 0) }); },
-        dispose() { if (disposed) return; disposed = true; for (const e of effects.keys()) e.dispose(); },
+        dispose() { if (disposed) return; disposed = true; systemSort.dispose(); for (const e of effects.keys()) e.dispose(); },
     });
 }

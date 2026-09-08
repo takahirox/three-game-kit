@@ -79,3 +79,33 @@ export function checkParticleRendering() {
     const remaining = { ...renderer.info.memory }; renderer.dispose();
     return { standardSoftBlend, screenSizePixel, pivotCenter, standardBlue, standardRed, standardLit, standardDark, shadowEnergy, unshadowedEnergy, borrowedPbrDisposals, faded, perspectiveFaded, solid, blended, litFront, litBack, tiltedLight, customPixel, borrowedDisposals, remaining };
 }
+
+export async function checkParticleExtensions() {
+    const { createParticleEffect } = await import("@three-game-kit/client/particles");
+    const renderer = new THREE.WebGLRenderer(); renderer.setSize(64, 64); renderer.outputColorSpace = THREE.LinearSRGBColorSpace;
+    const target = new THREE.WebGLRenderTarget(64, 64), scene = new THREE.Scene();
+    const camera = new THREE.OrthographicCamera(-1, 1, 1, -1, 0.1, 10); camera.position.z = 3; camera.updateMatrixWorld();
+    const rgba = new Uint8Array(4), flat = [{ time: 0, value: 1 }, { time: 1, value: 1 }];
+    function pixel() { renderer.setRenderTarget(target); renderer.clear(); renderer.render(scene, camera); renderer.readRenderTargetPixels(target, 32, 32, 1, 1, rgba); return Array.from(rgba); }
+    const effect = createParticleEffect(scene, { emitters: ["red", "blue"].map((id, i) => ({ id, options: { speed: 0, size: 1, color: i ? 0x0000ff : 0xff0000, opacityOverLife: [{ time: 0, value: 0.5 }, { time: 1, value: 0.5 }] } })) });
+    effect.emit("red", 1, { position: { x: 0, y: 0, z: -0.2 } }); effect.emit("red", 1, { position: { x: 0, y: 0, z: 0.2 } }); effect.emit("blue", 1);
+    pixel(); effect.sort(camera, "distance", { scope: "global" }); const sorted = pixel();
+    effect.clear(); effect.emit("red", 1); effect.sort(camera, "distance", { scope: "global", maxParticles: 1 }); pixel(); effect.sort(camera, "distance"); const restored = pixel(); effect.dispose();
+    const orientations: number[][] = [];
+    for (const alignment of ["view", "facing", "world", "local", "velocity"] as const) {
+        const e = createParticleEmitter(scene, { speed: 0, velocity: { x: 0, y: 0, z: 1 }, size: 1, opacityOverLife: flat, renderer: { kind: "billboard", alignment, allowRoll: false }, lighting: { ambient: 1, intensity: 0 } }); e.emit(1); orientations.push(pixel()); e.dispose();
+    }
+    const normal = new THREE.DataTexture(new Uint8Array([128, 128, 255, 255]), 1, 1); normal.needsUpdate = true;
+    const material = new THREE.MeshStandardMaterial({ roughness: 1, normalMap: normal, side: THREE.DoubleSide });
+    const sun = new THREE.DirectionalLight(0xffffff, 3); sun.position.set(0, 0, 3); sun.shadow.bias = -0.001; sun.castShadow = true; sun.shadow.mapSize.set(64, 64); scene.add(sun); renderer.shadowMap.enabled = true;
+    const e = createParticleEmitter(scene, { speed: 0, position: { x: -0.5, y: 0, z: 0 }, velocity: { x: 1, y: 0, z: 0 }, lifetimeMs: 3000, size: 0, opacityOverLife: flat, trails: { segments: 16, intervalMs: 100, width: 0.5, opacityOverTrail: flat, castShadow: true, receiveShadow: true }, runtime: { trailMaterial: material } });
+    e.emit(1); e.present(0); for (let time = 100; time <= 1000; time += 100) e.present(time);
+    const trailLit = pixel(); sun.intensity = 0; const trailDark = pixel();
+    const point = new THREE.PointLight(0xffffff, 1); point.position.z = 2; point.castShadow = true; point.shadow.mapSize.set(32, 32); scene.add(point); pixel(); point.removeFromParent(); point.shadow.map?.depthTexture?.dispose(); point.shadow.dispose();
+    e.dispose(); sun.removeFromParent(); sun.shadow.map?.depthTexture?.dispose(); sun.shadow.dispose(); material.dispose(); normal.dispose();
+    const floor = new THREE.Mesh(new THREE.PlaneGeometry(2, 2), new THREE.MeshStandardMaterial({ roughness: 1 })); scene.add(floor);
+    const lights = createParticleEmitter(scene, { position: { x: 0, y: 0, z: 0.5 }, speed: 0, size: 0, lights: { maxLights: 1, intensity: 3, range: 2 } }); lights.emit(1);
+    const lightOn = pixel(); lights.clear(); const lightOff = pixel(); lights.dispose(); floor.removeFromParent(); floor.geometry.dispose(); floor.material.dispose();
+    target.dispose(); const remaining = { ...renderer.info.memory }; renderer.dispose();
+    return { sorted, restored, orientations, trailLit, trailDark, lightOn, lightOff, remaining };
+}
