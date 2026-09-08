@@ -317,12 +317,12 @@ export function createRenderer(parent: THREE.Object3D, options: ParticleEmitterO
         }
         for (const entry of variants) { entry.mesh.visible = entry.geometry.instanceCount > 0; for (const a of entry.attributes) dirty(a, entry.geometry.instanceCount); }
     }
-    function setRenderOrder(order: number) { integer(order, -1000000, 1000000, "renderOrder"); for (const e of variants) e.mesh.renderOrder = order; if (trails) trails.mesh.renderOrder = order; }
+    function setRenderOrder(order: number) { integer(order, -1000000, 1000000, "renderOrder"); for (const e of variants) { e.mesh.userData.particleSortReset?.(); e.mesh.renderOrder = order; } if (trails) trails.mesh.renderOrder = order; }
     setRenderOrder(initialRenderOrder);
     for (const entry of variants) {
-        entry.mesh.userData.particleCustomMaterial = !!options.runtime?.material || simulation.independent || variants.length > 1;
+        entry.mesh.userData.particleCustomMaterial = !!options.runtime?.material || simulation.independent || variants.length > 1 || cameraScale > 0;
         entry.mesh.onBeforeRender = (_r, _s, c) => { simulation.apply(entry.mesh); standard?.update(c, entry.mesh); };
-        entry.mesh.onBeforeShadow = (_r, _o, _c, c) => { simulation.apply(entry.mesh); standard?.update(c, entry.mesh); };
+        entry.mesh.onBeforeShadow = (_r, _o, viewCamera, c) => { simulation.apply(entry.mesh); updateCamera(viewCamera); standard?.update(c, entry.mesh); };
         entry.mesh.userData.particleFrame = () => { simulation.update(); return simulation.matrix; };
         parent.add(entry.mesh);
     }

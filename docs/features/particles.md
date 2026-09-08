@@ -651,7 +651,7 @@ existing semantics. Zero velocity and parallel up directions have stable fallbac
 
 Stretched billboards accept `cameraScale`: relative view velocity subtracts camera
 translation velocity multiplied by this value before the usual `velocityScale` is
-applied. Its default is 0. Camera observations use presentation timestamps and are
+applied. Its default is 0. Camera-dependent stretching retains individual draws so its observation callback runs even in otherwise compatible additive effects. Camera observations use presentation timestamps and are
 cached per camera, so repeated viewport passes do not overwrite the velocity with
 zero. The first observation has zero camera velocity. Borrowed ShaderMaterials
 implement their own vertex behavior; these controls apply to built-in/PBR materials.
@@ -705,7 +705,7 @@ system.sort(camera, { scope: "global", maxParticles: 2048 });
 This optional path sorts normal-alpha particle centers across mesh variants and,
 for an effect/system, across its emitters/effects. Public integer `renderOrder`
 remains the primary priority; camera depth orders particles within each priority.
-Materials and textures can differ. Additive particles and trail segments retain
+Materials and textures can differ. Source camera layers are preserved, and excluded layers do not consume the sort budget. Additive particles and trail segments retain
 their existing rendering path. Arbitrary shader displacement and intersecting
 triangles cannot be resolved from center depth alone.
 

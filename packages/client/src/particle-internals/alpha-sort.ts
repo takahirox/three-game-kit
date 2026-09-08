@@ -25,7 +25,7 @@ export function createAlphaSort() {
             const limit = integer(options.maxParticles ?? 2048, 1, 4096, "global sort maxParticles");
             reset(); entries.length = 0; camera.updateWorldMatrix(true, false);
             for (const root of roots) root.traverseVisible(object => {
-                if (!(object instanceof THREE.Mesh) || !object.userData.particleFrame || Array.isArray(object.material) || object.material.blending !== THREE.NormalBlending || !object.material.transparent) return;
+                if (!(object instanceof THREE.Mesh) || !object.userData.particleFrame || Array.isArray(object.material) || object.material.blending !== THREE.NormalBlending || !object.material.transparent || !object.material.visible || !camera.layers.test(object.layers)) return;
                 const source = object as Mesh, centers = source.geometry.getAttribute("particleCenter");
                 if (!centers) return;
                 matrix.multiplyMatrices(camera.matrixWorldInverse, source.userData.particleFrame() as THREE.Matrix4);
@@ -54,7 +54,7 @@ export function createAlphaSort() {
                         target.needsUpdate = true;
                     } else geometry.setAttribute(name, attribute);
                 }
-                geometry.instanceCount = 1; mesh.material = source.material; mesh.visible = true;
+                geometry.instanceCount = 1; mesh.layers.mask = source.layers.mask; mesh.material = source.material; mesh.visible = true;
                 mesh.castShadow = source.castShadow; mesh.receiveShadow = source.receiveShadow; mesh.customDepthMaterial = source.customDepthMaterial; mesh.customDistanceMaterial = source.customDistanceMaterial;
                 // Within each public renderOrder bucket, fractional priorities preserve exact particle order.
                 mesh.renderOrder = source.renderOrder + rank / (limit + 1);

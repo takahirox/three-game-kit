@@ -978,3 +978,22 @@ test("global sorting remains active through culling and does not dispose borrowe
     camera.position.x = 100; s.emitter.cull(camera); assert.ok(proxies.every(o => !o.visible)); camera.position.x = 0; s.emitter.cull(camera); assert.ok(proxies.every(o => o.visible));
     s.emitter.clear(); s.emitter.emit(1); s.emitter.sort(camera, "distance", { scope: "global", maxParticles: 1 }); assert.equal(s.scene.children.filter(o => o.name === "three-game-kit-particle-alpha").length, 1); s.emitter.dispose();
 });
+
+test("camera-dependent stretching keeps its render callback through batching and shadow passes", () => {
+    const scene = new THREE.Group(); const effect = createParticleEffect(scene, { emitters: ["a", "b"].map(id => ({ id, options: { blending: "additive", renderer: { kind: "stretched", cameraScale: 1 } } })) });
+    assert.equal(effect.inspect().drawSavings, 0); effect.dispose();
+    const s = setup({ renderer: { kind: "stretched", cameraScale: 1 } }), camera = new THREE.PerspectiveCamera(), shadow = new THREE.PerspectiveCamera();
+    camera.updateMatrixWorld(); s.emitter.present(0); s.mesh.onBeforeRender(null, null, camera); camera.position.x = 2; camera.updateMatrixWorld(); s.emitter.present(1000);
+    s.mesh.onBeforeShadow(null, null, camera, shadow); close(s.mesh.material.uniforms.cameraVelocity.value.x, 2); s.emitter.dispose();
+});
+
+test("changing render priority invalidates a standalone emitter's prepared global ordering", () => {
+    const s = setup({ speed: 0 }); s.emitter.emit(2); s.emitter.sort(new THREE.PerspectiveCamera(), "distance", { scope: "global" }); s.emitter.setRenderOrder(5);
+    assert.equal(s.mesh.visible, true); assert.equal(s.mesh.renderOrder, 5); assert.ok(s.scene.children.filter(o => o.name === "three-game-kit-particle-alpha").every(o => !o.visible)); s.emitter.dispose();
+});
+
+test("global sorting preserves source camera layers and excludes invisible layers from its budget", () => {
+    const s = setup({ speed: 0 }); s.emitter.emit(2); s.mesh.layers.set(2); const camera = new THREE.PerspectiveCamera(); camera.layers.set(2);
+    s.emitter.sort(camera, "distance", { scope: "global", maxParticles: 2 }); const proxies = s.scene.children.filter(o => o.name === "three-game-kit-particle-alpha" && o.visible); assert.equal(proxies.length, 2); assert.ok(proxies.every(p => p.layers.mask === s.mesh.layers.mask));
+    camera.layers.set(0); assert.doesNotThrow(() => s.emitter.sort(camera, "distance", { scope: "global", maxParticles: 1 })); assert.ok(proxies.every(p => !p.visible)); s.emitter.dispose();
+});
