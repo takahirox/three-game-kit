@@ -2,6 +2,8 @@ import * as THREE from "three";
 import type { ParticleEmitterOptions } from "./types.js";
 import { number, record, vector } from "./validation.js";
 import { createTrails } from "./trails.js";
+import { createStandardMaterial } from "./standard-material.js";
+import { usesAxes } from "./variation.js";
 import { triangles } from "./shapes.js";
 
 /** @internal */
@@ -19,6 +21,9 @@ export function createRenderer(parent: THREE.Object3D, options: ParticleEmitterO
             for (let i = 0; i < data.positions.length; i += 3) meshRadius = Math.max(meshRadius, Math.hypot(data.positions[i]!, data.positions[i + 1]!, data.positions[i + 2]!)); break;
         default: throw new TypeError("Invalid particle renderer");
     }
+    for (const flag of [options.castShadow, options.receiveShadow]) if (flag !== undefined && typeof flag !== "boolean") throw new TypeError("shadow flags must be boolean");
+    const standardSource = options.runtime?.material instanceof THREE.MeshStandardMaterial ? options.runtime.material : undefined;
+    if (standardSource && (options.runtime?.softParticles || options.spriteSheet?.blend)) throw new TypeError("standard material does not support soft depth or frame blending; use the built-in material for those combinations");
     const light = options.lighting;
     if (light) record(light, ["ambient", "intensity", "direction", "color"], "lighting");
     const ambient = number(light?.ambient ?? 0.25, 0, 100, "ambient light"), intensity = number(light?.intensity ?? 1, 0, 100, "light intensity");
@@ -27,7 +32,7 @@ export function createRenderer(parent: THREE.Object3D, options: ParticleEmitterO
     const lightColor = new THREE.Color(number(light?.color ?? 0xffffff, 0, 0xffffff, "light color"));
     const soft = options.runtime?.softParticles;
     const camera = soft?.camera as THREE.PerspectiveCamera | THREE.OrthographicCamera | undefined;
-    const attributeCount = 6 + (render.kind === "mesh" || render.kind === "stretched" ? 1 : 0) + (options.sizeAxes || options.rotation3D || options.angularVelocity3D ? 2 : 0) + (options.spriteSheet?.blend ? 1 : 0) + (options.customAttributes?.length ?? 0);
+    const attributeCount = 6 + (render.kind === "mesh" || render.kind === "stretched" ? 1 : 0) + (usesAxes(options) ? 2 : 0) + (options.spriteSheet?.blend ? 1 : 0) + (options.customAttributes?.length ?? 0);
     if (attributeCount > 16) throw new TypeError("particle renderer exceeds the portable limit of 16 vertex attributes");
     const trails = createTrails(options, capacity);
     const world = options.simulationSpace === "world";
@@ -36,7 +41,7 @@ export function createRenderer(parent: THREE.Object3D, options: ParticleEmitterO
     const dimensions = new THREE.InstancedBufferAttribute(new Float32Array(capacity * 3), 3).setUsage(THREE.DynamicDrawUsage);
     const velocities = render.kind !== "stretched" && render.kind !== "mesh" ? undefined : new THREE.InstancedBufferAttribute(new Float32Array(capacity * 3), 3).setUsage(THREE.DynamicDrawUsage);
     const attribute = (size: number) => new THREE.InstancedBufferAttribute(new Float32Array(capacity * size), size).setUsage(THREE.DynamicDrawUsage);
-    const axes = !!(options.sizeAxes || options.rotation3D || options.angularVelocity3D);
+    const axes = !!(usesAxes(options));
     const scales = axes ? attribute(3) : undefined, rotations = axes ? attribute(3) : undefined;
     const atlas = options.spriteSheet?.blend ? attribute(3) : undefined;
     const customAttributes = (options.customAttributes ?? []).map(a => attribute(a.size));
@@ -97,7 +102,7 @@ export function createRenderer(parent: THREE.Object3D, options: ParticleEmitterO
             #include <tonemapping_fragment>
             #include <colorspace_fragment>
         }`;
-    const material = options.runtime?.material as THREE.ShaderMaterial | undefined ?? new THREE.ShaderMaterial({
+    const material = (options.runtime?.material instanceof THREE.ShaderMaterial ? options.runtime.material : undefined) ?? new THREE.ShaderMaterial({
         transparent: true, depthWrite: false, depthTest: options.depthTest ?? true,
         blending: options.blending === "additive" ? THREE.AdditiveBlending : THREE.NormalBlending,
         side: render.kind === "billboard" || render.kind === "stretched" ? THREE.FrontSide : THREE.DoubleSide,
@@ -211,7 +216,10 @@ export function createRenderer(parent: THREE.Object3D, options: ParticleEmitterO
                 vQuadUv = uv; vAppearance = particleAppearance;
             }`, fragmentShader: fragment,
     });
-    const mesh = new THREE.Mesh(geometry, material); mesh.name = "three-game-kit-particles"; mesh.frustumCulled = false; mesh.visible = false;
+    const standard = standardSource ? createStandardMaterial(standardSource, material) : undefined;
+    const mesh = new THREE.Mesh(geometry, standard?.material ?? material);
+    mesh.castShadow = options.castShadow ?? false; mesh.receiveShadow = options.receiveShadow ?? false;
+    if (standard) { mesh.customDepthMaterial = standard.depth; mesh.customDistanceMaterial = standard.distance; mesh.onBeforeRender = (_renderer, _scene, camera) => standard.update(camera, mesh); mesh.onBeforeShadow = (_renderer, _object, _camera, shadowCamera) => standard.update(shadowCamera, mesh); } mesh.name = "three-game-kit-particles"; mesh.frustumCulled = false; mesh.visible = false;
     mesh.userData.particleCustomMaterial = !!options.runtime?.material;
     const attributes = [centers, appearances, dimensions, ...(velocities ? [velocities] : []), ...(scales && rotations ? [scales, rotations] : []), ...(atlas ? [atlas] : []), ...customAttributes];
     parent.add(mesh); if (trails) parent.add(trails.mesh);
@@ -222,7 +230,7 @@ export function createRenderer(parent: THREE.Object3D, options: ParticleEmitterO
         geometry, material, mesh, attributes, centers, appearances, dimensions, velocities, scales, rotations, atlas, customAttributes,
         get culled() { return culled; },
         get resourceCount() { return trails ? 2 : 1; },
-        get materialCount() { return (trails ? 1 : 0) + (options.runtime?.material ? 0 : 1); },
+        get materialCount() { return (trails ? 1 : 0) + (standard ? 4 : options.runtime?.material ? 0 : 1); },
         get activeTrailCount() { return trails?.activeTrailCount ?? 0; },
         clear() { trails?.clear(); },
         setDepthSource(texture: THREE.Texture, width: number, height: number, origin = { x: 0, y: 0 }) {
@@ -265,6 +273,6 @@ export function createRenderer(parent: THREE.Object3D, options: ParticleEmitterO
             mesh.visible = !culled && geometry.instanceCount > 0; if (trails) trails.mesh.visible = !culled && trails.mesh.geometry.instanceCount > 0;
             return !culled;
         },
-        dispose() { mesh.removeFromParent(); geometry.dispose(); if (!options.runtime?.material) { material.dispose(); material.uniforms.particleMap!.value = null; material.uniforms.sceneDepth!.value = null; } trails?.dispose(); },
+        dispose() { mesh.removeFromParent(); geometry.dispose(); standard?.dispose(); if (standard || !options.runtime?.material) { material.dispose(); material.uniforms.particleMap!.value = null; material.uniforms.sceneDepth!.value = null; } trails?.dispose(); },
     };
 }

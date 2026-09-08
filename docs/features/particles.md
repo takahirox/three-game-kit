@@ -49,15 +49,18 @@ handles must be presented and disposed by the application.
 | `rate`, `rateOverTime`, `bursts`, `durationMs` | Births/second with a duration curve; repeated, probabilistic bursts with count ranges |
 | `loop`, `startDelayMs`, `prewarmMs` | Repeat the schedule without killing live particles, delay the first cycle, advance initial simulation |
 | `rateOverDistance` | Additional births per unit moved, interpolated along observed emitter positions |
-| `shape` | Point, sphere volume/surface, box volume, cone, circle disk, ring/annulus, line, or mesh surface |
+| `shape` | Point, sphere/hemisphere, box volume/surface/edge, cone, circle/ring with arcs, line, mesh surface/edge/vertex and image masks |
 | `position`, `rotation` | Birth origin and XYZ Euler rotation; `setTransform` changes future births |
 | `simulationSpace` | `local` follows parent transforms; `world` captures transformed birth positions/velocities |
 | `lifetimeMs`, `speed`, `size`, `angle`, `angularVelocity` | Constants or uniformly sampled `[min, max]` ranges; angles are radians |
 | `velocity` | Explicit initial vector replacing shape direction/speed, then rotated/transformed at birth |
-| `inheritVelocity` | 0–1 fraction of the emitter's observed velocity added at birth |
+| `inheritVelocity` | 0–1 fraction of observed emitter velocity; `inheritVelocityMode: "current"` also updates live particles, with `inheritVelocityOverLife` |
 | `acceleration`, `drag` | Constant acceleration and linear resistance, with an analytic fast path |
 | `velocityOverLife`, `forceOverLife` | Independent optional `x`, `y`, `z` scalar curves, additive in simulation space |
-| `noise` | Seeded smooth spatial/temporal turbulence: `strength`, `frequency`, `scrollSpeed` |
+| `noise` | Seeded value noise, 1–8 octaves, axis strengths, remap, position/rotation/size amounts |
+| `orbitalVelocity`, `orbitalOffset`, `radialVelocity`, `speedModifier` | Axis angular velocity around a simulation-space center, radial units/second, and base translation multiplier |
+| `sizeAxesOverLife`, `sizeAxesBySpeed` | Per-axis size multipliers by normalized age/speed |
+| `angularVelocityAxesOverLife`, `angularVelocityAxesBySpeed` | Per-axis angular velocity multipliers, integrated on fixed simulation steps |
 | `forceFields` | Attractors (negative strength repels) and axis-aligned vortices, with linear radial falloff |
 | `sizeOverLife`, `opacityOverLife`, `colorOverLife` | Size/opacity multipliers and color tint over normalized age |
 | `texture`, `spriteSheet` | Borrowed texture; columns/rows, cycles or FPS, random start frame/row, frame blending |
@@ -76,7 +79,12 @@ handles must be presented and disposed by the application.
 
 Curves require 2–16 strictly increasing keys covering 0 to 1. Each key can set
 `interpolation: "smooth"` for a smoothstep transition to the next key; the default
-is linear. Lifetime and speed curves also accept `{ min: curveA, max: curveB }`.
+is linear. Numeric curves also support `"hermite"` with `outTangent`/`inTangent`
+(value per normalized lifetime), and `"bezier"` with `outControl`/`inControl`
+(control values at one-third/two-thirds of the segment time). Outgoing fields
+belong to the left key and incoming fields to the right key. Integrals use the
+same cubic polynomial as sampling; hidden extrema outside a module's valid range
+are rejected. Color gradients remain linear/smooth. Lifetime and speed curves also accept `{ min: curveA, max: curveB }`.
 Each particle chooses one seeded blend factor and retains it through sorting,
 reuse and replay. All distributions on a particle share that factor. Color values are
 unsigned sRGB hex, interpolated in Three.js linear working space and multiplied
@@ -113,6 +121,70 @@ Numerical particles sample their committed fixed steps. Analytic particles sampl
 presentations, so their trail detail depends on presentation frequency. Sorting
 changes rendered instance order without changing histories or simulation state.
 
+## Shape masks, orbital motion and noise
+
+Box surfaces are area weighted and edges length weighted. Mesh surfaces are area
+weighted; edges deduplicate index pairs and sample by length; vertices are uniform
+across supplied vertices. Edge/vertex modes retain a seeded direction because
+there is no unique face normal. `setMeshPositions` preserves UVs and emission mode.
+Spheres accept `hemisphere: true` for the +Y half. Circle/ring/cone `arc` accepts
+`angle` (0–2π), `offset` and `speed` in radians/second, with `random`, `loop` or
+`pingPong` mode. Sweeps follow simulation birth time.
+
+A circle/ring projects its XZ coordinates onto [0,1] UVs. Mesh masks require two
+[0,1] UV components per vertex and interpolate them on sampled faces/edges.
+Masks are copied CPU data, so both browser image pixels and server-generated
+weight maps work without a GPU readback during simulation:
+
+```ts
+const mask = {
+  width: imageData.width, height: imageData.height,
+  values: Array.from({ length: imageData.width * imageData.height },
+    (_, i) => imageData.data[i * 4 + 3] / 255), // alpha; choose luminance instead if needed
+  threshold: 0.2, channel: "clip" as const,
+};
+const emitter = createParticleEmitter(scene, {
+  shape: { kind: "circle", radius: 2, mask },
+});
+```
+
+Use `canvas.getImageData` or a DataTexture's CPU pixels when constructing the
+mask. Values must be 0–1; width/height are 1–1024. Rows follow increasing UV Y
+(flip image rows if the source uses a top-left origin). `clip` accepts values
+strictly above threshold; default `probability` additionally samples that weight.
+Each requested particle tries at most 32 positions; rejected requests count as
+dropped particles, including an entirely black mask.
+
+`orbitalVelocity` supplies x/y/z radians/second curves around `orbitalOffset`
+(default simulation-space zero). Orbital rotations apply in XYZ order.
+`radialVelocity` adds outward/inward units/second; at the center it contributes
+zero. `speedModifier` scales base translation, before orbital/radial movement.
+Reported event/render velocity includes these components. These procedural
+motions keep their authored direction after collision, so use force fields when
+motion should instead be governed entirely by collision impulses.
+
+Axis size curves multiply `sizeAxes`. Axis angular curves multiply
+`angularVelocity3D` and the scalar lifetime multiplier, integrating committed
+steps with fractional render previews. Speed options use
+`{ range: [min, max], curves: { x: curve, y: curve, z: curve } }`.
+Omitted axes have multiplier 1. Current velocity inheritance uses the latest
+observed emitter displacement over presentation simulation time; initial mode
+retains the birth observation. The lifetime curve scales that contribution.
+
+Noise adds acceleration by default. `octaves` defaults to 1, `octaveMultiplier`
+to 0.5 and `octaveScale` to 2; octave amplitudes are normalized.
+`strengthAxes` defaults to (1,1,1). `remap` maps normalized noise [0,1] to [-1,1].
+`positionAmount` defaults to 1; `rotationAmount` and `sizeAmount` default to 0.
+Rotation adds radians; size multiplies each axis by max(0, 1 + noise × amount).
+Set positionAmount to 0 for appearance-only noise.
+
+Collision records include immutable `colliderId` and contact `normal` in
+simulation space; omitted IDs default to their index string. All event kinds
+also include current `color`, scalar `size`, `sizeAxes`, `rotation`, original `lifetimeMs`
+and `remainingLifetimeMs`. `collision.lifetimeLoss` removes 0–1 of the original
+lifetime per committed contact step without rescaling lifetime curves. Contacts
+within one numerical step share its first contact record and one lifetime loss.
+
 ## Emission and speed variation
 
 ```ts
@@ -134,8 +206,11 @@ const emitter = createParticleEmitter(scene, {
 come from integrating the curve. Burst repetitions beyond the duration are
 clipped. `cycles` is 1–65,536 and requires positive `intervalMs` when greater than
 1; counts are inclusive integer ranges, and probability is 0–1. Random bursts
-use a seeded 256-occurrence table, repeating within each burst stream. This
-allows exact arithmetic skipping without an unbounded loop during long hitches.
+hash the seed, stream and full occurrence index, without a short repeating table.
+Skipped constant streams contribute exact particle counts; random occurrences
+that cannot be evaluated within the budget contribute to `skippedBurstCount`
+instead of inventing a particle count. Replayed births after such skipping may
+have different per-particle seeds from a run that evaluated every occurrence.
 
 Speed curves clamp to their `[min, max]` speed range. Size/color multiply the
 particle's current appearance; rotation adds a radian offset. Velocity limits
@@ -159,7 +234,9 @@ return those values. Supply the original indices in the shape definition.
 `triggers: [{ id: "water", volume: sphereOrBoxOrPlane }]` records `enter`/`exit`
 with `triggerId` when membership changes at birth or a committed fixed-step
 boundary. Plane interiors satisfy `dot(normal, position) <= offset`. At most 32
-unique volumes are allowed. Enable `events` to drain records; linked effects
+unique volumes are allowed. `setTriggers(volumes)` replaces them and resets
+membership; particles inside new volumes report `enter` on their next committed
+step. Removed volumes do not synthesize `exit` records. Enable `events` to drain records; linked effects
 enable it automatically. Thin volumes crossed entirely between samples can be
 missed; use smaller simulation steps when required.
 
@@ -201,10 +278,33 @@ manual emissions, moving scene inputs or distance-emission paths. Configured
 prewarm is not added to the seek target. Counters remain cumulative. Direct
 emitter seeking discards replayed events; effect seeking consumes them for routing.
 
+Opt into an input journal with `recording: { maxCommands: 10000, maxBytes: 8388608 }`.
+`seek(ms, "recorded")` rebuilds simulation from copied commands, including manual
+births, settings, observed parent world matrices and deforming mesh snapshots.
+It also reconstructs trails and counters for the replayed prefix. Runtime update callbacks must derive outputs from
+particle context; arbitrary external callback state and texture pixel mutations
+are not recorded. Completion callbacks are suppressed during recorded playback. While a recorded
+command runs, callbacks may inspect or dispose the emitter, but cannot start
+nested mutations or seeking. A failed command stops recording at its valid prefix.
+The borrowed parent itself is not moved by seeking: world-space particle paths
+are restored, while local particles continue to render under its current transform.
+
+`recordedUntilMs` is cumulative forward simulation time in the journal (restart
+and automatic seek are commands, not a rewind of that clock). At a recorded
+boundary replay is exact; an intermediate seek advances part of the next
+presentation using that presentation's observed parent transform. The journal
+stops at a complete command when its count or estimated payload byte limit is
+reached and reports `recordingFull`. Older history is retained. Seeking beyond
+that prefix throws. After seeking, the first new mutation branches from the
+replayed prefix and discards its old future. Recorded seeking replaces owned
+meshes, so recorded emitters are excluded from automatic draw batching.
+Effects accept `seek(ms, "recorded")` when every emitter records an aligned
+timeline; child commands are replayed directly without duplicating event routing.
+
 Definitions remain plain JSON. Supply functions/resources through
 `createParticleEffect(parent, definition, { runtime: { emitterId: runtimeOptions },
 onComplete })`, or the same options on `createParticleSystem`. Effects expose
-named `setForceFields`, `setCollision`, `setMeshPositions`, and `setDepthSource`.
+named `setForceFields`, `setCollision`, `setTriggers`, `setMeshPositions`, and `setDepthSource`.
 
 ## Lighting, soft intersections and borrowed shaders
 
@@ -213,6 +313,21 @@ world-space directional Lambert light. Mesh normals follow per-axis scale and
 3D rotation; billboard normals follow their rendering orientation. This is an
 explicit particle light, independent of Three.js scene light enumeration, shadows,
 PBR materials and environment maps.
+
+For scene lights, PBR and shadows, supply a `THREE.MeshStandardMaterial` through
+`runtime.material`. Each emitter owns an adapted clone plus depth/distance shadow
+materials; the source and its textures remain caller-owned. Scene lights and
+environment maps follow Three.js's standard material pipeline. Enable
+`castShadow`/`receiveShadow`, the renderer's shadow map and shadow-casting lights
+as for ordinary Three.js meshes. Billboard shadow orientation follows the shadow
+camera; use mesh particles for solid 3D silhouettes. The clone captures source
+settings at construction and preserves its shader customization callback.
+Opacity/tint and atlas frame selection use particle attributes. Standard-material
+combinations with frame blending or soft depth are rejected explicitly; those
+features remain available with the built-in shader. The adapter enables transparency for particle opacity; blending, depth writing,
+depth testing and maps otherwise follow the supplied standard material. Three.js
+retains its renderer-owned DFG lookup texture after the PBR materials are disposed;
+that shared cache is not an emitter-owned resource.
 
 For soft particles, render opaque geometry into a render target with a depth
 texture first, using the same camera/projection. Pass
@@ -295,7 +410,10 @@ emission density of its effects when LOD bands are configured.
 
 Sub-emitter graphs must be acyclic (up to 64 emitters and 64 links). Links can
 trigger on birth, death, collision, enter, or exit, optionally replacing the target's initial
-velocity with a fraction of the source's velocity. Positions and inherited
+velocity with a fraction of the source's velocity. Each link also accepts seeded
+`probability` and `inheritColor`, `inheritSize`, `inheritRotation`, `inheritLifetime`.
+These replace child birth values with the source event's current color, scalar and per-axis size,
+rotation, and original lifetime (so death events can still spawn living children). Positions and inherited
 velocities are converted through the effect's transform. Each presentation first
 advances the clocks, then processes the graph in topological order. Child births
 are backdated by the source event's age, including further child death events in
@@ -322,8 +440,9 @@ resumes playback while preserving accepted absolute time and lifetime counters.
 
 Manual `emit` is immediate at the last presented age (zero before presentation),
 returns the accepted count, and works while paused or emission is stopped. Its
-`position`, `velocity`, `lifetimeMs`, `speed`, `size`, `color`, and `seed` overrides
-are validated and copied. Explicit seed overrides reproduce sampled bursts.
+`position`, `velocity`, `lifetimeMs`, `speed`, `size`, `color`, `seed`, `sizeAxes`, and `rotation3D` overrides
+are validated and copied. Manual `sizeAxes`/`rotation3D` require axis modules or `rotation3D: {}`
+on the emitter; linked rotation inheritance enables those buffers automatically. Explicit seed overrides reproduce sampled bursts.
 
 Basic motion uses the closed-form solution of `dv/dt = acceleration - drag * velocity`.
 No wall clock or `Math.random` is read. Corresponding births produce identical

@@ -1,5 +1,5 @@
 import * as THREE from "three";
-import type { ParticleEmitterOptions, ParticleEvent, ParticleUpdateContext } from "./types.js";
+import type { ParticleEmitterOptions, ParticleEvent, ParticleUpdateContext, ParticleTrigger } from "./types.js";
 import { integer, number, record, vector } from "./validation.js";
 import { createMotion } from "./motion.js";
 
@@ -9,7 +9,7 @@ export function createRuntime(options: ParticleEmitterOptions, capacity: number)
     record(input, ["update", "meshPositions", "material", "trailTexture", "softParticles", "onComplete"], "runtime");
     for (const fn of [input.update, input.meshPositions, input.onComplete]) if (fn !== undefined && typeof fn !== "function") throw new TypeError("runtime callbacks must be functions");
     if (input.meshPositions && options.shape?.kind !== "mesh") throw new TypeError("meshPositions requires a mesh emission shape");
-    if (input.material !== undefined && !(input.material instanceof THREE.ShaderMaterial)) throw new TypeError("runtime material must be a ShaderMaterial");
+    if (input.material !== undefined && !(input.material instanceof THREE.ShaderMaterial || input.material instanceof THREE.MeshStandardMaterial)) throw new TypeError("runtime material must be a ShaderMaterial or MeshStandardMaterial");
     if (input.trailTexture !== undefined && !(input.trailTexture instanceof THREE.Texture)) throw new TypeError("trailTexture must be a Texture");
     const soft = input.softParticles;
     if (soft) {
@@ -30,8 +30,9 @@ export function createRuntime(options: ParticleEmitterOptions, capacity: number)
         return { name: a.name, size, value, offset };
     });
     const data = new Float32Array(capacity * stride), scratch = new Float32Array(stride);
-    if (options.triggers !== undefined && (!Array.isArray(options.triggers) || options.triggers.length > 32)) throw new TypeError("triggers requires up to 32 unique volumes");
-    const triggers = Array.from(options.triggers ?? [], t => {
+    function parseTriggers(input: readonly ParticleTrigger[]) {
+    if (input !== undefined && (!Array.isArray(input) || input.length > 32)) throw new TypeError("triggers requires up to 32 unique volumes");
+    const triggers = Array.from(input ?? [], t => {
         record(t, ["id", "volume"], "trigger");
         if (typeof t.id !== "string" || !/^[a-zA-Z0-9_-]{1,64}$/.test(t.id)) throw new TypeError("Invalid trigger id");
         createMotion({ collision: { colliders: [t.volume] } }); // Same volume validation as solid colliders.
@@ -41,12 +42,16 @@ export function createRuntime(options: ParticleEmitterOptions, capacity: number)
         const normal = vector(c.normal, "trigger normal"), offset = c.offset;
         return { id: t.id, contains: (p: THREE.Vector3) => p.dot(normal) <= offset };
     });
-    if (!Array.isArray(options.triggers ?? []) || triggers.length > 32 || new Set(triggers.map(t => t.id)).size !== triggers.length) throw new TypeError("triggers requires up to 32 unique volumes");
-    const masks = new Uint32Array(triggers.length ? capacity : 0);
+    if (!Array.isArray(input ?? []) || triggers.length > 32 || new Set(triggers.map(t => t.id)).size !== triggers.length) throw new TypeError("triggers requires up to 32 unique volumes");
+    return triggers;
+    }
+    let triggers = parseTriggers(options.triggers ?? []);
+    let masks = new Uint32Array(triggers.length ? capacity : 0);
     const context = { particleId: 0, ageMs: 0, lifetimeMs: 0, deltaMs: 0, position: new THREE.Vector3(), velocity: new THREE.Vector3(), attributes: scratch };
     const update = input.update, meshPositions = input.meshPositions, onComplete = input.onComplete;
     return {
-        attributes, meshPositions, onComplete, enabled: !!(update || triggers.length),
+        attributes, meshPositions, onComplete, get enabled() { return !!(update || triggers.length); },
+        setTriggers(input: readonly ParticleTrigger[]) { const next = parseTriggers(input); if (next.length && !masks.length) masks = new Uint32Array(capacity); triggers = next; masks.fill(0); },
         birth(i: number) { if (triggers.length) masks[i] = 0; for (const a of attributes) data.set(a.value, i * stride + a.offset); },
         remove(i: number, last: number) { if (stride) data.copyWithin(i * stride, last * stride, (last + 1) * stride); if (triggers.length) masks[i] = masks[last]!; },
         step(i: number, id: number, age: number, lifetime: number, dt: number, p: THREE.Vector3, v: THREE.Vector3, emit: (kind: ParticleEvent["kind"], triggerId: string) => void, birth?: () => void) {

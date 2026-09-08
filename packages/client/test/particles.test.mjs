@@ -652,3 +652,120 @@ test("explicit manual and parameter colors take precedence over the randomized i
     a.emitter.emit(1, { color: 0x0000ff }); assert.equal(a.attr("particleAppearance").getZ(0), 1);
     a.emitter.setParameters({ color: 0x00ff00 }); a.emitter.emit(1); assert.equal(a.attr("particleAppearance").getY(1), 1); a.emitter.dispose();
 });
+
+test("Hermite and Bezier curves interpolate and integrate without allowing hidden invalid overshoot", () => {
+    for (const interpolation of ["hermite", "bezier"]) {
+        const s = setup({ rate: 4, durationMs: 1000, lifetimeMs: 2000, speed: 0, rateOverTime: [{ time: 0, value: 0, interpolation, outTangent: 0, outControl: 0 }, { time: 1, value: 2, inTangent: 0, inControl: 2 }], size: 1, sizeOverLife: [{ time: 0, value: 0, interpolation, outTangent: 0, outControl: 0 }, { time: 1, value: 2, inTangent: 0, inControl: 2 }] });
+        s.emitter.emit(1); s.emitter.present(0); s.emitter.present(1000);
+        close(s.attr("particleDimensions").getX(0), 1); assert.equal(s.emitter.inspect().emittedParticleCount, 5); s.emitter.dispose();
+    }
+    assert.throws(() => setup({ opacityOverLife: [{ time: 0, value: 0, interpolation: "bezier", outControl: 10 }, { time: 1, value: 1, inControl: 10 }] }), TypeError);
+});
+
+test("axis size and angular speed curves commit once per fixed step across frame partitions", () => {
+    const constant = value => [{ time: 0, value }, { time: 1, value }];
+    const options = { lifetimeMs: 2000, velocity: { x: 2, y: 0, z: 0 }, simulationStepMs: 20, maxSubSteps: 128, sizeAxesOverLife: { x: constant(2), z: constant(3) }, sizeAxesBySpeed: { range: [0, 4], curves: { y: [{ time: 0, value: 1 }, { time: 1, value: 3 }] } }, angularVelocity3D: { x: 2, y: 3 }, angularVelocityAxesOverLife: { x: constant(2) }, angularVelocityAxesBySpeed: { range: [0, 4], curves: { y: [{ time: 0, value: 1 }, { time: 1, value: 3 }] } } };
+    const a = setup(options), b = setup(options);
+    for (const s of [a, b]) { s.emitter.emit(1); s.emitter.present(0); }
+    a.emitter.present(1000); for (const t of [13, 27, 200, 537, 1000]) b.emitter.present(t);
+    assert.deepEqual(Array.from(a.attr("particleRotation").array), Array.from(b.attr("particleRotation").array));
+    close(a.attr("particleRotation").getX(0), 4); close(a.attr("particleRotation").getY(0), 6);
+    assert.deepEqual(Array.from(a.attr("particleScale").array.slice(0, 3)), [2, 2, 3]);
+    a.emitter.dispose(); b.emitter.dispose();
+});
+
+test("orbital, radial and speed-modifier modules move particles and report effective velocity", () => {
+    const constant = value => [{ time: 0, value }, { time: 1, value }];
+    const s = setup({ lifetimeMs: 2000, speed: 0, position: { x: 1, y: 0, z: 0 }, orbitalVelocity: { z: constant(Math.PI / 2) }, simulationStepMs: 10, maxSubSteps: 128, events: true });
+    s.emitter.emit(1); s.emitter.present(0); s.emitter.present(1000);
+    close(s.centers()[0], 0); close(s.centers()[1], 1); s.emitter.dispose();
+    const r = setup({ lifetimeMs: 2000, velocity: { x: 1, y: 0, z: 0 }, position: { x: 1, y: 0, z: 0 }, radialVelocity: constant(1), speedModifier: constant(2), simulationStepMs: 10, maxSubSteps: 128 });
+    r.emitter.emit(1); r.emitter.present(0); r.emitter.present(1000); close(r.centers()[0], 4); r.emitter.dispose();
+});
+
+test("current emitter velocity inheritance changes already living particles", () => {
+    const s = setup({ lifetimeMs: 2000, speed: 0, inheritVelocity: 1, inheritVelocityMode: "current", simulationStepMs: 10, maxSubSteps: 128 });
+    s.emitter.present(0); s.emitter.emit(1); s.emitter.setTransform({ x: 1, y: 0, z: 0 }); s.emitter.present(1000); close(s.centers()[0], 1);
+    s.emitter.present(1500); close(s.centers()[0], 1); s.emitter.dispose();
+});
+
+test("emission surfaces, edges, vertices, arcs, hemispheres and image masks constrain births", () => {
+    const shapes = [
+        [{ kind: "box", halfExtents: { x: 1, y: 2, z: 3 }, emitFrom: "surface" }, p => Math.abs(p[0]) === 1 || Math.abs(p[1]) === 2 || Math.abs(p[2]) === 3],
+        [{ kind: "box", halfExtents: { x: 1, y: 2, z: 3 }, emitFrom: "edge" }, p => [1, 2, 3].filter((v, k) => Math.abs(p[k]) === v).length >= 2],
+        [{ kind: "sphere", radius: 1, hemisphere: true }, p => p[1] >= 0],
+        [{ kind: "mesh", positions: [0, 0, 0, 1, 0, 0, 0, 1, 0], emitFrom: "vertex" }, p => p[0] + p[1] === 0 || p[0] === 1 || p[1] === 1],
+        [{ kind: "mesh", positions: [0, 0, 0, 1, 0, 0, 0, 1, 0], emitFrom: "edge" }, p => p[0] === 0 || p[1] === 0 || Math.abs(p[0] + p[1] - 1) < 1e-6],
+        [{ kind: "circle", radius: 1, mask: { width: 2, height: 1, values: [0, 1], channel: "clip" } }, p => p[0] >= 0],
+        [{ kind: "mesh", positions: [-1, 0, 0, 1, 0, 0, 0, 1, 0], uvs: [0, 0, 1, 0, 0.5, 1], mask: { width: 2, height: 1, values: [0, 1] } }, p => p[0] >= 0],
+    ];
+    for (const [shape, check] of shapes) { const s = setup({ shape, speed: 0 }); assert.equal(s.emitter.emit(100), 100); const p = s.centers(); for (let i = 0; i < p.length; i += 3) assert.ok(check(p.slice(i, i + 3)), JSON.stringify(shape)); s.emitter.dispose(); }
+    const arc = setup({ shape: { kind: "ring", radius: 1, arc: { angle: Math.PI, mode: "pingPong", speed: Math.PI } }, speed: 0, lifetimeMs: 5000 });
+    arc.emitter.present(0); arc.emitter.present(500); arc.emitter.emit(1); close(arc.centers()[0], 0); close(arc.centers()[2], 1); arc.emitter.dispose();
+    const empty = setup({ shape: { kind: "circle", radius: 1, mask: { width: 1, height: 1, values: [0] } } }); assert.equal(empty.emitter.emit(100), 0); assert.equal(empty.emitter.inspect().droppedParticleCount, 100); empty.emitter.dispose();
+});
+
+test("collision identity, normal, lifetime loss and runtime triggers survive dense removal", () => {
+    const s = setup({ lifetimeMs: 1000, velocity: { x: 0, y: -1, z: 0 }, position: { x: 0, y: 0.1, z: 0 }, simulationStepMs: 10, maxSubSteps: 128, events: true, collision: { colliders: [{ id: "floor", kind: "plane", normal: { x: 0, y: 1, z: 0 }, offset: 0 }], lifetimeLoss: 0.5, bounce: 1 } });
+    s.emitter.emit(1); s.emitter.present(0); s.emitter.present(200);
+    const contact = s.emitter.drainEvents().find(e => e.kind === "collision"); assert.equal(contact.colliderId, "floor"); assert.deepEqual(contact.normal, { x: 0, y: 1, z: 0 }); assert.ok(contact.remainingLifetimeMs <= 400);
+    s.emitter.setTriggers([{ id: "zone", volume: { kind: "sphere", center: { x: 0, y: 0, z: 0 }, radius: 5 } }]); s.emitter.present(250); assert.ok(s.emitter.drainEvents().some(e => e.kind === "enter" && e.triggerId === "zone"));
+    s.emitter.setTriggers([]); s.emitter.present(600); assert.equal(s.emitter.inspect().activeParticleCount, 0); s.emitter.dispose();
+});
+
+test("sub-emitter appearance, lifetime and probability inheritance use immutable event values", () => {
+    const parent = new THREE.Group();
+    const effect = createParticleEffect(parent, { emitters: [{ id: "a", options: { speed: 0, color: 0xff0080, size: 0.7, rotation3D: { x: 0.3 }, lifetimeMs: 2345 } }, { id: "b", options: { speed: 0 } }, { id: "c", options: {} }], subEmitters: [{ source: "a", target: "b", event: "birth", count: 1, inheritColor: true, inheritSize: true, inheritRotation: true, inheritLifetime: true }, { source: "a", target: "c", event: "birth", count: 1, probability: 0 }] });
+    effect.emit("a", 1); effect.present(0);
+    const b = parent.children[0].children[1]; close(b.geometry.getAttribute("particleDimensions").getX(0), 0.7); close(b.geometry.getAttribute("particleRotation").getX(0), 0.3);
+    assert.equal(b.geometry.getAttribute("particleAppearance").getX(0), 1); assert.equal(effect.inspect().emitters[2].state.activeParticleCount, 0);
+    effect.present(2000); assert.equal(effect.inspect().emitters[1].state.activeParticleCount, 1); effect.dispose();
+});
+
+test("octave noise is seeded, axis limited, remapped and can affect only size/rotation", () => {
+    const options = { seed: 17, speed: 0, lifetimeMs: 2000, noise: { strength: 1, octaves: 4, strengthAxes: { x: 1, y: 0, z: 0 }, positionAmount: 0, rotationAmount: 1, sizeAmount: 0.5, remap: [{ time: 0, value: 0.5 }, { time: 1, value: 0.5 }] } };
+    const a = setup(options); a.emitter.emit(1); a.emitter.present(0); a.emitter.present(500);
+    assert.deepEqual(a.centers(), [0, 0, 0]); close(a.attr("particleScale").getX(0), 1.25); close(a.attr("particleRotation").getX(0), 0.5); close(a.attr("particleRotation").getY(0), 0); a.emitter.dispose();
+});
+
+test("random bursts no longer repeat every 256 occurrences and hitch skipping stays bounded", () => {
+    const s = setup({ capacity: 65536, lifetimeMs: 100000, durationMs: 1000, bursts: [{ timeMs: 0, count: [1, 4], cycles: 600, intervalMs: 1, probability: 0.7 }], events: true, eventCapacity: 10000 });
+    s.emitter.present(0); s.emitter.present(600);
+    const counts = new Array(600).fill(0); for (const e of s.emitter.drainEvents()) if (e.kind === "birth") counts[e.timeMs]++;
+    assert.notDeepEqual(counts.slice(0, 256), counts.slice(256, 512)); s.emitter.dispose();
+    const h = setup({ capacity: 10, durationMs: 1, loop: true, bursts: [{ timeMs: 0, count: [1, 2], probability: 0.5 }] }); h.emitter.present(0); h.emitter.present(1e12); assert.ok(h.emitter.inspect().skippedBurstCount > 1e6); h.emitter.dispose();
+});
+
+test("recorded replay restores manual births, parent motion, parameters and mesh snapshots within a bounded journal", () => {
+    const scene = new THREE.Group(); let height = 0;
+    const emitter = createParticleEmitter(scene, { recording: {}, simulationSpace: "world", speed: 0, lifetimeMs: 5000, shape: { kind: "mesh", positions: [0, 0, 0, 1, 0, 0, 0, 1, 0] }, runtime: { meshPositions: () => [0, height, 0, 1, height, 0, 0, height + 1, 0] } });
+    const snapshot = () => { const mesh = scene.children.find(o => o.name === "three-game-kit-particles"); return Array.from(mesh.geometry.getAttribute("particleCenter").array.slice(0, emitter.inspect().activeParticleCount * 3)); };
+    emitter.present(100); emitter.emit(1); scene.position.x = 3; height = 4; emitter.present(600); emitter.emit(2); const expected = snapshot();
+    scene.position.x = 50; height = 90; emitter.present(1100); emitter.seek(500, "recorded"); assert.deepEqual(snapshot(), expected); assert.equal(scene.position.x, 50);
+    emitter.seek(1000, "recorded"); assert.deepEqual(snapshot(), expected); emitter.dispose(); assert.throws(() => emitter.seek(0, "recorded"));
+    const bounded = setup({ recording: { maxCommands: 2 }, speed: 0 }); bounded.emitter.present(0); bounded.emitter.emit(1); bounded.emitter.present(100); assert.equal(bounded.emitter.inspect().recordingFull, true); assert.equal(bounded.emitter.inspect().recordedUntilMs, 0); bounded.emitter.seek(0, "recorded"); assert.equal(bounded.emitter.inspect().activeParticleCount, 1); bounded.emitter.dispose();
+});
+
+test("recorded replay branches, replays child emissions once, and keeps callback failures outside its valid prefix", () => {
+    const group = new THREE.Group();
+    const effect = createParticleEffect(group, { emitters: [{ id: "source", options: { recording: {}, lifetimeMs: 100, speed: 0, events: true } }, { id: "child", options: { recording: {}, lifetimeMs: 1000, speed: 0 } }], subEmitters: [{ source: "source", target: "child", event: "death", count: 3 }] });
+    effect.present(0); effect.emit("source", 1); effect.present(200);
+    const before = effect.inspect().emitters.map(e => e.state.activeParticleCount);
+    effect.present(400); effect.seek(200, "recorded"); assert.deepEqual(effect.inspect().emitters.map(e => e.state.activeParticleCount), before);
+    effect.emit("child", 1); effect.present(250); effect.seek(250, "recorded"); assert.equal(effect.inspect().emitters[1].state.activeParticleCount, 4); effect.dispose();
+    let e; let error;
+    e = createParticleEmitter(new THREE.Group(), { recording: {}, speed: 0, runtime: { update() { try { e.seek(0, "recorded"); } catch (caught) { error = caught; } } } });
+    e.present(0); e.emit(1); assert.match(error.message, /reenter/); assert.equal(e.inspect().activeParticleCount, 1); e.dispose();
+    const broken = createParticleEmitter(new THREE.Group(), { recording: {}, runtime: { update() { throw new Error("update failed"); } } });
+    broken.present(0); assert.throws(() => broken.emit(1), /update failed/); assert.equal(broken.inspect().recordingFull, true); broken.seek(0, "recorded"); assert.equal(broken.inspect().activeParticleCount, 0); broken.dispose();
+});
+
+test("local inheritance observes parent movement and sub-emitter size/rotation include source axes", () => {
+    const s = setup({ speed: 0, lifetimeMs: 2000, inheritVelocity: 1, inheritVelocityMode: "current", simulationStepMs: 10, maxSubSteps: 128 });
+    s.emitter.present(0); s.emitter.emit(1); s.scene.position.x = 2; s.emitter.present(1000); close(s.centers()[0], 2); s.emitter.dispose();
+    const parent = new THREE.Group(); parent.rotation.z = Math.PI / 2;
+    const effect = createParticleEffect(parent, { emitters: [{ id: "source", options: { speed: 0, sizeAxes: { x: 2, y: 3 }, rotation3D: { x: 0.4 }, events: true } }, { id: "child", options: { speed: 0, simulationSpace: "world" } }], subEmitters: [{ source: "source", target: "child", event: "birth", count: 1, inheritSize: true, inheritRotation: true }] });
+    effect.emit("source", 1); effect.present(0); const child = parent.children[0].children[1];
+    close(child.geometry.getAttribute("particleScale").getX(0), 2); close(child.geometry.getAttribute("particleScale").getY(0), 3);
+    const r = child.geometry.getAttribute("particleRotation"); close(r.getX(0), 0.4); close(r.getZ(0), Math.PI / 2); effect.dispose();
+});

@@ -32,7 +32,8 @@ test("all twenty-six presets render, switch, and release their bounded GPU resou
     }
     const populated = await page.evaluate(() => (window as any).__particles.inspect());
     expect(populated.initializedCount).toBe(26);
-    expect(populated.textures).toBeLessThanOrEqual(10);
+    // Eight shared sprites, opaque depth/color, shadow depth/color, and Three.js's renderer-owned DFG lookup texture.
+    expect(populated.textures).toBeLessThanOrEqual(13);
     expect(populated.geometries).toBeLessThanOrEqual(80);
     await page.evaluate(() => { const api = (window as any).__particles; for (const id of api.inspect().presetIds) api.select(id); });
     const reused = await page.evaluate(() => (window as any).__particles.inspect());
@@ -60,7 +61,7 @@ test("all twenty-six presets render, switch, and release their bounded GPU resou
     await page.getByRole("button", { name: "Magic", exact: true }).click();
     await expect(page.locator(".card:visible")).toHaveCount(5);
     const disposed = await page.evaluate(() => { const api = (window as any).__particles; api.dispose(); api.dispose(); return api.inspect(); });
-    expect(disposed.children).toBe(0); expect(disposed.geometries).toBe(0); expect(disposed.programs).toBe(0); expect(disposed.textures).toBe(0);
+    expect(disposed.children).toBe(0); expect(disposed.geometries).toBe(0); expect(disposed.programs).toBe(0); expect(disposed.textures).toBe(1); // Three.js caches its DFG LUT beyond material disposal.
     expect(errors).toEqual([]);
 });
 
@@ -137,7 +138,7 @@ test("new module effects share the atlas gallery, controls and resource lifecycl
     expect(restarted.initializedCount).toBe(6);
     // WebGL allocates geometry only on its first visible draw; exercise a full
     // event cycle before comparing the next cycle's resource counts.
-    expect(later.geometries).toBeLessThanOrEqual(13);
+    expect(later.geometries).toBeLessThanOrEqual(14);
     await page.evaluate(() => { const api = (window as any).__particles; for (let t = 7016; t <= 12000; t += 80) api.present(t); });
     const repeated = await page.evaluate(() => (window as any).__particles.inspect());
     expect(repeated.geometries).toBe(later.geometries); expect(repeated.programs).toBe(later.programs);
@@ -159,6 +160,9 @@ test("soft intersections, atlas blending, lighting and custom attributes produce
     page.on("console", message => { if (message.type() === "error") errors.push(message.text()); });
     await page.goto("/examples/particles/index.html?test=1");
     const result = await page.evaluate(async () => { const module = "/tests/support/particles-rendering.ts"; return (await import(module)).checkParticleRendering(); });
+    expect(result.standardBlue[2]).toBeGreaterThan(result.standardBlue[0] + 30); expect(result.standardRed[0]).toBeGreaterThan(result.standardRed[2] + 30);
+    expect(result.standardLit[0]).toBeGreaterThan(30); expect(result.standardDark[0]).toBeLessThan(5);
+    expect(result.shadowEnergy).toBeLessThan(result.unshadowedEnergy - 100); expect(result.borrowedPbrDisposals).toBe(0);
     expect(result.faded[0]).toBeGreaterThan(40); expect(result.faded[0]).toBeLessThan(65);
     expect(result.perspectiveFaded[0]).toBeGreaterThan(40); expect(result.perspectiveFaded[0]).toBeLessThan(65);
     expect(result.solid[0]).toBeGreaterThan(245);
@@ -167,6 +171,6 @@ test("soft intersections, atlas blending, lighting and custom attributes produce
     expect(result.litFront[0]).toBeGreaterThan(240); expect(result.litBack[0]).toBeLessThan(5);
     expect(result.tiltedLight[0]).toBeGreaterThan(120); expect(result.tiltedLight[0]).toBeLessThan(135);
     expect(result.customPixel[0]).toBeGreaterThan(120); expect(result.customPixel[0]).toBeLessThan(135);
-    expect(result.borrowedDisposals).toBe(0); expect(result.remaining.geometries).toBe(0); expect(result.remaining.textures).toBe(0);
+    expect(result.borrowedDisposals).toBe(0); expect(result.remaining.geometries).toBe(0); expect(result.remaining.textures).toBe(1); // Renderer-owned DFG LUT, not an emitter resource.
     expect(errors).toEqual([]);
 });
