@@ -1,5 +1,6 @@
 import * as THREE from "three";
 import { createParticleEmitter, createParticleSystem, defineParticleEffect, type ParticleRuntimeOptions, type ParticleEffectDefinition, type ParticleEmitter, type ParticleEmitterOptions, type ParticleEmission } from "@three-game-kit/client/particles";
+import { SHOWCASES, createShowcase } from "./showcases.js";
 import type { TextureName } from "./textures.js";
 
 const P = (x = 0, y = 0, z = 0) => ({ x, y, z });
@@ -52,6 +53,7 @@ export const PRESETS = [
     { id: "toxic", name: "Toxic garden", category: "NATURE", color: "#c1ff6c", description: "ライム色の胞子と霧があふれ出す、幻想的な毒の庭。" },
     { id: "matrix", name: "Digital rain", category: "ENERGY", color: "#6bffb3", description: "光る文字が縦に流れ落ちるデジタルの雨。スプライトシートを使用。" },
     ...NATIVE_PRESETS.map(preset => ({ id: preset.id, name: preset.name, category: preset.category, color: preset.color, description: preset.description, native: true as const })),
+    ...SHOWCASES,
 ] as const;
 export type PresetId = typeof PRESETS[number]["id"];
 export interface Effect {
@@ -135,6 +137,8 @@ function createNativeEffect(preset: typeof NATIVE_PRESETS[number], textures: Rec
 }
 
 export function createEffect(id: PresetId, textures: Record<TextureName, THREE.DataTexture>): Effect {
+    const showcase = SHOWCASES.find(preset => preset.id === id);
+    if (showcase) return createShowcase(showcase.id, textures);
     const native = NATIVE_PRESETS.find(preset => preset.id === id);
     if (native) return createNativeEffect(native, textures);
     const scene = new THREE.Scene();
