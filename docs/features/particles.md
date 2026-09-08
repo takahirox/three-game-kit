@@ -51,7 +51,9 @@ handles must be presented and disposed by the application.
 | `rateOverDistance` | Additional births per unit moved, interpolated along observed emitter positions |
 | `shape` | Point, sphere/hemisphere, box volume/surface/edge, cone, circle/ring with arcs, line, mesh surface/edge/vertex and image masks |
 | `position`, `rotation` | Birth origin and XYZ Euler rotation; `setTransform` changes future births |
-| `simulationSpace` | `local` follows parent transforms; `world` captures transformed birth positions/velocities |
+| `simulationSpace` | `local` follows the parent; `world` captures birth transforms; `custom` follows a borrowed reference object |
+| `scalingMode` | `hierarchy` (default), own `local` scale, or birth-position-only `shape` scaling |
+| `sortMode`, `renderOrder` | Distance, oldest, youngest or no instance sorting; public draw priority |
 | `lifetimeMs`, `speed`, `size`, `angle`, `angularVelocity` | Constants or uniformly sampled `[min, max]` ranges; angles are radians |
 | `velocity` | Explicit initial vector replacing shape direction/speed, then rotated/transformed at birth |
 | `inheritVelocity` | 0–1 fraction of observed emitter velocity; `inheritVelocityMode: "current"` also updates live particles, with `inheritVelocityOverLife` |
@@ -63,14 +65,14 @@ handles must be presented and disposed by the application.
 | `angularVelocityAxesOverLife`, `angularVelocityAxesBySpeed` | Per-axis angular velocity multipliers, integrated on fixed simulation steps |
 | `forceFields` | Attractors (negative strength repels) and axis-aligned vortices, with linear radial falloff |
 | `sizeOverLife`, `opacityOverLife`, `colorOverLife` | Size/opacity multipliers and color tint over normalized age |
-| `texture`, `spriteSheet` | Borrowed texture; columns/rows, cycles or FPS, random start frame/row, frame blending |
+| `texture`, `spriteSheet` | Borrowed texture; columns/rows, cycles/FPS or lifetime/speed frame curves, random start frame/row, frame blending |
 | `renderer` | Camera-facing, horizontal, vertical or velocity-stretched billboard; triangle mesh with velocity alignment or independent 3D rotation |
-| `trails` | Per-particle ring-buffer histories rendered as connected, camera-facing ribbon segments |
+| `trails` | Per-particle histories, or `mode: "ribbon"` connecting particles in birth order |
 | `collision` | Swept plane, sphere and axis-aligned box collisions; bounce/friction or kill response |
 | `events`, `eventCapacity` | Optional bounded birth/death/collision snapshot queue, consumed with `drainEvents()` |
 | `sizeAxes`, `rotation3D`, `angularVelocity3D` | Independent per-axis birth ranges and angular rates |
 | `angularVelocityOverLife` | Multiplier integrated over age for 2D/3D angular velocity |
-| `sizeBySpeed`, `colorBySpeed`, `rotationBySpeed`, `limitVelocity` | Speed-range appearance curves and an absolute velocity cap |
+| `sizeBySpeed`, `colorBySpeed`, `rotationBySpeed`, `limitVelocity` | Speed-range appearance curves and scalar/per-axis lifetime velocity limits with damping |
 | `startColors` | Seeded choice from a palette of 1–256 initial sRGB colors |
 | `triggers` | Named plane/sphere/box volumes with enter/exit records |
 | `lighting`, `runtime.softParticles` | Ambient/directional Lambert lighting and scene-depth intersection fades |
@@ -99,7 +101,7 @@ between `start` and `end`. Mesh shapes accept copied, optionally indexed triangl
 Mesh renderers accept the same triangle format, orient their +Y axis toward
 velocity, and spin about that axis. Specifying 3D rotation/size axes selects independent
 XYZ rotation instead of velocity alignment. `sizeAxes` multiplies scalar size;
-`angularVelocity3D` is radians/second. Optional mesh textures use planar XY UVs.
+`angularVelocity3D` is radians/second. Mesh renderers accept explicit `uvs` (two components per vertex) and `normals` (three nonzero components per vertex, normalized on import). Defaults are planar XY UVs and computed normals.
 
 Planes define their permitted half-space by `dot(normal, position) >= offset`.
 Sphere/box interiors are solid. Collision `radius` expands colliders around the
@@ -120,6 +122,59 @@ trails end with their owner. `clear`/`restart` remove retained trails too.
 Numerical particles sample their committed fixed steps. Analytic particles sample
 presentations, so their trail detail depends on presentation frequency. Sorting
 changes rendered instance order without changing histories or simulation state.
+
+## Coordinate and renderer controls
+
+`simulationSpace: "custom"` requires `runtime.customSimulationSpace`, a borrowed
+Three.js Object3D. Births are transformed from the emitter into this reference;
+living particles follow subsequent reference movement. Forces, collisions and
+triggers use the selected simulation coordinates. Sub-emitter routing converts
+between each emitter's reference and birth frames.
+
+`scalingMode: "hierarchy"` retains the full inherited transform. `"local"` keeps
+world translation/rotation but uses only the object's own scale. `"shape"` scales
+birth positions while excluding inherited scale from velocities and rendered
+size. Scale-controlled frames and custom reference frames must be invertible.
+World-space simulation remains in world units: its size is independent of later
+parent scaling. Nonuniform/sheared hierarchy transforms are retained in hierarchy
+mode; scale-controlled frames use a decomposed translation/rotation/scale frame.
+
+Renderer options accept `pivot` in unscaled geometry coordinates, per-axis `flip`
+probabilities (0–1), and `minScreenSize` / `maxScreenSize` (0–1 viewport-height
+fractions). Size limits clamp nominal billboard width or mesh bounding diameter;
+zero-sized particles remain invisible. Explicit screen limits use conservative
+visibility instead of center-only frustum rejection. Seeded flips survive sorting
+and slot reuse. Borrowed ShaderMaterials implement their own vertex controls;
+`particleFlip` is supplied when requested.
+
+```ts
+const debris = createParticleEmitter(scene, {
+  renderer: {
+    kind: "mesh", pivot: { x: 0, y: 0.2, z: 0 },
+    flip: { x: 0.5, y: 0, z: 0.5 },
+    meshes: [
+      { positions: shardPositions, uvs: shardUvs, normals: shardNormals, weight: 3 },
+      { positions: chipPositions, weight: 1 },
+    ],
+  },
+  renderOrder: 2, sortMode: "oldest",
+});
+debris.setRenderOrder(3); // Effects expose setRenderOrder(emitterId, order).
+```
+
+Supply either singular mesh data or 1–8 `meshes`, with nonnegative weights and
+at least one positive weight. Births select a variant once. GPU buffers gather
+only that variant's active particles; total instance count remains the live count.
+The combined mesh budget is 65,536 vertices / 65,536 triangles, with at most
+262,144 reserved instance slots across variants. Variants and independent
+simulation frames are excluded from automatic effect batching.
+
+`trails: { mode: "ribbon", ribbonCount: 2 }` connects separate particles by
+emission order, assigning successive birth IDs across 1–16 ribbons. Width/color/
+opacity curves cover each ribbon from newest (0) to oldest (1). `persistMs` retains
+bounded fading endpoints after death. History `segments`/`intervalMs` apply only
+to the default `"particle"` mode; ribbons use one endpoint per particle and rebuild
+connections after births/deaths. Sorting does not change the connections.
 
 ## Shape masks, orbital motion and noise
 
@@ -214,7 +269,21 @@ have different per-particle seeds from a run that evaluated every occurrence.
 
 Speed curves clamp to their `[min, max]` speed range. Size/color multiply the
 particle's current appearance; rotation adds a radian offset. Velocity limits
-apply at birth and each numerical step. Sprite FPS overrides lifetime-based
+apply at birth and each numerical step. Use `limitVelocity: { speed: curve, dampen: 0.2 }` for a scalar lifetime cap, or
+`{ axes: { x: curveX, y: curveY }, dampen: 0.2 }` for independent absolute axis
+limits. Curves accept seeded min/max pairs; omitted axes use 1e6. `dampen` is the
+fraction of excess velocity removed per 1/60 second, rescaled exponentially for
+the fixed step. Its default 1 clamps instantly (including birth), while 0 disables
+limiting. Limits apply to physical base velocity, before authored orbital/radial
+motion and speed modifiers.
+
+Sprite `frameOverLife` or `frameBySpeed: { range: [0, 5], curve }` selects a
+fractional frame offset, added to `startFrame` and wrapped within the chosen row.
+Values are frame indices (0 through total frames minus 1), not normalized UVs.
+Either curve replaces FPS/cycles; conflicting options reject. `blend` interpolates
+neighboring frames, including reverse/nonlinear curves.
+
+Sprite FPS overrides lifetime-based
 `cycles`; `row` restricts animation/wrapping to that row and may be `"random"`.
 `startFrame` can be fractional; `blend` interpolates adjacent atlas samples.
 Manual `emit(count, { color })` overrides the initial palette for that burst; an explicit
@@ -282,8 +351,7 @@ Opt into an input journal with `recording: { maxCommands: 10000, maxBytes: 83886
 `seek(ms, "recorded")` rebuilds simulation from copied commands, including manual
 births, settings, observed parent world matrices and deforming mesh snapshots.
 It also reconstructs trails and counters for the replayed prefix. Runtime update callbacks must derive outputs from
-particle context; arbitrary external callback state and texture pixel mutations
-are not recorded. Completion callbacks are suppressed during recorded playback. While a recorded
+particle context, or supply paired `runtime.captureState()` and `runtime.restoreState(state)` callbacks. The journal copies their finite, acyclic JSON state before each command and restores it before replay. Include any external counters, inputs and PRNG state used by the callback; uncaptured state, `Math.random()` and texture pixel mutations cannot be reconstructed. State payloads share `maxBytes` and have a maximum nesting depth of 32. Completion callbacks are suppressed during recorded playback. While a recorded
 command runs, callbacks may inspect or dispose the emitter, but cannot start
 nested mutations or seeking. A failed command stops recording at its valid prefix.
 The borrowed parent itself is not moved by seeking: world-space particle paths
@@ -292,7 +360,7 @@ are restored, while local particles continue to render under its current transfo
 `recordedUntilMs` is cumulative forward simulation time in the journal (restart
 and automatic seek are commands, not a rewind of that clock). At a recorded
 boundary replay is exact; an intermediate seek advances part of the next
-presentation using that presentation's observed parent transform. The journal
+presentation using interpolated observed parent/reference translation and scale, and quaternion rotation. Interpolation approximates the interval between observations; it cannot recover unobserved curved motion or arbitrary external-input changes. The journal
 stops at a complete command when its count or estimated payload byte limit is
 reached and reports `recordingFull`. Older history is retained. Seeking beyond
 that prefix throws. After seeking, the first new mutation branches from the
@@ -322,9 +390,7 @@ environment maps follow Three.js's standard material pipeline. Enable
 as for ordinary Three.js meshes. Billboard shadow orientation follows the shadow
 camera; use mesh particles for solid 3D silhouettes. The clone captures source
 settings at construction and preserves its shader customization callback.
-Opacity/tint and atlas frame selection use particle attributes. Standard-material
-combinations with frame blending or soft depth are rejected explicitly; those
-features remain available with the built-in shader. The adapter enables transparency for particle opacity; blending, depth writing,
+Opacity/tint and atlas frame selection use particle attributes. Standard materials support both frame blending and soft depth, including their combination. Frame blending samples both atlas cells for diffuse/alpha, emissive, normal/bump, roughness/metalness, AO and light maps, preserving map transforms. Shadow passes use particle opacity and blended atlas alpha, without view-camera soft fades. The adapter enables transparency for particle opacity; blending, depth writing,
 depth testing and maps otherwise follow the supplied standard material. Three.js
 retains its renderer-owned DFG lookup texture after the PBR materials are disposed;
 that shared cache is not an emitter-owned resource.
@@ -487,9 +553,8 @@ stretched particles add velocity. Resources are reused across births, expiry,
 clear and restart. No per-particle objects are allocated during motion or rendering;
 enabled event recording intentionally allocates bounded immutable snapshots.
 
-Each emitter uses one instanced draw; trails add a second. Optional `sort(camera)`
-provides back-to-front sorting within a standalone emitter with reusable scratch
-storage. Different alpha emitters are not globally sorted. Effect batching is on
+Each populated mesh variant uses one instanced draw; trails/ribbons add one. The default emitter uses one draw. Optional `sort(camera)`
+uses `sortMode` (default `"distance"`); an explicit `sort(camera, "oldest" | "youngest" | "none" | "distance")` overrides it. Sorting reuses scratch storage. `"none"` restores dense simulation order. With multiple meshes, order is preserved within each variant; variants and different emitters are not globally particle-sorted. Effect batching is on
 by default and merges **compatible additive emitters under the same effect**,
 including compatible trails. It reuses aggregate buffers and checks geometry,
 shader, texture, atlas, stretch, blend and depth settings. Borrowed custom materials

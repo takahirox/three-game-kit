@@ -54,6 +54,15 @@ export function checkParticleRendering() {
     pbr.map = atlas;
     const mapped = createParticleEmitter(scene, { size: 0.8, speed: 0, opacityOverLife: flat, spriteSheet: { columns: 2, rows: 1, startFrame: 1 }, runtime: { material: pbr } });
     mapped.emit(1); const standardBlue = pixel(); atlas.offset.x = -0.5; const standardRed = pixel(); mapped.dispose(); atlas.offset.x = 0; pbr.map = null;
+    pbr.map = atlas;
+    const combination = createParticleEmitter(scene, { size: 0.8, speed: 0, lifetimeMs: 2000, opacityOverLife: flat,
+        spriteSheet: { columns: 2, rows: 1, frameOverLife: [{ time: 0, value: 0 }, { time: 1, value: 1 }], blend: true },
+        runtime: { material: pbr, softParticles: { depthTexture: depth.depthTexture, camera: perspective, width: 64, height: 64, origin: { x: 8, y: 8 }, fadeDistance: 1 } } });
+    combination.emit(1); combination.present(0); combination.present(1000); const standardSoftBlend = pixel(perspective);
+    combination.setDepthSource(depth.depthTexture, 64, 64, { x: 8, y: 8 }); combination.dispose(); pbr.map = null;
+    const sized = createParticleEmitter(scene, { size: 0.01, speed: 0, opacityOverLife: flat, renderer: { kind: "billboard", minScreenSize: 0.5, maxScreenSize: 0.5, flip: { x: 1, y: 0, z: 0 } } });
+    sized.emit(1); pixel(); renderer.readRenderTargetPixels(target, 50, 40, 1, 1, pixels); const screenSizePixel = Array.from(pixels); sized.dispose();
+    const shifted = createParticleEmitter(scene, { size: 0.5, speed: 0, opacityOverLife: flat, renderer: { kind: "billboard", pivot: { x: 2, y: 0, z: 0 } } }); shifted.emit(1); const pivotCenter = pixel(); shifted.dispose();
     renderer.shadowMap.enabled = true; sun.castShadow = true; sun.shadow.mapSize.set(256, 256); sun.shadow.camera.left = -2; sun.shadow.camera.right = 2; sun.shadow.camera.top = 2; sun.shadow.camera.bottom = -2; sun.shadow.bias = -0.0001;
     const receiver = new THREE.Mesh(new THREE.PlaneGeometry(4, 4), new THREE.MeshStandardMaterial({ roughness: 1 })); receiver.position.z = -0.6; receiver.receiveShadow = true; scene.add(receiver);
     const caster = createParticleEmitter(scene, { size: 0.6, speed: 0, opacityOverLife: flat, renderer: { kind: "mesh", positions }, rotation3D: { z: 0.2 }, castShadow: true, receiveShadow: true, runtime: { material: pbr } }); caster.emit(1);
@@ -66,5 +75,5 @@ export function checkParticleRendering() {
     const borrowedPbrDisposals = pbrDisposals; pbr.dispose();
     material.dispose(); atlas.dispose(); target.dispose(); depth.dispose(); plane.geometry.dispose(); plane.material.dispose();
     const remaining = { ...renderer.info.memory }; renderer.dispose();
-    return { standardBlue, standardRed, standardLit, standardDark, shadowEnergy, unshadowedEnergy, borrowedPbrDisposals, faded, perspectiveFaded, solid, blended, litFront, litBack, tiltedLight, customPixel, borrowedDisposals, remaining };
+    return { standardSoftBlend, screenSizePixel, pivotCenter, standardBlue, standardRed, standardLit, standardDark, shadowEnergy, unshadowedEnergy, borrowedPbrDisposals, faded, perspectiveFaded, solid, blended, litFront, litBack, tiltedLight, customPixel, borrowedDisposals, remaining };
 }

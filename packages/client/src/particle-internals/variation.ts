@@ -65,13 +65,18 @@ export function createVariation(options: ParticleEmitterOptions, capacity: numbe
     const fps = sheet?.fps === undefined ? undefined : number(sheet.fps, 0, 1e6, "fps");
     if (sheet?.row !== undefined && sheet.row !== "random") integer(sheet.row, 0, rows - 1, "sprite row");
     if (sheet?.blend !== undefined && typeof sheet.blend !== "boolean") throw new TypeError("sprite blend must be boolean");
+    if (sheet?.frameOverLife !== undefined && sheet.frameBySpeed !== undefined) throw new TypeError("choose frameOverLife or frameBySpeed");
+    if ((sheet?.frameOverLife !== undefined || sheet?.frameBySpeed !== undefined) && (sheet.fps !== undefined || sheet.cycles !== undefined)) throw new TypeError("frame curves replace fps/cycles");
+    const frameLife = sheet?.frameOverLife === undefined ? undefined : distribution(sheet.frameOverLife, 0, columns * rows - 1, "frameOverLife");
+    const frameSpeed = speedCurve(sheet?.frameBySpeed);
+    if (sheet?.frameBySpeed) distribution(sheet.frameBySpeed.curve, 0, columns * rows - 1, "frameBySpeed");
     const frames = new Float64Array(sheet ? capacity * 2 : 0);
     if (options.startColors !== undefined && (!Array.isArray(options.startColors) || !options.startColors.length || options.startColors.length > 256)) throw new TypeError("startColors requires 1–256 colors");
     const palette = options.startColors === undefined ? undefined : Array.from(options.startColors, c => integer(c, 0, 0xffffff, "startColors"));
     const cycles = sheet?.cycles ?? 1;
     function speedT(s: { limits: readonly [number, number] }, speed: number) { return Math.max(0, Math.min(1, (speed - s.limits[0]) / (s.limits[1] - s.limits[0]))); }
     return {
-        hasAxes, integrated, needsSpeed: !!(sizeSpeed || rotationSpeed || colorSpeed || axisSpeed || spinSpeed),
+        hasAxes, integrated, needsSpeed: !!(sizeSpeed || rotationSpeed || colorSpeed || axisSpeed || spinSpeed || frameSpeed),
         birth(i: number, random: () => number, tint: THREE.Color, usePalette: boolean, override?: ParticleVector3, scaleOverride?: ParticleVector3) {
             if (palette && usePalette) tint.setHex(palette[Math.floor(random() * palette.length)]!);
             if (hasAxes) for (let k = 0; k < 3; k++) for (let n = 0; n < 3; n++) {
@@ -102,9 +107,10 @@ export function createVariation(options: ParticleEmitterOptions, capacity: numbe
                 rotations.setComponent(i, k, values[i * 9 + 3 + k]! + (integrated ? turns[i * 3 + k]! + values[i * 9 + 6 + k]! * preview : values[i * 9 + 6 + k]! * t) + noiseValue.getComponent(k) * (noise?.rotationAmount ?? 0));
             }
         },
-        frame(i: number, seconds: number, progress: number, atlas?: THREE.InstancedBufferAttribute) {
+        frame(i: number, seconds: number, progress: number, atlas?: THREE.InstancedBufferAttribute, speed = 0, r = 0) {
             const row = sheet ? frames[i * 2 + 1]! : -1, count = row < 0 ? columns * rows : columns, offset = row < 0 ? 0 : row * columns;
-            const value = ((sheet ? frames[i * 2]! : 0) + (fps === undefined ? progress * cycles * count : seconds * fps)) % count;
+            const offsetFrame = frameLife?.sample(progress, r) ?? frameSpeed?.values?.sample(speedT(frameSpeed, speed), r) ?? (fps === undefined ? progress * cycles * count : seconds * fps);
+            const value = ((sheet ? frames[i * 2]! : 0) + offsetFrame) % count;
             const frame = Math.floor(value);
             atlas?.setXYZ(i, offset + (frame + 1) % count, sheet?.blend ? value - frame : 0, 0);
             return offset + frame;

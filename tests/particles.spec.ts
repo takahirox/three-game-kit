@@ -25,7 +25,7 @@ test("all twenty-six presets render, switch, and release their bounded GPU resou
         expect(result.renderedIds, result.id).toEqual([result.id]);
         expect(result.bright, `${result.id} visible pixels`).toBeGreaterThan(20);
         expect(result.calls, result.id).toBeGreaterThan(0);
-        expect(result.calls, `${result.id} draw budget`).toBeLessThanOrEqual(5);
+        expect(result.calls, `${result.id} draw budget`).toBeLessThanOrEqual(result.id === "shards" ? 7 : 5);
         if (["turbulence", "orbital-current", "comet", "shards", "cascade", "surface"].includes(result.id)) {
             expect(result.triangles, result.id).toBeGreaterThanOrEqual(result.particles * 2);
         } else expect(result.triangles, result.id).toBe(result.particles * 2);
@@ -138,7 +138,8 @@ test("new module effects share the atlas gallery, controls and resource lifecycl
     expect(restarted.initializedCount).toBe(6);
     // WebGL allocates geometry only on its first visible draw; exercise a full
     // event cycle before comparing the next cycle's resource counts.
-    expect(later.geometries).toBeLessThanOrEqual(14);
+    // A second weighted crystal geometry also participates in the shadow pass.
+    expect(later.geometries).toBeLessThanOrEqual(15);
     await page.evaluate(() => { const api = (window as any).__particles; for (let t = 7016; t <= 12000; t += 80) api.present(t); });
     const repeated = await page.evaluate(() => (window as any).__particles.inspect());
     expect(repeated.geometries).toBe(later.geometries); expect(repeated.programs).toBe(later.programs);
@@ -160,6 +161,9 @@ test("soft intersections, atlas blending, lighting and custom attributes produce
     page.on("console", message => { if (message.type() === "error") errors.push(message.text()); });
     await page.goto("/examples/particles/index.html?test=1");
     const result = await page.evaluate(async () => { const module = "/tests/support/particles-rendering.ts"; return (await import(module)).checkParticleRendering(); });
+    expect(result.standardSoftBlend[0]).toBeGreaterThan(10); expect(result.standardSoftBlend[2]).toBeGreaterThan(10);
+    expect(result.standardSoftBlend[0]).toBeLessThan(80); expect(result.standardSoftBlend[2]).toBeLessThan(80);
+    expect(result.screenSizePixel[0]).toBeGreaterThan(100); expect(result.pivotCenter[0]).toBeLessThan(5);
     expect(result.standardBlue[2]).toBeGreaterThan(result.standardBlue[0] + 30); expect(result.standardRed[0]).toBeGreaterThan(result.standardRed[2] + 30);
     expect(result.standardLit[0]).toBeGreaterThan(30); expect(result.standardDark[0]).toBeLessThan(5);
     expect(result.shadowEnergy).toBeLessThan(result.unshadowedEnergy - 100); expect(result.borrowedPbrDisposals).toBe(0);

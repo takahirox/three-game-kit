@@ -4,6 +4,7 @@ import * as THREE from "three";
 export function createStandardMaterial(source: THREE.MeshStandardMaterial, template: THREE.ShaderMaterial) {
     const material = source.clone();
     material.map ??= template.uniforms.particleMap!.value as THREE.Texture | null;
+    if (template.defines.PARTICLE_FLIP) material.side = THREE.DoubleSide;
     material.transparent = true; material.depthWrite = source.depthWrite;
     const inverse = new THREE.Matrix4();
     const shared = { ...template.uniforms, particleInverseModelView: { value: inverse } };
@@ -22,17 +23,39 @@ export function createStandardMaterial(source: THREE.MeshStandardMaterial, templ
                 .replace("#include <begin_vertex>", "vec3 transformed = (particleInverseModelView * particleViewPosition).xyz;")
                 .replace("#include <beginnormal_vertex>", "#include <beginnormal_vertex>\nobjectNormal = transpose(mat3(modelViewMatrix)) * particleViewNormal;");
             shader.fragmentShader = "varying vec4 vAppearance; varying vec2 vParticleUv; varying vec2 vQuadUv;\n" + shader.fragmentShader;
-            shader.fragmentShader = shader.fragmentShader.replace("#include <map_fragment>", `
-                #include <map_fragment>
+            if (template.defines.FRAME_BLEND) {
+                shader.fragmentShader = "varying vec2 vNextUv; varying float vFrameBlend;\n" + shader.fragmentShader;
+                const maps = ["map", "alphaMap", "emissiveMap", "roughnessMap", "metalnessMap", "normalMap", "aoMap", "lightMap", "bumpMap"];
+                for (const map of maps) shader.fragmentShader = `#ifdef USE_${map.toUpperCase()}\nuniform mat3 ${map}Transform;\n#endif\n` + shader.fragmentShader;
+                const chunks = ["map_fragment", "alphamap_fragment", "emissivemap_fragment", "roughnessmap_fragment", "metalnessmap_fragment", "normal_fragment_maps", "aomap_fragment", "lights_fragment_maps", "bumpmap_pars_fragment"] as const;
+                for (const name of chunks) {
+                    let chunk = THREE.ShaderChunk[name];
+                    for (const map of maps) chunk = chunk.replace(new RegExp(`texture2D\\(\\s*${map}\\s*,\\s*([^;]+?)\\s*\\)`, "g"), (_match, uv: string) => `mix(texture2D(${map}, ${uv}), texture2D(${map}, (${uv}) + mat2(${map}Transform) * (vNextUv - vParticleUv)), vFrameBlend)`);
+                    shader.fragmentShader = shader.fragmentShader.replace(`#include <${name}>`, chunk);
+                }
+            }
+            if (target === material && template.defines.SOFT_PARTICLES) {
+                if (!shader.fragmentShader.includes("#include <packing>")) shader.fragmentShader = "#include <packing>\n" + shader.fragmentShader;
+                shader.fragmentShader = "uniform sampler2D sceneDepth; uniform vec4 depthCamera, depthViewport;\n" + shader.fragmentShader;
+                shader.fragmentShader = shader.fragmentShader.replace("#include <alphatest_fragment>", `
+                    float depth = texture2D(sceneDepth, (gl_FragCoord.xy - depthViewport.xy) / depthViewport.zw).x;
+                    float sceneZ = depthCamera.w > 0.5 ? perspectiveDepthToViewZ(depth, depthCamera.x, depthCamera.y) : orthographicDepthToViewZ(depth, depthCamera.x, depthCamera.y);
+                    float particleZ = depthCamera.w > 0.5 ? perspectiveDepthToViewZ(gl_FragCoord.z, depthCamera.x, depthCamera.y) : orthographicDepthToViewZ(gl_FragCoord.z, depthCamera.x, depthCamera.y);
+                    diffuseColor.a *= clamp((particleZ - sceneZ) / depthCamera.z, 0.0, 1.0);
+                    #include <alphatest_fragment>
+                `);
+            }
+            shader.fragmentShader = shader.fragmentShader.replace("#include <alphatest_fragment>", `
                 diffuseColor *= vAppearance;
                 #if !defined(USE_MAP) && !defined(MESH_PARTICLE)
                     diffuseColor.a *= 1.0 - smoothstep(0.65, 1.0, length(vQuadUv - 0.5) * 2.0);
                 #endif
                 if (diffuseColor.a <= 0.001) discard;
+                #include <alphatest_fragment>
             `);
         };
         target.defines = { ...target.defines, ...template.defines, PARTICLE_LIGHT: 1 };
-        target.customProgramCacheKey = () => `particles-standard-v1:${originalKey}:${JSON.stringify(template.defines)}`;
+        target.customProgramCacheKey = () => `particles-standard-v2:${originalKey}:${JSON.stringify(template.defines)}`;
     }
     adapt(material);
     const depth = new THREE.MeshDepthMaterial({ depthPacking: THREE.RGBADepthPacking, map: material.map, alphaMap: material.alphaMap, alphaTest: material.alphaTest, side: material.side });
