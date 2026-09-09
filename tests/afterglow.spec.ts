@@ -1,6 +1,8 @@
 import { expect, test } from "@playwright/test";
 
 test("Afterglow runs a deterministic public-Feature neon sprint", async ({ page }, testInfo) => {
+  // Full sprint, post-processing captures and ghost replay on CI software WebGL.
+  test.setTimeout(120_000);
   const consoleErrors: string[] = [];
   const pageErrors: string[] = [];
   page.on("console", (message) => { if (message.type() === "error") consoleErrors.push(message.text()); });
