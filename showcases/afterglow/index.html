@@ -1,0 +1,65 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Afterglow</title>
+    <link rel="stylesheet" href="./styles.css" />
+  </head>
+  <body>
+    <main id="app">
+      <canvas id="game-canvas" tabindex="0" aria-label="Afterglow neon survival sprint"></canvas>
+      <section id="hud" aria-live="polite">
+        <div class="topbar">
+          <div class="brand"><span class="brand-mark"><i></i></span><div><strong>AFTERGLOW</strong><small data-hud-bind="extra:track">MERIDIAN DESCENT</small></div></div>
+          <div class="timer"><small>RUN TIME</small><strong data-hud-bind="extra:time">0:00.00</strong><span>BEST <b data-hud-bind="extra:best">—</b></span></div>
+          <div class="stats">
+            <div><small>CHECKPOINT</small><strong data-hud-bind="extra:checkpoints">0/4</strong></div>
+            <div><small>CRASHES</small><strong data-hud-bind="extra:deaths">0</strong></div>
+          </div>
+        </div>
+        <div class="progress" aria-hidden="true"><i id="progress-bar"></i></div>
+        <div id="cue" class="cue" hidden><span data-hud-bind="extra:cue"></span><b data-hud-bind="extra:cueDistance"></b></div>
+        <div id="ghost-tag" class="ghost-tag" hidden>GHOST · BEST RUN</div>
+        <div id="toast" class="toast" data-hud-bind="extra:toast" hidden></div>
+        <div id="crash" class="crash" hidden><strong>SIGNAL LOST</strong><small data-hud-bind="extra:deathCause"></small></div>
+        <div class="dash">
+          <div class="speed"><small>VELOCITY</small><strong data-hud-bind="extra:speed">0</strong><em>KM/H</em><div class="track"><i id="speed-bar"></i></div></div>
+          <div class="heat"><small data-hud-bind="extra:heatLabel">HEAT</small><div class="track"><i id="heat-bar"></i></div><em>SHIFT · BOOST</em></div>
+        </div>
+        <div class="controls">W THROTTLE · A/D STEER · SPACE JUMP · SHIFT BOOST · S BRAKE · R RESTART</div>
+        <section class="overlay" data-hud-screen="title">
+          <div class="title-rail"><b>AG–01</b><i></i><span>MERIDIAN DESCENT</span></div>
+          <div class="eyebrow">A THREE-GAME-KIT SURVIVAL SPRINT</div>
+          <h1><span>AFTER</span><br /><em>GLOW</em></h1>
+          <p>Drive a light-trailing hovercar down a floating neon highway. Jump the gaps, thread the lasers, ride the boost pads, and don't overheat before the finish line.</p>
+          <div class="launch-row">
+            <button type="button" data-hud-action="start">LAUNCH <span>↗</span></button>
+            <dl class="mission-meta"><div><dt>LENGTH</dt><dd>1350 M</dd></div><div><dt>BEST</dt><dd data-hud-bind="extra:best">—</dd></div><div><dt>MODE</dt><dd>SPRINT</dd></div></dl>
+          </div>
+          <small>W THROTTLE · A/D STEER · SPACE JUMP · SHIFT BOOST · GAMEPAD SUPPORTED</small>
+          <div class="scene-caption"><span>LIVE FEED</span><b>SECTOR 07<br />ALT +30 M</b></div>
+        </section>
+        <section class="overlay countdown" data-hud-screen="countdown" hidden>
+          <strong data-hud-bind="extra:countdown">3</strong>
+          <small>HOLD W · SHIFT TO BOOST</small>
+        </section>
+        <section class="overlay results" data-hud-screen="results" hidden>
+          <div class="eyebrow">RUN COMPLETE</div>
+          <div id="record" class="record" hidden>NEW RECORD</div>
+          <h2 data-hud-bind="extra:finishTime">0:00.00</h2>
+          <div class="medal" data-hud-bind="extra:medal">NONE</div>
+          <dl class="results-meta">
+            <div><dt>CRASHES</dt><dd data-hud-bind="extra:deaths">0</dd></div>
+            <div><dt>CHECKPOINTS</dt><dd data-hud-bind="extra:checkpoints">0/4</dd></div>
+            <div><dt>BEST</dt><dd data-hud-bind="extra:best">—</dd></div>
+          </dl>
+          <button type="button" data-hud-action="restart">RUN AGAIN <span>↻</span></button>
+          <small>GOLD 0:44 · SILVER 0:55 · BRONZE 1:15 · PRESS SPACE TO RETRY</small>
+        </section>
+      </section>
+      <p id="status" role="status" aria-live="polite"></p>
+    </main>
+    <script type="module" src="./src/main.ts"></script>
+  </body>
+</html>
