@@ -67,6 +67,7 @@ Client/Server authority wrappers.
 - [Priority B genre-expansion Features](./docs/features/genre-expansion.md)
 - [Priority C advanced Features](./docs/features/advanced-features.md)
 - [Relic Frontier official integrated showcase](./showcases/relic-frontier/README.md)
+- [Afterglow neon survival sprint showcase](./showcases/afterglow/README.md)
 - [Interaction contract](./docs/features/interaction.md)
 - [Client-only Feature authoring](./docs/authoring/client-only-feature.md)
 - [Server-only Feature authoring](./docs/authoring/server-only-feature.md)
