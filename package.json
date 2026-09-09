@@ -55,7 +55,12 @@
     "verify": "pnpm run build && tsc -p tsconfig.typecheck.json --noEmit && pnpm run test:node && node scripts/verify-workspace.mjs",
     "typecheck:particles": "pnpm run build && tsc -p examples/particles/tsconfig.json --noEmit",
     "test:particles": "playwright test tests/particles.spec.ts --project=chromium --workers=1 --retries=0",
-    "verify:particles": "pnpm run typecheck:particles && pnpm run test:particles"
+    "verify:particles": "pnpm run typecheck:particles && pnpm run test:particles",
+    "typecheck:deepfield": "pnpm run build && tsc -p showcases/deepfield/tsconfig.json --noEmit",
+    "test:deepfield-boundaries": "node scripts/verify-deepfield-boundaries.mjs",
+    "test:deepfield-assets": "node scripts/verify-deepfield-assets.mjs",
+    "test:deepfield": "playwright test tests/deepfield.spec.ts --project=chromium --workers=1 --retries=0",
+    "verify:deepfield": "pnpm run test:deepfield-boundaries && pnpm run test:deepfield-assets && pnpm run typecheck:deepfield && pnpm run test:deepfield"
   },
   "devDependencies": {
     "@playwright/test": "1.62.1",

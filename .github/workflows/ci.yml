@@ -37,6 +37,9 @@ jobs:
       - name: Verify Core Run
         run: pnpm verify:core-run
 
+      - name: Verify Deepfield
+        run: pnpm verify:deepfield
+
       - name: Archive M5 evidence
         if: always()
         uses: actions/upload-artifact@v4
