@@ -1,0 +1,79 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Gravetide</title>
+    <link rel="stylesheet" href="./styles.css" />
+  </head>
+  <body>
+    <main id="app">
+      <canvas id="game-canvas" tabindex="0" aria-label="Gravetide survivor run"></canvas>
+      <section id="hud" aria-live="polite">
+        <div class="vignette" aria-hidden="true"></div>
+        <div class="topbar">
+          <div class="brand"><span class="brand-mark"></span><div><strong>GRAVETIDE</strong><small data-hud-bind="extra:wave">WAVE 1</small></div></div>
+          <div class="timer"><small>UNTIL DAWN</small><strong data-hud-bind="extra:time">5:00</strong></div>
+          <div class="stats">
+            <div><small>KILLS</small><strong data-hud-bind="extra:kills">0</strong></div>
+            <div><small>LEVEL</small><strong data-hud-bind="extra:level">1</strong></div>
+            <div><small>HORDE</small><strong data-hud-bind="extra:alive">0</strong></div>
+          </div>
+        </div>
+        <div class="xp"><i id="xp-bar"></i></div>
+        <div id="elite" class="elite" hidden><small data-hud-bind="extra:elite">GRAVE WARDEN</small><div class="track"><i id="elite-bar"></i></div></div>
+        <div id="shrine" class="shrine" hidden data-hud-bind="extra:shrine"></div>
+        <div class="bottom">
+          <div class="hp"><small>VITALITY <b data-hud-bind="extra:hpLabel">100 / 100</b></small><div class="track"><i id="hp-bar"></i></div></div>
+          <div class="loadout"><span data-hud-bind="extra:weapons"></span><em data-hud-bind="extra:passives"></em></div>
+          <div id="bell" class="bell"><small>GRAVE BELL · E</small><strong data-hud-bind="extra:bell">READY</strong></div>
+        </div>
+        <div class="controls">WASD MOVE · WEAPONS FIRE ON THEIR OWN · E GRAVE BELL · 1-3 CHOOSE UPGRADES</div>
+        <section class="overlay" data-hud-screen="title">
+          <div class="eyebrow">A THREE-GAME-KIT SURVIVOR RUN</div>
+          <h1><span>GRAVE</span><br /><em>TIDE</em></h1>
+          <p>The graveyard wakes at dusk. Hold out for five minutes as the horde grows, gather the souls they leave behind, and stack weapons until the dawn breaks.</p>
+          <div class="launch-row">
+            <button type="button" data-hud-action="start">BEGIN THE NIGHT <span>☽</span></button>
+            <dl class="mission-meta"><div><dt>BEST TIME</dt><dd data-hud-bind="extra:bestTime">0:00</dd></div><div><dt>BEST LEVEL</dt><dd data-hud-bind="extra:bestLevel">0</dd></div><div><dt>RUNS</dt><dd data-hud-bind="extra:runs">0</dd></div></dl>
+          </div>
+          <small>WASD MOVE · WEAPONS FIRE ON THEIR OWN · E GRAVE BELL · 1-3 CHOOSE UPGRADES</small>
+        </section>
+        <section class="overlay levelup" data-hud-screen="levelup" hidden>
+          <div class="eyebrow">LEVEL <b data-hud-bind="extra:level">2</b> · CHOOSE ONE</div>
+          <div id="cards" class="cards">
+            <button type="button" class="card" data-hud-action="choose-1"><b>1</b><i></i><strong data-hud-bind="extra:card0Title"></strong><small data-hud-bind="extra:card0Level"></small><p data-hud-bind="extra:card0Description"></p></button>
+            <button type="button" class="card" data-hud-action="choose-2"><b>2</b><i></i><strong data-hud-bind="extra:card1Title"></strong><small data-hud-bind="extra:card1Level"></small><p data-hud-bind="extra:card1Description"></p></button>
+            <button type="button" class="card" data-hud-action="choose-3"><b>3</b><i></i><strong data-hud-bind="extra:card2Title"></strong><small data-hud-bind="extra:card2Level"></small><p data-hud-bind="extra:card2Description"></p></button>
+          </div>
+        </section>
+        <section class="overlay results" data-hud-screen="results" hidden>
+          <div class="eyebrow">NIGHT OVER</div>
+          <h2 data-hud-bind="extra:result">THE GRAVE TOOK YOU</h2>
+          <dl class="results-meta">
+            <div><dt>SURVIVED</dt><dd data-hud-bind="extra:resultTime">0:00</dd></div>
+            <div><dt>LEVEL</dt><dd data-hud-bind="extra:resultLevel">1</dd></div>
+            <div><dt>KILLS</dt><dd data-hud-bind="extra:resultKills">0</dd></div>
+            <div><dt>DAMAGE</dt><dd data-hud-bind="extra:resultDamage">0</dd></div>
+          </dl>
+          <button type="button" data-hud-action="restart">RISE AGAIN <span>↻</span></button>
+          <small>BEST <b data-hud-bind="extra:bestTime">0:00</b> · PRESS ENTER TO RETRY</small>
+        </section>
+        <section class="overlay results victory" data-hud-screen="victory" hidden>
+          <div class="eyebrow">THE SUN RISES</div>
+          <h2 data-hud-bind="extra:result">YOU SAW THE DAWN</h2>
+          <dl class="results-meta">
+            <div><dt>SURVIVED</dt><dd data-hud-bind="extra:resultTime">5:00</dd></div>
+            <div><dt>LEVEL</dt><dd data-hud-bind="extra:resultLevel">1</dd></div>
+            <div><dt>KILLS</dt><dd data-hud-bind="extra:resultKills">0</dd></div>
+            <div><dt>DAMAGE</dt><dd data-hud-bind="extra:resultDamage">0</dd></div>
+          </dl>
+          <button type="button" data-hud-action="restart">ANOTHER NIGHT <span>↻</span></button>
+          <small>BEST KILLS <b data-hud-bind="extra:bestKills">0</b> · PRESS ENTER TO PLAY AGAIN</small>
+        </section>
+      </section>
+      <p id="status" role="status" aria-live="polite"></p>
+    </main>
+    <script type="module" src="./src/main.ts"></script>
+  </body>
+</html>

@@ -68,6 +68,7 @@ Client/Server authority wrappers.
 - [Priority C advanced Features](./docs/features/advanced-features.md)
 - [Relic Frontier official integrated showcase](./showcases/relic-frontier/README.md)
 - [Deepfield voxel sandbox showcase](./showcases/deepfield/README.md)
+- [Gravetide survivor-run showcase](./showcases/gravetide/README.md)
 - [Afterglow neon survival sprint showcase](./showcases/afterglow/README.md)
 - [Interaction contract](./docs/features/interaction.md)
 - [Client-only Feature authoring](./docs/authoring/client-only-feature.md)

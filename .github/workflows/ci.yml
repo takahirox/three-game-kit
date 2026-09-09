@@ -40,6 +40,9 @@ jobs:
       - name: Verify Deepfield
         run: pnpm verify:deepfield
 
+      - name: Verify Gravetide
+        run: pnpm verify:gravetide
+
       - name: Archive M5 evidence
         if: always()
         uses: actions/upload-artifact@v4

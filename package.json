@@ -60,7 +60,12 @@
     "test:deepfield-boundaries": "node scripts/verify-deepfield-boundaries.mjs",
     "test:deepfield-assets": "node scripts/verify-deepfield-assets.mjs",
     "test:deepfield": "playwright test tests/deepfield.spec.ts --project=chromium --workers=1 --retries=0",
-    "verify:deepfield": "pnpm run test:deepfield-boundaries && pnpm run test:deepfield-assets && pnpm run typecheck:deepfield && pnpm run test:deepfield"
+    "verify:deepfield": "pnpm run test:deepfield-boundaries && pnpm run test:deepfield-assets && pnpm run typecheck:deepfield && pnpm run test:deepfield",
+    "typecheck:gravetide": "pnpm run build && tsc -p showcases/gravetide/tsconfig.json --noEmit",
+    "test:gravetide-boundaries": "node scripts/verify-gravetide-boundaries.mjs",
+    "test:gravetide-assets": "node scripts/verify-gravetide-assets.mjs",
+    "test:gravetide": "playwright test tests/gravetide.spec.ts --project=chromium --workers=1 --retries=0",
+    "verify:gravetide": "pnpm run test:gravetide-boundaries && pnpm run test:gravetide-assets && pnpm run typecheck:gravetide && pnpm run test:gravetide"
   },
   "devDependencies": {
     "@playwright/test": "1.62.1",

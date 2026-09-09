@@ -14,6 +14,7 @@ export default defineConfig({
       "three/examples/jsm/postprocessing/UnrealBloomPass.js",
       "three/examples/jsm/shaders/RGBShiftShader.js",
       "three/examples/jsm/shaders/VignetteShader.js",
+      "three/examples/jsm/utils/BufferGeometryUtils.js",
     ],
   },
   resolve: {
