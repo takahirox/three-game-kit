@@ -2,12 +2,12 @@
 import { createDomHudAdapter, type HudAdapter } from "@three-game-kit/client/gameplay";
 import { createAudioRuntime, createSilentAudioDriver, createWebAudioDriver, type AudioRuntime } from "@three-game-kit/client/audio";
 import type { HudState } from "@three-game-kit/shared/gameplay";
-import { createRelicFrontierGame, type RelicFrontierGame, type RelicLeakInspection, type RelicRuntimeInspection } from "./game.js";
+import { createRelicFrontierGame, type RelicCombatInspection, type RelicFrontierGame, type RelicLeakInspection, type RelicRuntimeInspection } from "./game.js";
 import { createRelicFrontierRenderer, type RelicFrontierRenderer, type RelicRendererInspection } from "./renderer.js";
 import type { RelicAction, RelicEvent, RelicScenario, RelicSnapshot, SemanticInput } from "./state.js";
 
 type HostMode = "normal" | "test";
-interface HostError { readonly source: string; readonly message: string; }
+interface HostError { readonly source: string; readonly message: string; readonly detail?: string; }
 export interface RelicFrontierHandle {
   readonly ready: boolean;
   readonly screenshotReady: boolean;
@@ -19,8 +19,10 @@ export interface RelicFrontierHandle {
   dispose(): void;
   setInput(input: Partial<SemanticInput>): void;
   press(action: RelicAction): void;
-  advance(seconds: number): number;
+  /** Advances exact ticks; pass `{ present: false }` inside tight QA loops to skip the per-call presentation frame. */
+  advance(seconds: number, options?: Readonly<{ readonly present?: boolean }>): number;
   loadScenario(id: RelicScenario): void;
+  forcePlayerDeath(): void;
   setDebugCamera(enabled: boolean): void;
   snapshot(): RelicSnapshot;
   events(): readonly RelicEvent[];
@@ -28,6 +30,8 @@ export interface RelicFrontierHandle {
   inspectRuntime(): RelicRuntimeInspection | null;
   inspectRenderer(): RelicRendererInspection | null;
   inspectAssets(): ReturnType<RelicFrontierGame["inspectAssets"]> | null;
+  inspectAnimation(): ReturnType<RelicFrontierGame["inspectAnimation"]> | null;
+  inspectCombat(): RelicCombatInspection | null;
   inspectAudio(): ReturnType<RelicFrontierGame["inspectAudio"]> | null;
   inspectLeaks(): Readonly<{ hostListeners: number; rafActive: boolean; hostDisposed: boolean; game: RelicLeakInspection | null }>;
 }
@@ -53,10 +57,14 @@ function createRelicHudAdapter(root: HTMLElement, onAction: (action: string) => 
   const guardianPanel = requireElement<HTMLElement>("#guardian");
   const guardianHealth = requireElement<HTMLElement>("#guardian-health");
   const onboarding = requireElement<HTMLElement>("#onboarding");
+  const targetPanel = requireElement<HTMLElement>("#target");
+  const toast = requireElement<HTMLElement>("#toast");
   let lastHealth = -1;
   let lastGuardian = -1;
   let lastGuardianVisible: boolean | null = null;
   let lastOnboarding: boolean | null = null;
+  let lastTarget: boolean | null = null;
+  let lastToast: boolean | null = null;
   return Object.freeze({
     get disposed(): boolean { return dom.disposed; },
     render(state: HudState): void {
@@ -69,6 +77,10 @@ function createRelicHudAdapter(root: HTMLElement, onAction: (action: string) => 
       if (guardianVisible !== lastGuardianVisible) { lastGuardianVisible = guardianVisible; guardianPanel.hidden = !guardianVisible; }
       const onboardingVisible = state.extras.onboarding === true;
       if (onboardingVisible !== lastOnboarding) { lastOnboarding = onboardingVisible; onboarding.hidden = !onboardingVisible; }
+      const targetVisible = typeof state.extras.target === "string" && state.extras.target.length > 0;
+      if (targetVisible !== lastTarget) { lastTarget = targetVisible; targetPanel.hidden = !targetVisible; }
+      const toastVisible = typeof state.extras.toast === "string" && state.extras.toast.length > 0;
+      if (toastVisible !== lastToast) { lastToast = toastVisible; toast.hidden = !toastVisible; }
     },
     inspect() { return dom.inspect(); },
     dispose(): void { dom.dispose(); },
@@ -114,33 +126,46 @@ function updateMovement(): void {
   game?.setInput({ moveX: x, moveY: y, cameraYaw: yaw });
 }
 
+function pressAction(action: RelicAction): void {
+  game?.press(action);
+  if (mode === "test") { game?.advance(1 / 60); renderNow(); }
+}
+
 const actionKeys = new Map<string, RelicAction>([
-  ["Space", "jump"], ["ShiftLeft", "dash"], ["ShiftRight", "dash"],
-  ["KeyE", "interact"], ["KeyQ", "use-item"], ["KeyF", "ability"],
+  ["Space", "dodge"], ["ShiftLeft", "dodge"], ["ShiftRight", "dodge"],
+  ["Tab", "lock-on"], ["KeyE", "interact"], ["KeyQ", "use-item"], ["KeyF", "ability"],
+  ["KeyJ", "attack-light"], ["KeyK", "attack-heavy"],
 ]);
 listen(window, "keydown", ((event: KeyboardEvent) => {
-  if (event.code.startsWith("Key") || event.code === "Space" || event.code.startsWith("Shift")) event.preventDefault();
+  if (event.code.startsWith("Key") || event.code === "Space" || event.code === "Tab" || event.code.startsWith("Shift")) event.preventDefault();
   if (["KeyW", "KeyA", "KeyS", "KeyD"].includes(event.code)) { held.add(event.code); updateMovement(); }
   if (event.code === "Escape" && !event.repeat) handle.dismissOnboarding();
   const action = actionKeys.get(event.code);
-  if (action !== undefined && !event.repeat) { game?.press(action); if (mode === "test") { game?.advance(1 / 60); renderNow(); } }
+  if (action !== undefined && !event.repeat) pressAction(action);
 }) as EventListener);
 listen(window, "keyup", ((event: KeyboardEvent) => { held.delete(event.code); updateMovement(); }) as EventListener);
 listen(window, "blur", (() => { held.clear(); updateMovement(); }) as EventListener);
 listen(canvas, "pointermove", ((event: PointerEvent) => {
-  if (event.buttons !== 1) return;
+  if (event.buttons !== 4 && !(event.buttons === 1 && event.shiftKey)) return;
   yaw += event.movementX * 0.005;
   game?.setInput({ cameraYaw: yaw });
 }) as EventListener);
 listen(canvas, "pointerdown", (() => canvas.focus()) as EventListener);
 listen(canvas, "mousedown", ((event: MouseEvent) => {
-  if (event.button === 0) { game?.press("attack"); if (mode === "test") { game?.advance(1 / 60); renderNow(); } }
-  if (event.button === 2) { event.preventDefault(); game?.press("ability"); if (mode === "test") { game?.advance(1 / 60); renderNow(); } }
+  if (event.button === 0 && !event.shiftKey) pressAction("attack-light");
+  if (event.button === 2) { event.preventDefault(); pressAction("attack-heavy"); }
+}) as EventListener);
+listen(canvas, "wheel", ((event: WheelEvent) => {
+  event.preventDefault();
+  yaw += event.deltaX * 0.003;
+  game?.setInput({ cameraYaw: yaw });
 }) as EventListener);
 listen(canvas, "contextmenu", ((event: Event) => event.preventDefault()) as EventListener);
 listen(window, "resize", (() => renderer?.resize()) as EventListener);
 listen(window, "error", ((event: ErrorEvent) => record("window.error", event.error ?? event.message)) as EventListener);
 listen(window, "unhandledrejection", ((event: PromiseRejectionEvent) => record("unhandledrejection", event.reason)) as EventListener);
+
+const AUDIO_CLIPS = [["impact", 130, 0.14], ["pickup", 620, 0.14], ["victory", 880, 0.14], ["swing", 240, 0.08], ["hurt", 90, 0.18]] as const;
 
 function boot(): void {
   renderer = createRelicFrontierRenderer(canvas, mode === "test");
@@ -148,17 +173,21 @@ function boot(): void {
     if (mode === "normal" && typeof AudioContext !== "undefined") {
       audioContext = new AudioContext();
       const runtime = createAudioRuntime(createWebAudioDriver(audioContext));
-      for (const [id, frequency] of [["impact", 130], ["pickup", 620], ["victory", 880]] as const) {
-        const length = Math.floor(audioContext.sampleRate * 0.14);
+      for (const [id, frequency, seconds] of AUDIO_CLIPS) {
+        const length = Math.floor(audioContext.sampleRate * seconds);
         const buffer = audioContext.createBuffer(1, length, audioContext.sampleRate);
         const data = buffer.getChannelData(0);
-        for (let index = 0; index < length; index += 1) data[index] = Math.sin(index / audioContext.sampleRate * frequency * Math.PI * 2) * (1 - index / length) * 0.18;
+        for (let index = 0; index < length; index += 1) {
+          const t = index / audioContext.sampleRate;
+          const sweep = id === "swing" ? frequency * (1 + t * 12) : id === "hurt" ? frequency * (1 - t * 1.5) : frequency;
+          data[index] = Math.sin(t * sweep * Math.PI * 2) * (1 - index / length) * 0.18;
+        }
         runtime.registerClip(id, buffer);
       }
       return runtime;
     }
     const runtime = createAudioRuntime(createSilentAudioDriver());
-    for (const id of ["impact", "pickup", "victory"]) runtime.registerClip(id, Object.freeze({ id }));
+    for (const [id] of AUDIO_CLIPS) runtime.registerClip(id, Object.freeze({ id }));
     return runtime;
   })();
   const adapter = createRelicHudAdapter(hud, (action) => {
@@ -217,18 +246,21 @@ const handle: RelicFrontierHandle = Object.freeze({
   },
   setInput(input: Partial<SemanticInput>) { game?.setInput(input); renderNow(); },
   press(action: RelicAction) { game?.press(action); },
-  advance(seconds: number) { const steps = game?.advance(seconds) ?? 0; renderNow(); return steps; },
+  advance(seconds: number, options?: Readonly<{ readonly present?: boolean }>) { const steps = game?.advance(seconds) ?? 0; if (options?.present !== false) renderNow(); return steps; },
   loadScenario(id: RelicScenario) { game?.loadScenario(id); game?.advance(1 / 60); renderNow(); },
+  forcePlayerDeath() { game?.forcePlayerDeath(); },
   setDebugCamera(enabled: boolean) { game?.setDebugCamera(enabled); renderNow(); },
   snapshot() { if (game === null) throw new Error("Relic Frontier is not booted"); return game.snapshot(); },
   events() { return game?.events() ?? Object.freeze([]); },
   errors() {
-    const runtime = game?.errors().map((error) => Object.freeze({ source: "runtime", message: error.message })) ?? [];
+    const runtime = game?.errors().map((error) => Object.freeze({ source: "runtime", message: error.message, detail: `${error.code} ${error.operation} ${error.featureId ?? ""} ${error.context.map((entry) => `${entry.key}=${String(entry.value)}`).join(" ")} ${error.cause === null ? "" : JSON.stringify(error.cause)}`.trim() })) ?? [];
     return Object.freeze([...hostErrors, ...runtime]);
   },
   inspectRuntime() { return game?.inspectRuntime() ?? null; },
   inspectRenderer() { return game?.inspectRenderer() ?? null; },
   inspectAssets() { return game?.inspectAssets() ?? null; },
+  inspectAnimation() { return game?.inspectAnimation() ?? null; },
+  inspectCombat() { return game?.inspectCombat() ?? null; },
   inspectAudio() { return game?.inspectAudio() ?? null; },
   inspectLeaks() { return Object.freeze({ hostListeners: removers.length, rafActive: raf !== null, hostDisposed: disposed, game: game?.inspectLeaks() ?? null }); },
 });

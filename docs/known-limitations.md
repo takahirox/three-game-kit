@@ -20,9 +20,11 @@ support for omitted capabilities. Normative details remain in the linked contrac
   static, and kinematic bodies, forces, sensors, layers, and queries; it is not a
   full rigid-body solver and does not provide rotation, joints, destructible
   geometry, continuous collision detection, or cross-platform bit-identical vendor physics.
-- Rendering and asset loading cover the local scene and one URL-loaded glTF avatar
-  with at most one animation clip. There is no generalized scene, asset cache/CDN,
-  streaming, retry, animation graph, blending, retargeting, or character system.
+- Rendering and asset loading cover the local scene and URL-loaded glTF characters
+  driven by the Animation Feature (state clips, one-shots, clip events, cross-fades,
+  and character sets registered after boot). There is no generalized scene, asset
+  cache/CDN, streaming, retry, animation graph, layered playback, retargeting, or
+  character-versus-character collision.
 
 ## WebSocket, protocol, trust, and connection lifecycle
 
