@@ -19,7 +19,8 @@ export interface RelicFrontierHandle {
   dispose(): void;
   setInput(input: Partial<SemanticInput>): void;
   press(action: RelicAction): void;
-  advance(seconds: number): number;
+  /** Advances exact ticks; pass `{ present: false }` inside tight QA loops to skip the per-call presentation frame. */
+  advance(seconds: number, options?: Readonly<{ readonly present?: boolean }>): number;
   loadScenario(id: RelicScenario): void;
   forcePlayerDeath(): void;
   setDebugCamera(enabled: boolean): void;
@@ -245,7 +246,7 @@ const handle: RelicFrontierHandle = Object.freeze({
   },
   setInput(input: Partial<SemanticInput>) { game?.setInput(input); renderNow(); },
   press(action: RelicAction) { game?.press(action); },
-  advance(seconds: number) { const steps = game?.advance(seconds) ?? 0; renderNow(); return steps; },
+  advance(seconds: number, options?: Readonly<{ readonly present?: boolean }>) { const steps = game?.advance(seconds) ?? 0; if (options?.present !== false) renderNow(); return steps; },
   loadScenario(id: RelicScenario) { game?.loadScenario(id); game?.advance(1 / 60); renderNow(); },
   forcePlayerDeath() { game?.forcePlayerDeath(); },
   setDebugCamera(enabled: boolean) { game?.setDebugCamera(enabled); renderNow(); },

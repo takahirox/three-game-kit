@@ -8,17 +8,21 @@ async function advanceUntil(page: import("@playwright/test").Page, predicate: st
   return page.evaluate(({ predicate, maxTicks }) => {
     const game = window.__RELIC_FRONTIER__!;
     const test = new Function("snapshot", "events", `return (${predicate});`) as (snapshot: Snapshot, events: ReturnType<Handle["events"]>) => boolean;
+    let ticks = maxTicks;
+    let matched = false;
     for (let tick = 0; tick < maxTicks; tick += 1) {
-      if (test(game.snapshot(), game.events())) return { ticks: tick, matched: true };
-      game.advance(1 / 60);
+      if (test(game.snapshot(), game.events())) { ticks = tick; matched = true; break; }
+      game.advance(1 / 60, { present: false });
     }
-    return { ticks: maxTicks, matched: test(game.snapshot(), game.events()) };
+    // Present once so HUD/DOM assertions that follow observe the final state without a render per tick.
+    game.advance(0);
+    return { ticks, matched: matched || test(game.snapshot(), game.events()) };
   }, { predicate, maxTicks });
 }
 
 test("Relic Frontier completes a deterministic animated melee expedition through public Features", async ({ page }, testInfo) => {
   // The deterministic Guardian fight advances several thousand exact ticks with a render per tick.
-  test.setTimeout(180_000);
+  test.setTimeout(300_000);
   const consoleErrors: string[] = [];
   const pageErrors: string[] = [];
   page.on("console", (message) => { if (message.type() === "error") consoleErrors.push(message.text()); });
@@ -148,7 +152,7 @@ test("Relic Frontier completes a deterministic animated melee expedition through
     game.press("attack-heavy");
     const trace: Array<{ phase: string | null; health: number; kind: string; clip: string | null; clipProgress: number }> = [];
     for (let tick = 0; tick < 50; tick += 1) {
-      game.advance(1 / 60);
+      game.advance(1 / 60, { present: false });
       const snapshot = game.snapshot();
       const animation = game.inspectAnimation()!.characters.find(({ characterId }) => characterId === "player")!.animation;
       trace.push({ phase: snapshot.player.combat.phase, health: snapshot.enemies.find(({ id }) => id === "husk-1")!.health, kind: snapshot.enemies.find(({ id }) => id === "husk-1")!.combat.kind, clip: animation.activeOneShotClipId, clipProgress: animation.activeClipDuration === 0 ? 0 : animation.activeClipSeconds / animation.activeClipDuration });
@@ -316,7 +320,7 @@ test("Relic Frontier completes a deterministic animated melee expedition through
       if (action === "dodge") { game.press("dodge"); dodges += 1; }
       if (action === "heavy") { game.press("attack-heavy"); heavies += 1; }
       if (action === "light") { game.press("attack-light"); lights += 1; }
-      game.advance(1 / 60);
+      game.advance(1 / 60, { present: false });
     }
     game.setInput({ moveX: 0, moveY: 0 });
     game.advance(1 / 60);
