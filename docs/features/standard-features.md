@@ -39,15 +39,38 @@ servers must validate movement, grounded state, jumps, and impulses independentl
 ## Animation
 
 Import from `@three-game-kit/client/animation`. `createThreeAnimationRuntime` accepts a caller-owned
-Three `Object3D`, stable clip registrations, and an optional semantic-state map. `setState` performs
-the standard idle/walk/run/jump-style switch, `play` configures looping/rate/crossfade, and
-`playOneShot` emits completion callbacks. The Feature advances the mixer on deterministic fixed
-ticks so tests can reproduce state.
+Three `Object3D`, stable clip registrations, an optional semantic-state map, and optional clip
+events. `setState` performs the standard idle/walk/run/jump-style switch, `play` configures
+looping/rate/crossfade, and `playOneShot` emits completion callbacks. The Feature advances the mixer
+on deterministic fixed ticks so tests can reproduce state.
+
+Action-game timing contracts added by the Relic Frontier melee slice:
+
+- **State definitions.** A state may be a clip ID or `{ clip, loop, clampWhenFinished,
+  crossFadeSeconds, playbackRate }`, so a `dead` state can clamp a non-looping death clip instead of
+  looping it.
+- **Clip events (notifies).** `events: [{ clipId, id, seconds }]` fire through `onEvent` while
+  `update` crosses the timestamp, including across loop wrap-around and on the final frame of a
+  one-shot; events at `0` fire when a clip starts. Emission is deterministic per fixed tick and is
+  meant for presentation (trails, footsteps, audio), never for authority.
+- **Clip-time inspection.** `inspect()` reports `activeClipSeconds`, `activeClipDuration`,
+  `activePlaybackRate`, `completedOneShotCount`, `interruptedOneShotCount`, `emittedEventCount`, and
+  `registeredEventIds`, so tests can prove a swing clip tracks a tick-authoritative hit window.
+- **Cancel and interruption rules.** `cancelOneShot()` returns to the current state clip immediately;
+  replacing an active one-shot, cancelling it, or calling `play` counts as an interruption, and only
+  the surviving action reports completion. `setPlaybackRate` retunes the active action so a clip can
+  be stretched to an attack's tick budget.
+- **Character sets.** `createAnimationCharacterSet()` owns any number of runtimes that may be added
+  or removed after boot (for example once a glTF character finishes loading and is cloned per
+  enemy). `createAnimationFeature({ characters })` advances every registered character on the fixed
+  presentation tick and disposes the set on shutdown; `id` optionally renames the Feature when a
+  composition needs more than one. The single-runtime form is unchanged.
 
 Root motion is ignored by policy: locomotion remains owned by gameplay/Character Controller state.
 The runtime owns its mixer/actions/listeners, but borrows the root and clips. Disposal stops and
 uncaches actions and clears retained references; asset geometry/material/texture disposal remains
-with the Asset Manager or caller.
+with the Asset Manager or caller. A general animation graph, layered or partial-body playback, and
+retargeting remain outside this contract.
 
 ## Asset Manager
 
