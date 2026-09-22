@@ -1,0 +1,82 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Craftlands</title>
+    <link rel="stylesheet" href="./styles.css" />
+  </head>
+  <body>
+    <main id="app">
+      <canvas id="game-canvas" tabindex="0" aria-label="Craftlands survival sandbox"></canvas>
+      <section id="hud" aria-live="polite">
+        <div class="underwater" aria-hidden="true"></div>
+        <div class="hurt" aria-hidden="true"></div>
+        <div class="crosshair" aria-hidden="true"></div>
+        <pre id="debug" class="debug" hidden></pre>
+        <div id="chat-log" class="chat-log"></div>
+        <div class="bottom">
+          <div id="item-name" class="item-name"></div>
+          <div class="bars">
+            <div class="bar-row"><div id="hearts" class="icons" aria-label="Health"></div><div id="air" class="icons right" aria-label="Air" hidden></div><div id="hunger" class="icons right" aria-label="Hunger"></div></div>
+            <div class="xp"><div id="xp-fill" class="xp-fill"></div><b id="xp-level" hidden>0</b></div>
+          </div>
+          <div id="hotbar" class="hotbar"></div>
+        </div>
+        <div id="saved" class="saved" hidden>Saving world…</div>
+        <div id="cursor-item" class="cursor-item" hidden><span></span></div>
+
+        <section class="screen title" data-hud-screen="title">
+          <div class="title-bg" aria-hidden="true"></div>
+          <div class="logo"><span>CRAFT</span><span>LANDS</span><i id="splash" class="splash">A three-game-kit showcase!</i></div>
+          <div class="menu">
+            <button type="button" class="mc" data-hud-action="start">New World</button>
+            <button type="button" class="mc" data-hud-action="continue" hidden>Continue World</button>
+            <div class="menu-row"><button type="button" class="mc small" id="btn-seed">Seed: <span id="seed-label">0</span></button><button type="button" class="mc small" id="btn-help">Controls</button></div>
+          </div>
+          <div class="corner left">Craftlands 0.1 · three-game-kit</div>
+          <div class="corner right">Inspired by Minecraft. Not affiliated with Mojang.</div>
+          <div id="help" class="help" hidden>
+            <b>Controls</b>
+            W A S D move · Mouse look · Space jump · Shift sneak · Ctrl / double-tap W sprint<br />
+            Left click mine / attack · Right click place / use / eat · Q drop · E inventory · 1–9 / wheel hotbar<br />
+            Esc menu · T chat &amp; /commands · F3 debug · F5 perspective · F1 hide HUD · F save<br />
+            Creative: double-tap Space to fly, Space up / Shift down.
+          </div>
+        </section>
+
+        <section class="screen pause" data-hud-screen="paused" hidden>
+          <h2>Game Menu</h2>
+          <div class="menu">
+            <button type="button" class="mc" data-hud-action="continue">Back to Game</button>
+            <div class="menu-row"><button type="button" class="mc small" data-hud-action="mode">Toggle Creative</button><button type="button" class="mc small" data-hud-action="save">Save World</button></div>
+            <button type="button" class="mc" data-hud-action="quit">Save and Quit to Title</button>
+          </div>
+        </section>
+
+        <section class="screen dead" data-hud-screen="dead" hidden>
+          <h2>You Died!</h2>
+          <p>Score: <b data-hud-bind="extra:score">0</b></p>
+          <div class="menu">
+            <button type="button" class="mc" data-hud-action="respawn">Respawn</button>
+            <button type="button" class="mc" data-hud-action="quit">Title Screen</button>
+          </div>
+        </section>
+
+        <section id="panel" class="panel-screen" hidden>
+          <div class="panel">
+            <div class="panel-title" id="panel-title">Crafting</div>
+            <div class="panel-top" id="panel-top"></div>
+            <div class="panel-inventory" id="panel-inventory"></div>
+            <div class="panel-hotbar" id="panel-hotbar"></div>
+          </div>
+          <div id="tooltip" class="tooltip" hidden></div>
+        </section>
+
+        <form id="chat-form" class="chat-form" hidden autocomplete="off"><input id="chat-input" type="text" maxlength="120" aria-label="Chat" /></form>
+      </section>
+      <p id="status" role="status" aria-live="polite"></p>
+    </main>
+    <script type="module" src="./src/main.ts"></script>
+  </body>
+</html>

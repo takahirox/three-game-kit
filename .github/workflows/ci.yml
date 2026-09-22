@@ -43,6 +43,9 @@ jobs:
       - name: Verify Gravetide
         run: pnpm verify:gravetide
 
+      - name: Verify Craftlands
+        run: pnpm verify:craftlands
+
       - name: Archive M5 evidence
         if: always()
         uses: actions/upload-artifact@v4
