@@ -97,6 +97,7 @@ export interface CraftlandsSnapshot {
   readonly eating: number;
   readonly swing: number;
   readonly thirdPerson: boolean;
+  readonly perspective: number;
   readonly debug: boolean;
   readonly hudHidden: boolean;
   readonly timeOfDay: number;

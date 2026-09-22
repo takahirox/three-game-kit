@@ -631,6 +631,13 @@ class Renderer implements CraftlandsRenderer {
           if (hit !== null) distance = Math.max(0.8, hit.distance + 0.4 - 0.35);
         }
         this.camera.position.set(eye.x - dir.x * distance, eye.y - dir.y * distance, eye.z - dir.z * distance);
+        if (snapshot.perspective === 2) {
+          // Front view: mirror the probe forward and turn the camera back toward the player.
+          let front = back;
+          if (this.world !== null) { const start = { x: eye.x + dir.x * 0.4, y: eye.y + dir.y * 0.4, z: eye.z + dir.z * 0.4 }; const hit = this.world.raycast(start, dir, back - 0.4); if (hit !== null) front = Math.max(0.8, hit.distance + 0.4 - 0.35); }
+          this.camera.position.set(eye.x + dir.x * front, eye.y + dir.y * front, eye.z + dir.z * front);
+          this.camera.rotation.set(-this.pitch, this.yaw + Math.PI, 0);
+        }
       }
       this.handBlock.position.set(0.56 + bobX, -0.52 + bobY - swingAngle * 0.35 - eat, -0.9 - swingAngle * 0.1);
       this.handBlock.rotation.set(0.1 - swingAngle * 0.9, -0.6 - swingAngle * 0.4, 0.05);

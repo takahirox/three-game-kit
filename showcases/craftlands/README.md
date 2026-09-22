@@ -30,7 +30,7 @@ Open <http://127.0.0.1:4174/showcases/craftlands/index.html>. The title screen o
 | `E` | Inventory with 2 × 2 crafting; drag stacks with left / right click, `Shift`-click to move or craft all |
 | `Q` | Drop one of the held item |
 | `T` or `/` | Chat and commands: `/time set day\|night`, `/gamemode creative\|survival`, `/give <item> [n]`, `/tp x y z`, `/spawn <mob>`, `/seed`, `/kill` |
-| `F3` / `F5` / `F1` | Debug overlay / third-person camera / hide HUD |
+| `F3` / `F5` / `F1` | Debug overlay / cycle first-person → behind → facing camera / hide HUD |
 | `F` | Save now (the world also autosaves every 30 s of play and when quitting) |
 | **Options…** (title / game menu) | Render distance, FOV, mouse sensitivity and sound volume as Minecraft-style slider buttons, saved in browser storage |
 

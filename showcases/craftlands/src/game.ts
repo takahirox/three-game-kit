@@ -239,6 +239,8 @@ class Game implements CraftlandsGame {
   private attackCooldown = 0;
   private swing = 0;
   private thirdPerson = false;
+  /** 0 first person, 1 behind the player, 2 facing the player (F5 cycles like Minecraft). */
+  private perspective = 0;
   private debugOverlay = false;
   private hudHidden = false;
   private timeTicks = Math.round(START_TIME * DAY_TICKS);
@@ -606,7 +608,7 @@ class Game implements CraftlandsGame {
     }
     if (this.pressed.has("inventory")) { if (this.screen === "none") this.openScreen("inventory"); else this.closeScreen(); }
     if (this.pressed.has("chat") && this.screen === "none") this.openScreen("chat");
-    if (this.pressed.has("toggle-perspective")) { this.thirdPerson = !this.thirdPerson; this.emit("perspective", this.thirdPerson ? "third" : "first"); }
+    if (this.pressed.has("toggle-perspective")) { this.perspective = (this.perspective + 1) % 3; this.thirdPerson = this.perspective !== 0; this.emit("perspective", ["first", "third-back", "third-front"][this.perspective] ?? "first"); }
     if (this.pressed.has("toggle-debug")) this.debugOverlay = !this.debugOverlay;
     if (this.pressed.has("toggle-hud")) this.hudHidden = !this.hudHidden;
     if (this.pressed.has("fly-toggle") && this.mode === "creative") { player.flying = !player.flying; player.velocity = vec3(player.velocity.x, 0, player.velocity.z); }
@@ -1599,6 +1601,7 @@ class Game implements CraftlandsGame {
       eating: this.eating,
       swing: this.swing,
       thirdPerson: this.thirdPerson,
+      perspective: this.perspective,
       debug: this.debugOverlay,
       hudHidden: this.hudHidden,
       timeOfDay: this.timeTicks / DAY_TICKS,
