@@ -185,6 +185,13 @@ test("Craftlands runs a deterministic public-Feature survival sandbox", async ({
   // --- Creative flight, third person, debug overlay, chat commands ---
   await page.evaluate(() => { game().press("fly-toggle"); game().advance(0.05); game().press("jump"); game().advance(0.5); });
   expect((await page.evaluate(() => game().snapshot())).player.flying).toBe(true);
+  // Creative palette hands out full stacks; advancements toast on first items.
+  await page.evaluate(() => { game().press("inventory"); game().advance(0.05); game().clickSlot("creative", 0, "left"); game().advance(0.05); });
+  expect((await page.evaluate(() => game().snapshot())).cursor).toMatchObject({ count: 64 });
+  await expect(page.locator("#panel-title")).toHaveText("Creative Inventory");
+  await page.evaluate(() => { game().clickSlot("creative", 0, "left"); game().press("inventory"); game().advance(0.2); });
+  expect((await page.evaluate(() => game().snapshot())).cursor).toBeNull();
+  expect((await page.evaluate(() => game().snapshot())).advancements).toEqual(expect.arrayContaining(["wood", "planks", "pickaxe", "iron"]));
   await page.evaluate(() => { game().press("toggle-perspective"); game().press("toggle-debug"); game().advance(0.05); });
   expect(await page.evaluate(() => game().inspectRenderer()!.thirdPerson)).toBe(true);
   await expect(page.locator("#debug")).toBeVisible();

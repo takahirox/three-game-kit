@@ -20,7 +20,7 @@ import { createSaveLoadRuntime, type SaveAdapter, type SaveValue } from "@three-
 import type { CraftlandsRenderer, CraftlandsRendererInspection } from "./client/renderer.js";
 import { AIR, BEDROCK, CACTUS, COBBLESTONE, CRAFTING_TABLE, DIAMOND_ORE, FURNACE, FURNACE_LIT, IRON_ORE, LAVA, LOG, OBSIDIAN, STONE, TORCH, WATER, blockById, blockByKey, canHarvest, miningSeconds, type BlockDefinition, type ToolType } from "./shared/blocks.js";
 import { Container, clickSlot, sameItem, stack, transferStack, wearTool, type SlotValue } from "./shared/inventory.js";
-import { itemByKey } from "./shared/items.js";
+import { CREATIVE_ITEMS, itemByKey } from "./shared/items.js";
 import { MOB_DEFINITIONS, createMob, createMobRng, damageMob, deserializeMobs, serializeMobs, spawnMobs, stepMobs, type Mob, type MobKind } from "./shared/mobs.js";
 import { hash3 } from "./shared/noise.js";
 import { bodyInLiquid, boxIntersectsBlock, moveWithCollision, overlapsSolid, vec3 } from "./shared/physics.js";
@@ -47,13 +47,26 @@ const EMPTY = defineFeatureConfiguration<Readonly<Record<string, never>>>({
   },
 });
 const HOTBAR = Object.freeze([0, 1, 2, 3, 4, 5, 6, 7, 8]);
+/** Minecraft-style advancements: id, title, description, and the item that unlocks it when first obtained. */
+export const ADVANCEMENTS: readonly Readonly<{ id: string; title: string; description: string; item: string }>[] = Object.freeze([
+  { id: "wood", title: "Getting Wood", description: "Punch a tree until a block of wood pops out", item: "oak_log" },
+  { id: "planks", title: "Benchmarking", description: "Craft planks and a crafting table", item: "crafting_table" },
+  { id: "pickaxe", title: "Time to Mine!", description: "Use planks and sticks to make a pickaxe", item: "wooden_pickaxe" },
+  { id: "furnace", title: "Hot Topic", description: "Construct a furnace out of cobblestone", item: "furnace" },
+  { id: "iron", title: "Acquire Hardware", description: "Smelt an iron ingot", item: "iron_ingot" },
+  { id: "iron-pickaxe", title: "Isn't It Iron Pick", description: "Upgrade your pickaxe", item: "iron_pickaxe" },
+  { id: "diamond", title: "Diamonds!", description: "Acquire diamonds", item: "diamond" },
+  { id: "torch", title: "Let There Be Light", description: "Craft a torch", item: "torch" },
+  { id: "food", title: "Husbandry", description: "Eat something", item: "*ate" },
+  { id: "monster", title: "Monster Hunter", description: "Kill a hostile monster", item: "*kill" },
+]);
 const MAIN = Object.freeze(Array.from({ length: 27 }, (_, index) => 9 + index));
 
 export interface CraftlandsRuntimeInspection { readonly lifecycleState: string; readonly installedFeatureIds: readonly string[]; readonly scheduleSystemIds: readonly string[]; readonly schedulerTick: number; readonly debugProviders: readonly string[]; }
 export interface CraftlandsWorldInspection { readonly seed: number; readonly loadedChunks: number; readonly editCount: number; readonly spawn: Vec3; readonly blockEntities: number; readonly simulationDistance: number; }
 export interface CraftlandsSaveInspection { readonly ready: boolean; readonly lastLoad: string | null; readonly lastSave: string | null; readonly hasSave: boolean; readonly editCount: number; }
 export interface CraftlandsLeakInspection { readonly activeListeners: number; readonly activeFeatures: number; readonly disposed: boolean; }
-export type SlotContainer = "inventory" | "craft" | "furnace-input" | "furnace-fuel" | "furnace-output" | "craft-result";
+export type SlotContainer = "inventory" | "craft" | "furnace-input" | "furnace-fuel" | "furnace-output" | "craft-result" | "creative";
 
 export interface CraftlandsGame {
   readonly disposed: boolean;
@@ -157,7 +170,8 @@ type SaveShape = Readonly<{
   readonly player: Readonly<Record<string, number | boolean>>;
   readonly inventory: readonly (readonly [number, string, number, number])[];
   readonly mobs: SaveValue;
-  readonly stats: Readonly<{ mined: number; placed: number; crafted: number; kills: number; deaths: number; minedByKey: Readonly<Record<string, number>> }>;
+  readonly stats: Readonly<{ mined: number; placed: number; crafted: number; kills: number; deaths: number; eaten?: number; minedByKey: Readonly<Record<string, number>> }>;
+  readonly unlocked?: SaveValue;
   readonly timeTicks: number;
   readonly playTicks: number;
   readonly selectedSlot: number;
@@ -225,9 +239,11 @@ class Game implements CraftlandsGame {
   private hudHidden = false;
   private timeTicks = Math.round(START_TIME * DAY_TICKS);
   private playTicks = 0;
-  private stats = { mined: 0, placed: 0, crafted: 0, kills: 0, deaths: 0, minedByKey: {} as Record<string, number> };
+  private stats = { mined: 0, placed: 0, crafted: 0, kills: 0, deaths: 0, eaten: 0, minedByKey: {} as Record<string, number> };
   private chatLog: string[] = [];
   private explosions: Vec3[] = [];
+  private readonly unlocked = new Set<string>();
+  private toast: Readonly<{ title: string; description: string; item: string; until: number }> | null = null;
   private hasSave = false;
   private lastSaveTick: number | null = null;
   private dirtySinceSave = false;
@@ -307,6 +323,7 @@ class Game implements CraftlandsGame {
 
   private emit(kind: string, subject?: string, value?: number): void {
     const event: CraftlandsEvent = Object.freeze({ kind, tick: this.tick, ...(subject === undefined ? {} : { subject }), ...(value === undefined ? {} : { value }) });
+    if (subject !== undefined && (kind === "crafted" || kind === "item-collected" || kind === "gave" || kind === "smelted")) this.pendingObtained.add(subject);
     if (this.collected.length >= 768) this.collected.shift();
     this.collected.push(event);
     this.tickEvents.push(event);
@@ -352,7 +369,8 @@ class Game implements CraftlandsGame {
       player: { x: player.position.x, y: player.position.y, z: player.position.z, yaw: player.yaw, pitch: player.pitch, health: player.health, hunger: player.hunger, saturation: player.saturation, air: player.air, xp: player.xp, level: player.level, flying: player.flying },
       inventory: this.inventory.serialize().map((entry) => [...entry]),
       mobs: serializeMobs(this.mobs) as SaveValue,
-      stats: { mined: this.stats.mined, placed: this.stats.placed, crafted: this.stats.crafted, kills: this.stats.kills, deaths: this.stats.deaths, minedByKey: { ...this.stats.minedByKey } },
+      stats: { mined: this.stats.mined, placed: this.stats.placed, crafted: this.stats.crafted, kills: this.stats.kills, deaths: this.stats.deaths, eaten: this.stats.eaten, minedByKey: { ...this.stats.minedByKey } },
+      unlocked: [...this.unlocked],
       timeTicks: this.timeTicks,
       playTicks: this.playTicks,
       selectedSlot: this.selectedSlot,
@@ -391,7 +409,9 @@ class Game implements CraftlandsGame {
     this.mobs = deserializeMobs(data.mobs);
     this.nextEntityId = this.mobs.reduce((max, mob) => Math.max(max, mob.id + 1), 1);
     this.items = [];
-    this.stats = { mined: data.stats.mined, placed: data.stats.placed, crafted: data.stats.crafted ?? 0, kills: data.stats.kills ?? 0, deaths: data.stats.deaths, minedByKey: { ...data.stats.minedByKey } };
+    this.stats = { mined: data.stats.mined, placed: data.stats.placed, crafted: data.stats.crafted ?? 0, kills: data.stats.kills ?? 0, deaths: data.stats.deaths, eaten: data.stats.eaten ?? 0, minedByKey: { ...data.stats.minedByKey } };
+    this.unlocked.clear();
+    if (Array.isArray(data.unlocked)) for (const id of data.unlocked) if (typeof id === "string") this.unlocked.add(id);
     this.timeTicks = data.timeTicks;
     this.playTicks = data.playTicks;
     this.selectedSlot = Math.max(0, Math.min(8, Math.floor(data.selectedSlot)));
@@ -424,7 +444,9 @@ class Game implements CraftlandsGame {
     this.items = [];
     this.mobs = [];
     this.nextEntityId = 1;
-    this.stats = { mined: 0, placed: 0, crafted: 0, kills: 0, deaths: 0, minedByKey: {} };
+    this.stats = { mined: 0, placed: 0, crafted: 0, kills: 0, deaths: 0, eaten: 0, minedByKey: {} };
+    this.unlocked.clear();
+    this.toast = null;
     this.timeTicks = Math.round(START_TIME * DAY_TICKS);
     this.playTicks = 0;
     this.selectedSlot = 0;
@@ -596,6 +618,7 @@ class Game implements CraftlandsGame {
     this.stepMobs(tick);
     this.stepFurnaces();
     this.stepBlocks(tick);
+    this.stepAdvancements(tick);
     if (this.attackCooldown > 0) this.attackCooldown -= 1;
     if (this.swing > 0) this.swing -= 0.1;
     if (player.hurtTicks > 0) player.hurtTicks -= 1;
@@ -789,6 +812,7 @@ class Game implements CraftlandsGame {
     this.inventory.take(this.selectedSlot, 1);
     this.player.hunger = Math.min(TUNING.maximumHunger, this.player.hunger + item.food.hunger);
     this.player.saturation = Math.min(this.player.hunger, this.player.saturation + item.food.saturation);
+    this.stats.eaten += 1;
     this.emit("ate", item.key, item.food.hunger);
     this.renderer?.emitDebris(vec3(this.player.position.x, this.player.position.y + 1.3, this.player.position.z), item.color, 10, this.tick);
   }
@@ -1056,6 +1080,31 @@ class Game implements CraftlandsGame {
 
   // --- Furnaces --------------------------------------------------------------------------
 
+  // --- Advancements --------------------------------------------------------------------------
+
+  private readonly toastQueue: Array<Readonly<{ title: string; description: string; item: string }>> = [];
+  /** Item keys obtained since the last advancement check; UI clicks emit between ticks, so events alone are not enough. */
+  private readonly pendingObtained = new Set<string>();
+
+  private stepAdvancements(tick: number): void {
+    if (this.toast !== null && tick >= this.toast.until) this.toast = null;
+    if (this.toast === null && this.toastQueue.length > 0) { const next = this.toastQueue.shift()!; this.toast = Object.freeze({ ...next, until: tick + 60 * 5 }); }
+    // Obtaining events award immediately; the periodic inventory scan catches anything else (loaded saves, drops).
+    const obtained = new Set(this.pendingObtained);
+    this.pendingObtained.clear();
+    const scan = tick % 20 === 0;
+    for (const advancement of ADVANCEMENTS) {
+      if (this.unlocked.has(advancement.id)) continue;
+      const done = advancement.item === "*ate" ? this.stats.eaten > 0
+        : advancement.item === "*kill" ? this.stats.kills > 0
+        : obtained.has(advancement.item) || (scan && this.inventory.count(advancement.item) > 0);
+      if (!done) continue;
+      this.unlocked.add(advancement.id);
+      this.toastQueue.push(Object.freeze({ title: advancement.title, description: advancement.description, item: advancement.item === "*ate" ? "apple" : advancement.item === "*kill" ? "iron_sword" : advancement.item }));
+      this.emit("advancement", advancement.id);
+    }
+  }
+
   // --- Block updates: gravity blocks, unsupported plants, random ticks for saplings ----------------
 
   private stepBlocks(tick: number): void {
@@ -1187,6 +1236,15 @@ class Game implements CraftlandsGame {
     const furnace = this.currentFurnace();
     const furnaceContainer = (name: "input" | "fuel" | "output"): Container => { const c = new Container(1); if (furnace !== null && furnace[name] !== null) c.set(0, stack(furnace[name]!.key, furnace[name]!.count, furnace[name]!.damage)); return c; };
     const writeFurnace = (name: "input" | "fuel" | "output", c: Container): void => { if (furnace === null) return; const slot = c.get(0); furnace[name] = slot === null ? null : { key: slot.key, count: slot.count, damage: slot.damage }; this.dirtySinceSave = true; };
+    if (container === "creative") {
+      // Creative palette: pick a full stack, or destroy whatever is on the cursor.
+      if (this.mode !== "creative") return;
+      const key = CREATIVE_ITEMS[index];
+      if (this.cursor !== null) this.cursor = null;
+      else if (key !== undefined) { if (shift) this.inventory.add(key, itemByKey(key)?.maxStack ?? 64, HOTBAR); else this.cursor = stack(key, itemByKey(key)?.maxStack ?? 64); }
+      this.publishFrame();
+      return;
+    }
     if (container === "craft-result") {
       if (this.craftResult === null) return;
       const craftOnce = (): boolean => {
@@ -1339,6 +1397,10 @@ class Game implements CraftlandsGame {
       eating: this.eating > 0,
       playTime: `${Math.floor(this.playTicks * DT / 60)}:${String(Math.floor(this.playTicks * DT) % 60).padStart(2, "0")}`,
       chat: this.chatLog.join("\n"),
+      toastTitle: this.toast?.title ?? "",
+      toastDescription: this.toast?.description ?? "",
+      toastItem: this.toast?.item ?? "",
+      advancements: this.unlocked.size,
       version: "Craftlands 0.1 (three-game-kit)",
     };
     return extras;
@@ -1410,6 +1472,8 @@ class Game implements CraftlandsGame {
       chatLog: Object.freeze([...this.chatLog]),
       biome: BIOME_NAMES[this.world.biomeAt(Math.floor(player.position.x), Math.floor(player.position.z))] ?? "Plains",
       explosions: Object.freeze([...this.explosions]),
+      advancements: Object.freeze([...this.unlocked]),
+      toast: this.toast === null ? null : Object.freeze({ title: this.toast.title, description: this.toast.description, item: this.toast.item }),
     });
   }
 

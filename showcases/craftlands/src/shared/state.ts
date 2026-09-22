@@ -108,6 +108,8 @@ export interface CraftlandsSnapshot {
   readonly chatLog: readonly string[];
   readonly biome: string;
   readonly explosions: readonly Vec3[];
+  readonly advancements: readonly string[];
+  readonly toast: Readonly<{ readonly title: string; readonly description: string; readonly item: string }> | null;
 }
 
 export type CraftlandsEvent = Readonly<{ readonly kind: string; readonly tick: number; readonly subject?: string; readonly value?: number }>;

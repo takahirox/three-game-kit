@@ -10,7 +10,7 @@ import { blockByKey } from "./shared/blocks.js";
 import { createCraftlandsRenderer, type CraftlandsRenderer, type CraftlandsRendererInspection } from "./client/renderer.js";
 import { createCraftlandsGame, type CraftlandsGame, type CraftlandsLeakInspection, type CraftlandsRuntimeInspection, type CraftlandsSaveInspection, type CraftlandsWorldInspection, type SlotContainer } from "./game.js";
 import type { SlotValue } from "./shared/inventory.js";
-import { itemByKey } from "./shared/items.js";
+import { CREATIVE_ITEMS, itemByKey } from "./shared/items.js";
 import { TUNING, type Action, type CraftlandsEvent, type CraftlandsSnapshot, type GameMode, type HeldInput, type Scenario } from "./shared/state.js";
 
 type HostMode = "normal" | "test";
@@ -172,9 +172,14 @@ function createCraftlandsHudAdapter(root: HTMLElement, onAction: (action: string
     };
     const arrow = (): HTMLElement => { const element = document.createElement("div"); element.className = "arrow"; element.append(document.createElement("i")); return element; };
     const result = (container: SlotContainer): HTMLElement => { const element = document.createElement("div"); element.className = "result"; element.append(register(slotElement(container, 0))); return element; };
-    if (snapshot.screen === "inventory") {
+    if (snapshot.screen === "inventory" && snapshot.mode === "creative") {
+      panelTitle.textContent = "Creative Inventory";
+      const palette = document.createElement("div"); palette.className = "grid nine palette";
+      CREATIVE_ITEMS.forEach((key, index) => { const slot = slotElement("creative", index); paintSlot(slot, { key, count: 1, damage: 0 }); palette.append(slot); });
+      panelTop.append(palette);
+    } else if (snapshot.screen === "inventory") {
       panelTitle.textContent = "Crafting";
-      const preview = document.createElement("div"); preview.className = "player-preview"; preview.textContent = snapshot.mode === "creative" ? "CREATIVE" : "SURVIVAL";
+      const preview = document.createElement("div"); preview.className = "player-preview"; preview.textContent = "SURVIVAL";
       panelTop.append(preview, grid(2), arrow(), result("craft-result"));
     } else if (snapshot.screen === "crafting") {
       panelTitle.textContent = "Crafting";
@@ -244,6 +249,12 @@ function createCraftlandsHudAdapter(root: HTMLElement, onAction: (action: string
       root.classList.toggle("is-hurt", snapshot.player.hurtTicks > 0);
       root.classList.toggle("hud-hidden", snapshot.hudHidden);
       saved.hidden = !(snapshot.lastSaveTick !== null && snapshot.tick - snapshot.lastSaveTick < 90);
+      const toast = requireElement<HTMLElement>("#toast");
+      const toastVisible = snapshot.toast !== null && snapshot.phase === "playing";
+      if (toast.hidden === toastVisible) toast.hidden = !toastVisible;
+      if (toastVisible && toast.dataset["title"] !== snapshot.toast!.title) { toast.dataset["title"] = snapshot.toast!.title; toast.querySelector("b")!.textContent = snapshot.toast!.title; (toast.querySelector<HTMLElement>(".slot")!).style.backgroundImage = `url("${icons.icon(snapshot.toast!.item)}")`; }
+      const lockHint = requireElement<HTMLElement>("#lock-hint");
+      lockHint.hidden = !(mode === "normal" && snapshot.phase === "playing" && snapshot.screen === "none" && !pointerLocked());
       continueButton.hidden = !snapshot.hasSave;
       const seedText = String(snapshot.seed); if (seedText !== lastSeed) { lastSeed = seedText; seedLabel.textContent = seedText; }
       const panelOpen = snapshot.phase === "playing" && (snapshot.screen === "inventory" || snapshot.screen === "crafting" || snapshot.screen === "furnace");
