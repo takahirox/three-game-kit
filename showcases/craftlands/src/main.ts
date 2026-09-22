@@ -261,6 +261,8 @@ function createCraftlandsHudAdapter(root: HTMLElement, onAction: (action: string
       const toastVisible = snapshot.toast !== null && snapshot.phase === "playing";
       if (toast.hidden === toastVisible) toast.hidden = !toastVisible;
       if (toastVisible && toast.dataset["title"] !== snapshot.toast!.title) { toast.dataset["title"] = snapshot.toast!.title; toast.querySelector("b")!.textContent = snapshot.toast!.title; (toast.querySelector<HTMLElement>(".slot")!).style.backgroundImage = `url("${icons.icon(snapshot.toast!.item)}")`; }
+      const loadingScreen = document.querySelector<HTMLElement>("#loading");
+      if (loadingScreen !== null && !loadingScreen.hidden && snapshot.phase !== "title") loadingScreen.hidden = true;
       const lockHint = requireElement<HTMLElement>("#lock-hint");
       lockHint.hidden = !(mode === "normal" && snapshot.phase === "playing" && snapshot.screen === "none" && !pointerLocked());
       continueButton.hidden = !snapshot.hasSave;
@@ -581,9 +583,19 @@ function boot(): void {
   const chatForm = requireElement<HTMLFormElement>("#chat-form");
   const chatInput = requireElement<HTMLInputElement>("#chat-input");
   listen(chatForm, "submit", ((event: Event) => { event.preventDefault(); game?.command(chatInput.value); chatInput.value = ""; stepTestFrame(); if (mode === "normal") lockPointer(); }) as EventListener);
+  const loading = requireElement<HTMLElement>("#loading");
   const adapter = createCraftlandsHudAdapter(hud, (action) => {
     unlockAudio();
     playSound("click", 0.6, 1);
+    const fromTitle = game?.snapshot().phase === "title";
+    if (fromTitle && (action === "start" || action === "continue") && mode === "normal") {
+      // Paint the loading screen before the synchronous terrain build freezes the main thread for a moment.
+      loading.hidden = false;
+      loading.style.backgroundImage = `url("${icons!.dirt()}")`;
+      loading.style.backgroundSize = "64px 64px";
+      requestAnimationFrame(() => requestAnimationFrame(() => { if (action === "start") game?.start(); else game?.continueWorld(); lockPointer(); }));
+      return;
+    }
     if (action === "start") game?.start();
     if (action === "continue") game?.continueWorld();
     if (action === "respawn") game?.press("respawn");

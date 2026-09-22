@@ -49,6 +49,9 @@ body:has(.screen.title:not([hidden])) #status { opacity: 0; }
 .toast small { display: block; color: #ffff55; font-size: 14px; }
 .toast b { display: block; color: #fff; font-size: 15px; }
 @keyframes toast-in { from { transform: translateX(340px); } to { transform: translateX(0); } }
+.loading { position: absolute; inset: 0; z-index: 6; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 8px; background: #3a2a1a; }
+.loading[hidden] { display: none; }
+.loading b { font-size: 24px; } .loading small { color: #bbb; font-size: 13px; }
 .lock-hint { position: absolute; left: 50%; top: 58%; transform: translateX(-50%); padding: 6px 12px; background: #00000099; font-size: 14px; color: #fff; }
 
 .screen { pointer-events: auto; position: absolute; inset: 0; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 12px; }

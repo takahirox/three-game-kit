@@ -425,7 +425,7 @@ class Game implements CraftlandsGame {
     this.selectedSlot = Math.max(0, Math.min(8, Math.floor(data.selectedSlot)));
     this.mode = data.mode;
     this.dirtySinceSave = false;
-    this.loadChunksAround(player.position, this.simulationDistance, Number.POSITIVE_INFINITY);
+    this.loadChunksAround(player.position, Math.min(this.testMode ? this.simulationDistance : 3, this.simulationDistance), Number.POSITIVE_INFINITY);
   }
 
   private requestSave(reason: string): void {
@@ -466,7 +466,8 @@ class Game implements CraftlandsGame {
     this.held = NEUTRAL_HELD;
     this.screen = "none";
     this.chatLog = [];
-    this.loadChunksAround(this.spawn, this.simulationDistance, Number.POSITIVE_INFINITY);
+    // Load the immediate surroundings synchronously; the streaming step fills the rest over the next seconds.
+    this.loadChunksAround(this.spawn, Math.min(this.testMode ? this.simulationDistance : 3, this.simulationDistance), Number.POSITIVE_INFINITY);
     this.seedPassiveMobs();
   }
 
@@ -612,7 +613,7 @@ class Game implements CraftlandsGame {
     if (uiOpen) { this.held = Object.freeze({ ...this.held, attack: false, use: false }); }
 
     // Streaming: a few chunks per tick near the player, unload far ones.
-    this.loadChunksAround(player.position, this.simulationDistance, this.testMode ? 64 : 2);
+    this.loadChunksAround(player.position, this.simulationDistance, this.testMode ? 64 : 3);
     if (tick % 120 === 0) this.world.unloadBeyond(Math.floor(player.position.x / CHUNK), Math.floor(player.position.z / CHUNK), this.simulationDistance + 2);
 
     this.stepMovement(tick);
