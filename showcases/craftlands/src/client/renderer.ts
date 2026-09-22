@@ -392,7 +392,7 @@ class Renderer implements CraftlandsRenderer {
     this.handBlock.visible = false;
     this.handItem.visible = false;
     this.handArm.visible = false;
-    if (block !== undefined && block.id !== AIR && block.shape === "cube") {
+    if (block !== undefined && block.id !== AIR && (block.shape === "cube" || block.shape === "slab")) {
       const t = block.tiles;
       this.setBoxTiles(this.handBlockGeometry, [t.side, t.side, t.top, t.bottom, t.front, t.side]);
       const colors = this.handBlockGeometry.getAttribute("color") as THREE.BufferAttribute | undefined;
@@ -458,7 +458,7 @@ class Renderer implements CraftlandsRenderer {
         const definition = itemByKey(item.key);
         const group = new THREE.Group();
         const material = new THREE.MeshBasicMaterial({ map: this.atlas, transparent: true, alphaTest: 0.5, side: THREE.DoubleSide, vertexColors: false });
-        if (block !== undefined && block.shape === "cube") {
+        if (block !== undefined && (block.shape === "cube" || block.shape === "slab")) {
           const geometry = this.itemBlockGeometry.clone();
           this.setBoxTiles(geometry, [block.tiles.side, block.tiles.side, block.tiles.top, block.tiles.bottom, block.tiles.front, block.tiles.side]);
           if (block.tint !== "none") material.color.set(block.tint === "grass" ? 0x91bd59 : 0x77ab2f);

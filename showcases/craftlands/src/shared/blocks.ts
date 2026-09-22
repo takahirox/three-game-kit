@@ -44,18 +44,19 @@ export const ICE = 38;
 export const CLAY = 39;
 export const SAPLING = 40;
 export const CHEST = 41;
+export const BED = 42;
 
 /** Atlas tile indices: a 16 × 16 grid of 16 px tiles (256 × 256 px), row-major. Rows 0–3 are blocks, 4–7 items, 8–11 mob skins. */
 export const TILE = Object.freeze({
   stone: 0, grassTop: 1, grassSide: 2, dirt: 3, cobblestone: 4, planks: 5, bedrock: 6, water: 7, lava: 8, sand: 9, gravel: 10, goldOre: 11, ironOre: 12, coalOre: 13, logSide: 14, logTop: 15,
   leaves: 16, glass: 17, diamondOre: 18, craftingTop: 19, craftingSide: 20, craftingFront: 21, furnaceSide: 22, furnaceFront: 23, furnaceFrontLit: 24, furnaceTop: 25, torch: 26, snow: 27, grassSideSnow: 28, sandstoneTop: 29, sandstoneSide: 30, bricks: 31,
   stoneBricks: 32, obsidian: 33, tallGrass: 34, dandelion: 35, poppy: 36, wool: 37, mossyCobblestone: 38, cactusSide: 39, cactusTop: 40, deadBush: 41, birchLogSide: 42, birchLogTop: 43, birchLeaves: 44, glowstone: 45, bookshelf: 46, ice: 47,
-  chestTop: 112, chestSide: 113, chestFront: 114,
+  chestTop: 112, chestSide: 113, chestFront: 114, bedTop: 115, bedSide: 116,
   clay: 48, sapling: 49, crack0: 50, crack1: 51, crack2: 52, crack3: 53, crack4: 54, crack5: 55, crack6: 56, crack7: 57, crack8: 58, crack9: 59, sun: 60, moon: 61, cloud: 62, arm: 63,
 });
 
 export type ToolType = "pickaxe" | "axe" | "shovel" | "sword" | "none";
-export type BlockShape = "cube" | "cross" | "torch" | "liquid";
+export type BlockShape = "cube" | "cross" | "torch" | "liquid" | "slab";
 export type Tint = "none" | "grass" | "foliage";
 
 export interface BlockDefinition {
@@ -182,6 +183,7 @@ const DEFINITIONS: readonly BlockDefinition[] = [
   block(ICE, "ice", "Ice", { opaque: false, hardness: 0.5, tool: "pickaxe", drop: null, lightFilter: 2, top: TILE.ice, color: 0x9fd2ff, sound: "glass" }),
   block(CLAY, "clay", "Clay", { hardness: 0.6, tool: "shovel", drop: "clay_ball", dropCount: [4, 4], top: TILE.clay, color: 0x9ea4b0, sound: "gravel" }),
   block(SAPLING, "sapling", "Oak Sapling", { solid: false, opaque: false, shape: "cross", hardness: 0, top: TILE.sapling, color: 0x4f8a2a, sound: "grass" }),
+  block(BED, "bed", "Bed", { opaque: false, shape: "slab", hardness: 0.2, top: TILE.bedTop, side: TILE.bedSide, bottom: TILE.planks, color: 0xb02e26, sound: "wood" }),
   block(CHEST, "chest", "Chest", { opaque: false, hardness: 2.5, tool: "axe", top: TILE.chestTop, side: TILE.chestSide, bottom: TILE.chestTop, front: TILE.chestFront, color: 0x9a6e34, sound: "wood" }),
 ];
 

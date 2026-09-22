@@ -796,6 +796,8 @@ const PAINTERS: Readonly<Record<number, Painter>> = Object.freeze({
   [TILE.furnaceFrontLit]: overlay((px, py, noise) => cobble(px, py, noise, 0x6e6e6e, 0x424242, 12), FURNACE_MOUTH_LIT),
   [TILE.furnaceTop]: (px, py, noise) => stone(px, py, noise, 0x707070),
   [TILE.torch]: TORCH,
+  [TILE.bedTop]: (px, py, noise) => (py < 5 ? speckle(px === 0 || px === 15 || py === 0 ? 0xd8d8d8 : 0xffffff, noise, 0.06) : speckle(py === 15 || px === 0 || px === 15 ? 0x7a1d18 : 0xb02e26, noise, 0.12)),
+  [TILE.bedSide]: (px, py, noise) => (py >= 8 ? speckle(0x7d5a3a, noise, 0.16) : speckle(px < 5 ? 0xe8e8e8 : 0xb02e26, noise, 0.1)),
   [TILE.chestTop]: (px, py, noise) => (px === 0 || py === 0 || px === 15 || py === 15 ? speckle(0x5a3d1c, noise, 0.1) : speckle(0xa5772f, noise, 0.14)),
   [TILE.chestSide]: (px, py, noise) => (px === 0 || px === 15 || py === 0 || py === 15 || py === 9 ? speckle(0x5a3d1c, noise, 0.1) : speckle(py < 9 ? 0xa5772f : 0x9a6a2a, noise, 0.14)),
   [TILE.chestFront]: (px, py, noise) => {

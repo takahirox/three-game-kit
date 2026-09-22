@@ -49,6 +49,7 @@ export const RECIPES: readonly Recipe[] = Object.freeze([
   shaped({ key: "torch", count: 4 }, ["C", "S"], { C: ["coal", "charcoal"], S }),
   shaped({ key: "furnace", count: 1 }, ["CCC", "C C", "CCC"], { C }),
   shaped({ key: "chest", count: 1 }, ["PPP", "P P", "PPP"], { P }),
+  shaped({ key: "bed", count: 1 }, ["WWW", "PPP"], { W: ["white_wool"], P }),
   shaped({ key: "stone_bricks", count: 4 }, ["SS", "SS"], { S: ["stone"] }),
   shaped({ key: "sandstone", count: 1 }, ["SS", "SS"], { S: ["sand"] }),
   shaped({ key: "bricks", count: 1 }, ["BB", "BB"], { B: ["brick"] }),

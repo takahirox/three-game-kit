@@ -95,7 +95,7 @@ export function createIconPainter(atlas: HTMLCanvasElement): IconPainter {
       const block = blockByKey(key);
       const item = itemByKey(key);
       let url: string;
-      if (block !== undefined && block.shape === "cube") url = paintCube(atlas, block.tiles.top, block.tiles.side, block.tiles.front, block.tint === "grass" ? GRASS_TINT : block.tint === "foliage" ? FOLIAGE_TINT : null);
+      if (block !== undefined && (block.shape === "cube" || block.shape === "slab")) url = paintCube(atlas, block.tiles.top, block.tiles.side, block.tiles.front, block.tint === "grass" ? GRASS_TINT : block.tint === "foliage" ? FOLIAGE_TINT : null);
       else if (block !== undefined) url = paintFlat(atlas, block.tiles.top, block.tint === "grass" ? GRASS_TINT : block.tint === "foliage" ? FOLIAGE_TINT : null);
       else if (item !== undefined) url = paintFlat(atlas, item.tile, null);
       else url = "";

@@ -18,7 +18,7 @@ import { createDebugDevToolsRuntime, type DebugSnapshot } from "@three-game-kit/
 import { createGameFlowRuntime, createHealthRuntime, createHudStateStore } from "@three-game-kit/shared/gameplay";
 import { createSaveLoadRuntime, type SaveAdapter, type SaveValue } from "@three-game-kit/shared/genre";
 import type { CraftlandsRenderer, CraftlandsRendererInspection } from "./client/renderer.js";
-import { AIR, BEDROCK, CACTUS, CHEST, COBBLESTONE, CRAFTING_TABLE, DIAMOND_ORE, FURNACE, FURNACE_LIT, IRON_ORE, LAVA, LOG, OBSIDIAN, STONE, TORCH, WATER, blockById, blockByKey, canHarvest, miningSeconds, type BlockDefinition, type ToolType } from "./shared/blocks.js";
+import { AIR, BED, BEDROCK, CACTUS, CHEST, COBBLESTONE, CRAFTING_TABLE, DIAMOND_ORE, FURNACE, FURNACE_LIT, IRON_ORE, LAVA, LOG, OBSIDIAN, STONE, TORCH, WATER, blockById, blockByKey, canHarvest, miningSeconds, type BlockDefinition, type ToolType } from "./shared/blocks.js";
 import { Container, clickSlot, sameItem, stack, transferStack, wearTool, type SlotValue } from "./shared/inventory.js";
 import { CREATIVE_ITEMS, itemByKey } from "./shared/items.js";
 import { MOB_DEFINITIONS, createMob, createMobRng, damageMob, deserializeMobs, serializeMobs, spawnMobs, stepMobs, type Mob, type MobKind } from "./shared/mobs.js";
@@ -947,12 +947,29 @@ class Game implements CraftlandsGame {
       const blockId = blockByKey(target.blockKey)?.id;
       if (!this.player.sneaking) {
         if (blockId === CRAFTING_TABLE) { this.openScreen("crafting"); this.emit("use", "crafting_table"); return; }
+        if (blockId === BED) { this.trySleep(target); return; }
         if (blockId === CHEST) { const key = `${target.x},${target.y},${target.z}`; if (!isChestState(this.world.blockEntities.get(key))) this.world.blockEntities.set(key, { kind: "chest", slots: new Array<null>(27).fill(null) }); this.openScreen("chest", vec3(target.x, target.y, target.z)); this.emit("use", "chest"); return; }
         if (blockId === FURNACE || blockId === FURNACE_LIT) { const key = `${target.x},${target.y},${target.z}`; if (!this.world.blockEntities.has(key)) this.world.blockEntities.set(key, { input: null, fuel: null, output: null, burn: 0, burnTotal: 0, progress: 0 }); this.openScreen("furnace", vec3(target.x, target.y, target.z)); this.emit("use", "furnace"); return; }
       }
       if (item?.block !== null && item !== undefined) this.placeBlock(target, item.block, tick);
     }
   }
+
+  private trySleep(target: TargetSnapshot): void {
+    const timeOfDay = this.timeTicks / DAY_TICKS;
+    const night = timeOfDay > 0.72 || timeOfDay < 0.22;
+    this.spawn = vec3(target.x + 0.5, target.y + 1, target.z + 0.5);
+    this.dirtySinceSave = true;
+    if (!night) { this.chat("You can only sleep at night"); this.emit("bed", "respawn-set"); return; }
+    const hostileNear = this.mobs.some((mob) => MOB_DEFINITIONS[mob.kind].hostile && mob.deadTicks === 0 && Math.hypot(mob.position.x - this.player.position.x, mob.position.z - this.player.position.z) < 8);
+    if (hostileNear) { this.chat("You may not rest now; there are monsters nearby"); this.emit("bed", "monsters"); return; }
+    this.timeTicks = Math.round(0.3 * DAY_TICKS);
+    this.mobs = this.mobs.filter((mob) => !MOB_DEFINITIONS[mob.kind].hostile);
+    this.chat("You slept through the night");
+    this.emit("slept", PLAYER_ID, this.day());
+  }
+
+  private day(): number { return Math.floor(this.playTicks / DAY_TICKS) + 1; }
 
   private placeBlock(target: TargetSnapshot, definition: BlockDefinition, tick: number): void {
     const targetDefinition = blockByKey(target.blockKey);
