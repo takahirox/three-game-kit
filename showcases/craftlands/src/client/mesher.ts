@@ -2,7 +2,7 @@
  * Chunk meshing with face culling, per-vertex ambient occlusion, smooth sky / block light sampling,
  * biome tints, cross-shaped plants, torches and lowered liquid surfaces.
  */
-import { AIR, GRASS, TILE, WATER, blockById, type BlockDefinition } from "../shared/blocks.js";
+import { AIR, BEDROCK, GRASS, TILE, WATER, blockById, type BlockDefinition } from "../shared/blocks.js";
 import { BIOME, BIOME_FOLIAGE, BIOME_GRASS, CHUNK, HEIGHT, chunkIndex } from "../shared/terrain.js";
 import type { Chunk, World } from "../shared/world.js";
 
@@ -127,12 +127,44 @@ class GeometryBuilder {
   }
 }
 
-function occludes(world: World, x: number, y: number, z: number): boolean {
+/**
+ * Direct array access over the 3 × 3 chunk neighbourhood of the chunk being meshed. The mesher never reads
+ * more than one block outside its chunk, so this avoids a string-keyed map lookup per sample.
+ */
+class Sampler {
+  private readonly chunks: (Chunk | undefined)[] = new Array<Chunk | undefined>(9);
+  constructor(world: World, private readonly cx: number, private readonly cz: number) {
+    for (let dz = -1; dz <= 1; dz += 1) for (let dx = -1; dx <= 1; dx += 1) this.chunks[(dz + 1) * 3 + (dx + 1)] = world.chunkAt(cx + dx, cz + dz);
+  }
+  private chunkFor(x: number, z: number): Chunk | undefined {
+    const dx = Math.floor(x / CHUNK) - this.cx;
+    const dz = Math.floor(z / CHUNK) - this.cz;
+    if (dx < -1 || dx > 1 || dz < -1 || dz > 1) return undefined;
+    return this.chunks[(dz + 1) * 3 + (dx + 1)];
+  }
+  get(x: number, y: number, z: number): number {
+    if (y < 0) return BEDROCK;
+    if (y >= HEIGHT) return AIR;
+    const chunk = this.chunkFor(x, z);
+    return chunk === undefined ? AIR : chunk.blocks[chunkIndex(x & 15, y, z & 15)] ?? AIR;
+  }
+  /** Packed light: high nibble sky, low nibble block; unloaded neighbours count as open sky. */
+  light(x: number, y: number, z: number): number {
+    if (y >= HEIGHT) return 0xf0;
+    if (y < 0) return 0;
+    const chunk = this.chunkFor(x, z);
+    return chunk === undefined ? 0xf0 : chunk.light[chunkIndex(x & 15, y, z & 15)] ?? 0;
+  }
+  skyLight(x: number, y: number, z: number): number { return this.light(x, y, z) >> 4; }
+  blockLight(x: number, y: number, z: number): number { return this.light(x, y, z) & 15; }
+}
+
+function occludes(world: Sampler, x: number, y: number, z: number): boolean {
   const definition = blockById(world.get(x, y, z));
   return definition.solid && definition.opaque;
 }
 
-function vertexAo(world: World, x: number, y: number, z: number, sideA: readonly [number, number, number], sideB: readonly [number, number, number]): number {
+function vertexAo(world: Sampler, x: number, y: number, z: number, sideA: readonly [number, number, number], sideB: readonly [number, number, number]): number {
   const a = occludes(world, x + sideA[0], y + sideA[1], z + sideA[2]) ? 1 : 0;
   const b = occludes(world, x + sideB[0], y + sideB[1], z + sideB[2]) ? 1 : 0;
   const cornerX = sideA[0] + sideB[0];
@@ -144,7 +176,7 @@ function vertexAo(world: World, x: number, y: number, z: number, sideA: readonly
 }
 
 /** Average light of the four blocks touching a face vertex on the face's outer side (Minecraft "smooth lighting"). */
-function vertexLight(world: World, x: number, y: number, z: number, normal: readonly [number, number, number], sideA: readonly [number, number, number], sideB: readonly [number, number, number]): readonly [number, number] {
+function vertexLight(world: Sampler, x: number, y: number, z: number, normal: readonly [number, number, number], sideA: readonly [number, number, number], sideB: readonly [number, number, number]): readonly [number, number] {
   const nx = x + normal[0];
   const ny = y + normal[1];
   const nz = z + normal[2];
@@ -176,7 +208,7 @@ function vertexLight(world: World, x: number, y: number, z: number, normal: read
   return [Math.max(sky / count, bestSky * 0.7) / 15, Math.max(block / count, bestBlock * 0.7) / 15];
 }
 
-function blockLightSample(world: World, x: number, y: number, z: number): readonly [number, number] {
+function blockLightSample(world: Sampler, x: number, y: number, z: number): readonly [number, number] {
   return [world.skyLight(x, y, z) / 15, world.blockLight(x, y, z) / 15];
 }
 
@@ -187,7 +219,8 @@ function tintFor(definition: BlockDefinition, biome: number, face: FaceSpec["til
 }
 
 /** Builds opaque, cutout (alpha-tested) and water geometry for one chunk column. */
-export function meshChunk(world: World, chunk: Chunk, tileUv: TileUv): ChunkMeshes {
+export function meshChunk(source: World, chunk: Chunk, tileUv: TileUv): ChunkMeshes {
+  const world = new Sampler(source, chunk.cx, chunk.cz);
   const opaque = new GeometryBuilder();
   const cutout = new GeometryBuilder();
   const water = new GeometryBuilder();
