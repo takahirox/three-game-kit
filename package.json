@@ -65,7 +65,12 @@
     "test:gravetide-boundaries": "node scripts/verify-gravetide-boundaries.mjs",
     "test:gravetide-assets": "node scripts/verify-gravetide-assets.mjs",
     "test:gravetide": "playwright test tests/gravetide.spec.ts --project=chromium --workers=1 --retries=0",
-    "verify:gravetide": "pnpm run test:gravetide-boundaries && pnpm run test:gravetide-assets && pnpm run typecheck:gravetide && pnpm run test:gravetide"
+    "verify:gravetide": "pnpm run test:gravetide-boundaries && pnpm run test:gravetide-assets && pnpm run typecheck:gravetide && pnpm run test:gravetide",
+    "typecheck:craftlands": "pnpm run build && tsc -p showcases/craftlands/tsconfig.json --noEmit",
+    "test:craftlands-boundaries": "node scripts/verify-craftlands-boundaries.mjs",
+    "test:craftlands-assets": "node scripts/verify-craftlands-assets.mjs",
+    "test:craftlands": "playwright test tests/craftlands.spec.ts --project=chromium --workers=1 --retries=0",
+    "verify:craftlands": "pnpm run test:craftlands-boundaries && pnpm run test:craftlands-assets && pnpm run typecheck:craftlands && pnpm run test:craftlands"
   },
   "devDependencies": {
     "@playwright/test": "1.62.1",
