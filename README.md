@@ -3,6 +3,10 @@
 `three-game-kit` is a reusable, modular foundation for bounded Three.js games whose Features can be composed through public JavaScript and TypeScript package APIs.
 It is not a game, a general-purpose engine, or a framework that owns a consuming game's application structure.
 
+## Live showcases
+
+Every browser showcase is published with GitHub Pages at <https://takahirox.github.io/three-game-kit/> (built by `.github/workflows/pages.yml` from `main` via `pnpm run build:pages`; `pnpm run preview:pages` serves the same build locally on port 4175).
+
 ## Repository status
 
 Milestones 0 through 4 are complete. Milestone 0 froze the executable product contract, including the

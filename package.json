@@ -70,7 +70,9 @@
     "test:craftlands-boundaries": "node scripts/verify-craftlands-boundaries.mjs",
     "test:craftlands-assets": "node scripts/verify-craftlands-assets.mjs",
     "test:craftlands": "playwright test tests/craftlands.spec.ts --project=chromium --workers=1 --retries=0",
-    "verify:craftlands": "pnpm run test:craftlands-boundaries && pnpm run test:craftlands-assets && pnpm run typecheck:craftlands && pnpm run test:craftlands"
+    "verify:craftlands": "pnpm run test:craftlands-boundaries && pnpm run test:craftlands-assets && pnpm run typecheck:craftlands && pnpm run test:craftlands",
+    "build:pages": "vite build --config vite.pages.config.ts",
+    "preview:pages": "vite preview --config vite.pages.config.ts --host 127.0.0.1 --port 4175"
   },
   "devDependencies": {
     "@playwright/test": "1.62.1",
