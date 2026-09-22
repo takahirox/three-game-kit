@@ -1,5 +1,6 @@
 import { Runtime as ClientRuntime } from "@three-game-kit/client";
 import { createDebugDevToolsClientFeature } from "@three-game-kit/client/advanced";
+import { createAudioFeature, type AudioRuntime } from "@three-game-kit/client/audio";
 import { createGameFlowClientFeature, createHealthClientFeature, createHudFeature, type HudAdapter } from "@three-game-kit/client/gameplay";
 import { createSaveLoadClientFeature } from "@three-game-kit/client/genre";
 import { createInputFeature, createMovementInput, createSemanticActionInput } from "@three-game-kit/client/input";
@@ -22,7 +23,7 @@ import { Container, clickSlot, sameItem, stack, transferStack, wearTool, type Sl
 import { itemByKey } from "./shared/items.js";
 import { MOB_DEFINITIONS, createMob, createMobRng, damageMob, deserializeMobs, serializeMobs, spawnMobs, stepMobs, type Mob, type MobKind } from "./shared/mobs.js";
 import { hash3 } from "./shared/noise.js";
-import { bodyInLiquid, boxIntersectsBlock, moveWithCollision, vec3 } from "./shared/physics.js";
+import { bodyInLiquid, boxIntersectsBlock, moveWithCollision, overlapsSolid, vec3 } from "./shared/physics.js";
 import { matchRecipe, smeltingFor } from "./shared/recipes.js";
 import {
   AUTOSAVE_TICKS, DAY_TICKS, DEFAULT_SEED, DT, NEUTRAL_HELD, NEUTRAL_MOVE, PLAYER_ID, SAVE_SLOT, SAVE_VERSION, START_TIME, TUNING, formatClock, xpForLevel,
@@ -94,6 +95,8 @@ export interface CraftlandsGameOptions {
   readonly seed?: number;
   readonly simulationDistance?: number;
   readonly testMode?: boolean;
+  /** Optional public Audio Feature runtime; the host maps rule events to synthesised clips. */
+  readonly audio?: AudioRuntime;
 }
 
 type Contribution = ClientFeatureDescriptor<Readonly<Record<string, never>>>["runtimeContributions"][number];
@@ -237,6 +240,8 @@ class Game implements CraftlandsGame {
   private lastSave: string | null = null;
   private saving = false;
   private pendingCommands: string[] = [];
+  private stepDistance = 0;
+  private readonly fusing = new Set<number>();
 
   constructor(options: CraftlandsGameOptions) {
     this.world = new World(options.seed ?? DEFAULT_SEED);
@@ -268,6 +273,7 @@ class Game implements CraftlandsGame {
       createHudFeature({ store: this.hud, adapter: options.hudAdapter }),
       createDebugDevToolsClientFeature(this.debug, (value) => { this.lastDebug = value; }),
     ];
+    if (options.audio !== undefined) features.push(createAudioFeature(options.audio));
     if (this.renderer !== null) {
       const renderer = this.renderer;
       features.push(
@@ -686,6 +692,12 @@ class Game implements CraftlandsGame {
     const resolved = moveWithCollision(this.world, player.position, TUNING.halfWidth, height, vx * DT, vy * DT, vz * DT, sneaking && player.grounded);
     const moved = Math.hypot(resolved.position.x - player.position.x, resolved.position.z - player.position.z);
     player.walkPhase += moved * 4;
+    if (player.grounded && !inWater && !player.flying) {
+      this.stepDistance += moved;
+      if (this.stepDistance >= (sneaking ? 2.4 : 1.7)) { this.stepDistance = 0; const sound = this.groundSound(); if (sound !== "none") this.emit("step", sound); }
+    }
+    if (inWater && !this.wasInWater && player.velocity.y < -2.5) this.emit("splash", PLAYER_ID, -player.velocity.y);
+    this.wasInWater = inWater;
     if (player.sprinting && moved > 0) this.addExhaustion(0.1 * moved);
     player.position = resolved.position;
     if (resolved.hitX) vx = 0;
@@ -695,14 +707,17 @@ class Game implements CraftlandsGame {
         if (!player.grounded) {
           const fall = player.fallStart - player.position.y;
           if (!inWater && !player.flying && fall > 3) { const damage = Math.max(0, Math.round(fall - 3)); if (damage > 0) { this.hurt(damage, "fall", 10); this.renderer?.emitDebris(player.position, 0x8a5a33, 14, tick); this.emit("hard-landing", PLAYER_ID, fall); } }
-          else if (fall > 1) this.emit("landed", PLAYER_ID, fall);
+          else if (fall > 1) { const sound = this.groundSound(); this.emit("landed", sound === "none" ? "stone" : sound, fall); }
         }
         player.grounded = true;
         player.fallStart = player.position.y;
       }
       vy = 0;
     } else {
-      player.grounded = false;
+      // Standing still on a flat floor never hits Y (dy is tiny), so probe just under the feet before declaring free fall.
+      const onFloor = vy <= 0 && !player.flying && overlapsSolid(this.world, player.position.x - TUNING.halfWidth, player.position.y - 0.06, player.position.z - TUNING.halfWidth, player.position.x + TUNING.halfWidth, player.position.y, player.position.z + TUNING.halfWidth);
+      player.grounded = onFloor;
+      if (onFloor) vy = 0;
       if (vy > 0 || inWater || player.flying) player.fallStart = player.position.y;
     }
     if (player.grounded) player.fallStart = player.position.y;
@@ -718,6 +733,18 @@ class Game implements CraftlandsGame {
   }
 
   private flyUp = false;
+  private wasInWater = false;
+
+  /** Sound family of the block under any corner of the player's footprint (edges count as the block still under a foot). */
+  private groundSound(): BlockDefinition["sound"] {
+    const p = this.player.position;
+    const y = Math.floor(p.y - 0.05);
+    for (const [dx, dz] of [[0, 0], [-1, -1], [1, -1], [1, 1], [-1, 1]] as const) {
+      const definition = this.world.definition(Math.floor(p.x + dx * (TUNING.halfWidth - 0.02)), y, Math.floor(p.z + dz * (TUNING.halfWidth - 0.02)));
+      if (definition.solid && definition.sound !== "none") return definition.sound;
+    }
+    return "none";
+  }
 
   private addExhaustion(amount: number): void {
     if (this.mode === "creative") return;
@@ -820,6 +847,7 @@ class Game implements CraftlandsGame {
         if (tool !== null && tool !== undefined && this.mode === "survival") this.inventory.set(this.selectedSlot, wearTool(this.heldStack()));
         this.renderer?.emitDebris(vec3(mob.position.x, mob.position.y + MOB_DEFINITIONS[mob.kind].height * 0.6, mob.position.z), 0xc0392b, 6, tick);
         this.emit("attack", mob.kind, damage);
+        this.emit("mob-hurt", mob.kind, mob.id);
         if (killed) { /* death handled in stepMobs via deadTicks */ }
         this.miningProgress = 0;
         return;
@@ -834,6 +862,7 @@ class Game implements CraftlandsGame {
     const tool = this.heldTool();
     const seconds = this.mode === "creative" ? 0 : miningSeconds(definition, tool.type, tool.tier);
     this.miningProgress = seconds <= 0 ? 1 : Math.min(1, this.miningProgress + DT / seconds);
+    if (tick % 15 === 7 && this.mode !== "creative" && this.miningProgress < 1) this.emit("mining-hit", definition.sound);
     if (tick % 8 === 0 && this.mode !== "creative") this.renderer?.emitDebris(vec3(target.x + 0.5 + target.normal.x * 0.5, target.y + 0.5 + target.normal.y * 0.5, target.z + 0.5 + target.normal.z * 0.5), definition.color, 2, tick);
     if (this.miningProgress < 1) return;
     this.breakBlock(target.x, target.y, target.z, definition, tool, tick);
@@ -959,6 +988,11 @@ class Game implements CraftlandsGame {
     const daylight = this.daylight();
     const context = { world: this.world, tick, dt: DT, daylight, player: { position: this.player.position, eye: this.eyePosition(), alive: this.phase === "playing", creative: this.mode === "creative" }, rng: (salt: number) => this.mobRng(tick, salt) };
     const events = [...stepMobs(this.mobs, context), ...spawnMobs(this.mobs, context, () => this.nextEntityId++)];
+    for (const mob of this.mobs) {
+      if (mob.fuse > 0 && !this.fusing.has(mob.id)) { this.fusing.add(mob.id); this.emit("creeper-fuse", mob.kind, mob.id); }
+      else if (mob.fuse === 0 && this.fusing.has(mob.id)) this.fusing.delete(mob.id);
+      if (tick % 60 === mob.id % 60 && mob.deadTicks === 0 && Math.hypot(mob.position.x - this.player.position.x, mob.position.z - this.player.position.z) < 20 && this.mobRng(tick, mob.id * 977 + 5) < (MOB_DEFINITIONS[mob.kind].hostile ? 0.05 : 0.09)) this.emit("mob-say", mob.kind, mob.id);
+    }
     for (const event of events) {
       if (event.kind === "attack-player") {
         this.hurt(event.damage, `mob:${event.mobId}`, 20);

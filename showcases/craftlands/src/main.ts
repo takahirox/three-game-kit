@@ -1,9 +1,12 @@
 /// <reference lib="dom" />
+import { createAudioRuntime, createSilentAudioDriver, createWebAudioDriver, type AudioRuntime } from "@three-game-kit/client/audio";
 import { createDomHudAdapter, type HudAdapter } from "@three-game-kit/client/gameplay";
 import { createBrowserStorageSaveAdapter } from "@three-game-kit/client/genre";
 import type { HudState } from "@three-game-kit/shared/gameplay";
 import { createInMemorySaveAdapter, type SaveAdapter } from "@three-game-kit/shared/genre";
 import { createIconPainter, type IconPainter } from "./client/icons.js";
+import { synthesiseSoundBank } from "./client/sounds.js";
+import { blockByKey } from "./shared/blocks.js";
 import { createCraftlandsRenderer, type CraftlandsRenderer, type CraftlandsRendererInspection } from "./client/renderer.js";
 import { createCraftlandsGame, type CraftlandsGame, type CraftlandsLeakInspection, type CraftlandsRuntimeInspection, type CraftlandsSaveInspection, type CraftlandsWorldInspection, type SlotContainer } from "./game.js";
 import type { SlotValue } from "./shared/inventory.js";
@@ -313,6 +316,7 @@ function uiCaptured(): boolean {
 }
 
 listen(window, "keydown", ((event: KeyboardEvent) => {
+  unlockAudio();
   const snapshot = game?.snapshot();
   if (snapshot?.screen === "chat") {
     if (event.code === "Escape") { event.preventDefault(); game?.press("escape"); stepTestFrame(); }
@@ -376,6 +380,7 @@ listen(document, "mousemove", ((event: MouseEvent) => {
   game?.look(-event.movementX * 0.0022, -event.movementY * 0.0022);
 }) as EventListener);
 listen(document, "mousedown", ((event: MouseEvent) => {
+  unlockAudio();
   const slot = (event.target as HTMLElement | null)?.closest<HTMLElement>(".slot[data-container]") ?? null;
   if (slot !== null && game?.snapshot().screen !== "none" && game?.snapshot().phase === "playing") {
     event.preventDefault();
@@ -406,8 +411,95 @@ listen(window, "resize", (() => renderer?.resize()) as EventListener);
 listen(window, "error", ((event: ErrorEvent) => record("window.error", event.error ?? event.message)) as EventListener);
 listen(window, "unhandledrejection", ((event: PromiseRejectionEvent) => record("unhandledrejection", event.reason)) as EventListener);
 
+// --- Audio: the public Audio Feature runtime driven by rule events -------------------------
+
+let audioContext: AudioContext | null = null;
+let audio: AudioRuntime | null = null;
+let audioUnlocked = false;
+let clipCount = 0;
+
+function createAudio(): AudioRuntime {
+  if (mode === "test" || typeof AudioContext === "undefined") return createAudioRuntime(createSilentAudioDriver());
+  try {
+    audioContext = new AudioContext();
+    const runtime = createAudioRuntime(createWebAudioDriver(audioContext));
+    const bank = synthesiseSoundBank(audioContext);
+    for (const [id, buffer] of bank.buffers) runtime.registerClip(id, buffer);
+    clipCount = bank.buffers.size;
+    return runtime;
+  } catch {
+    audioContext = null;
+    return createAudioRuntime(createSilentAudioDriver());
+  }
+}
+
+function unlockAudio(): void {
+  if (audio === null || audioUnlocked) return;
+  audioUnlocked = true;
+  void audio.unlock().then((outcome) => { if (!outcome.ok) audioUnlocked = false; });
+}
+
+function pitch(seed: number, spread = 0.12): number {
+  const h = Math.sin(seed * 12.9898) * 43758.5453;
+  return 1 + ((h - Math.floor(h)) * 2 - 1) * spread;
+}
+
+function playSound(id: string, volume = 1, rate = 1, position?: { x: number; y: number; z: number }): void {
+  if (audio === null || !audioUnlocked || clipCount === 0) return;
+  audio.playEffect(id, { volume: Math.max(0, Math.min(1, volume * soundVolume)), playbackRate: rate, ...(position === undefined ? {} : { position }) });
+}
+
+let soundVolume = 1;
+
+function wireSounds(target: CraftlandsGame): void {
+  const mobAt = (id: number | undefined) => id === undefined ? undefined : target.snapshot().mobs.find((mob) => mob.id === id)?.position;
+  const family = (subject: string | undefined): string => { const known = ["stone", "grass", "gravel", "sand", "wood", "cloth", "glass", "snow"]; if (subject !== undefined && known.includes(subject)) return subject; const block = blockByKey(subject ?? ""); return block !== undefined && block.sound !== "none" ? block.sound : "stone"; };
+  target.subscribe((event) => {
+    const tick = event.tick;
+    switch (event.kind) {
+      case "step": playSound(`step.${family(event.subject)}`, 0.5, pitch(tick, 0.1)); break;
+      case "landed": playSound(`step.${family(event.subject)}`, 0.9, 0.85); break;
+      case "hard-landing": playSound("fall", 1, 1); break;
+      case "mining-hit": playSound(`hit.${family(event.subject)}`, 0.5, pitch(tick, 0.08)); break;
+      case "block-mined": playSound(`dig.${family(event.subject)}`, 1, pitch(tick, 0.1)); break;
+      case "block-placed": playSound(`dig.${family(event.subject)}`, 0.8, pitch(tick, 0.08) * 0.9); break;
+      case "player-damaged": playSound("hurt", 1, pitch(tick, 0.06)); break;
+      case "player-died": playSound("death", 1, 1); break;
+      case "ate": playSound("burp", 0.7, 1); break;
+      case "eating": playSound("eat", 1, pitch(tick, 0.05)); break;
+      case "item-collected": playSound("pop", 0.7, pitch(tick, 0.2) * 1.1); break;
+      case "xp": playSound("orb", 0.5, pitch(tick, 0.25)); break;
+      case "level-up": playSound("levelup", 0.8, 1); break;
+      case "crafted": playSound("click", 0.6, 1); break;
+      case "attack": playSound("punch", 0.9, pitch(tick, 0.1)); break;
+      case "mob-hurt": { const kind = event.subject ?? "pig"; playSound(`mob.${kind === "creeper" ? "creeper" : kind}`, 0.9, 0.8, mobAt(event.value)); break; }
+      case "mob-killed": playSound(`mob.${event.subject ?? "pig"}`, 0.9, 0.6); break;
+      case "mob-say": playSound(`mob.${event.subject ?? "pig"}`, 0.8, pitch(tick, 0.1), mobAt(event.value)); break;
+      case "creeper-fuse": playSound("fuse", 1, 1, mobAt(event.value)); break;
+      case "explosion": playSound("explode", 1, pitch(tick, 0.1)); break;
+      case "splash": playSound("splash", 0.8, pitch(tick, 0.1)); break;
+      case "screen-opened": case "screen-closed": playSound("click", 0.3, 1.2); break;
+      default: break;
+    }
+  });
+}
+
+function updateListener(snapshot: CraftlandsSnapshot): void {
+  if (audioContext === null) return;
+  const listener = audioContext.listener;
+  const p = snapshot.player.position;
+  const fx = -Math.sin(snapshot.player.yaw);
+  const fz = -Math.cos(snapshot.player.yaw);
+  if ("positionX" in listener && listener.positionX !== undefined) {
+    listener.positionX.value = p.x; listener.positionY.value = p.y + snapshot.player.eyeHeight; listener.positionZ.value = p.z;
+    listener.forwardX.value = fx; listener.forwardY.value = 0; listener.forwardZ.value = fz;
+    listener.upX.value = 0; listener.upY.value = 1; listener.upZ.value = 0;
+  }
+}
+
 function boot(): void {
   renderer = createCraftlandsRenderer(canvas, mode === "test");
+  audio = createAudio();
   icons = createIconPainter(renderer.atlasCanvas);
   requireElement<HTMLElement>(".title-bg").style.backgroundImage = `url("${icons.dirt()}")`;
   const splashes = ["A three-game-kit showcase!", "Punch trees!", "Now with creepers!", "Also try Deepfield!", "0 bytes of assets!", "Flood-fill lighting!", "Craft a pickaxe!", "Beware the night!", "Infinite-ish!", "Diamonds below y=16!"];
@@ -419,6 +511,8 @@ function boot(): void {
   const chatInput = requireElement<HTMLInputElement>("#chat-input");
   listen(chatForm, "submit", ((event: Event) => { event.preventDefault(); game?.command(chatInput.value); chatInput.value = ""; stepTestFrame(); if (mode === "normal") lockPointer(); }) as EventListener);
   const adapter = createCraftlandsHudAdapter(hud, (action) => {
+    unlockAudio();
+    playSound("click", 0.6, 1);
     if (action === "start") game?.start();
     if (action === "continue") game?.continueWorld();
     if (action === "respawn") game?.press("respawn");
@@ -428,7 +522,8 @@ function boot(): void {
     stepTestFrame();
     if (mode === "normal" && (action === "start" || action === "continue" || action === "respawn")) lockPointer();
   });
-  game = createCraftlandsGame({ renderer, hudAdapter: adapter, saveAdapter: createSaveAdapter(), testMode: mode === "test", ...(Number.isSafeInteger(seedParam) && seedParam > 0 ? { seed: seedParam } : {}), ...(Number.isSafeInteger(distanceParam) && distanceParam > 0 ? { simulationDistance: distanceParam } : {}) });
+  game = createCraftlandsGame({ renderer, hudAdapter: adapter, saveAdapter: createSaveAdapter(), testMode: mode === "test", audio, ...(Number.isSafeInteger(seedParam) && seedParam > 0 ? { seed: seedParam } : {}), ...(Number.isSafeInteger(distanceParam) && distanceParam > 0 ? { simulationDistance: distanceParam } : {}) });
+  wireSounds(game);
   if (mode === "test") { queueMicrotask(() => renderNow()); return; }
   lastTime = performance.now();
   const frame = (time: number): void => {
@@ -438,7 +533,9 @@ function boot(): void {
     lastTime = time;
     game.advance(seconds);
     game.present(time);
-    statusElement.textContent = statusLine(game.snapshot());
+    const snapshot = game.snapshot();
+    updateListener(snapshot);
+    statusElement.textContent = statusLine(snapshot);
     raf = requestAnimationFrame(frame);
   };
   raf = requestAnimationFrame(frame);

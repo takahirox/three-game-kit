@@ -21,7 +21,7 @@ test("Craftlands runs a deterministic public-Feature survival sandbox", async ({
   expect(boot.snapshot.player).toMatchObject({ health: 20, maximumHealth: 20, hunger: 20 });
   expect(await page.evaluate(() => Object.isFrozen(game().snapshot().player))).toBe(true);
   expect(boot.runtime).toMatchObject({ lifecycleState: "running", debugProviders: ["player", "world"] });
-  expect(boot.runtime!.installedFeatureIds).toEqual(["movement-input", "craftlands.rules", "health-damage.client", "game-flow.client", "save-load.client", "ui-hud", "debug-devtools.client", "craftlands.camera", "particles", "three-rendering"]);
+  expect(boot.runtime!.installedFeatureIds).toEqual(["movement-input", "craftlands.rules", "health-damage.client", "game-flow.client", "save-load.client", "ui-hud", "debug-devtools.client", "audio", "craftlands.camera", "particles", "three-rendering"]);
   expect(boot.runtime!.scheduleSystemIds).toEqual(expect.arrayContaining(["movement-input-sample", "craftlands.rules.step", "health-damage-client-apply", "craftlands.camera.view", "three-render-frame"]));
   expect(boot.world).toMatchObject({ seed: 8_675_309, editCount: 0, simulationDistance: 3 });
   expect(boot.world!.loadedChunks).toBe(49);
@@ -51,6 +51,7 @@ test("Craftlands runs a deterministic public-Feature survival sandbox", async ({
   await page.keyboard.up("KeyW");
   const walked = await page.evaluate(() => game().snapshot());
   expect(walked.player.position.z).toBeLessThan(started.player.position.z - 0.8);
+  expect((await page.evaluate(() => game().events())).some((event) => event.kind === "step" && event.subject === "grass")).toBe(true);
   await page.evaluate(() => { game().press("jump"); game().advance(0.15); });
   expect((await page.evaluate(() => game().snapshot())).player.grounded).toBe(false);
   await page.evaluate(() => game().advance(1));

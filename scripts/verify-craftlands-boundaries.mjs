@@ -8,6 +8,7 @@ const showcaseRoot = path.join(root, "showcases", "craftlands");
 const allowedPackageImports = new Set([
   "@three-game-kit/client",
   "@three-game-kit/client/advanced",
+  "@three-game-kit/client/audio",
   "@three-game-kit/client/gameplay",
   "@three-game-kit/client/genre",
   "@three-game-kit/client/input",

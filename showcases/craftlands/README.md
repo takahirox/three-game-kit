@@ -41,6 +41,7 @@ Open <http://127.0.0.1:4174/showcases/craftlands/index.html>. Click **New World*
 - **Mining and placing.** The mining time follows Minecraft's formula from block hardness, tool type and tier (hand, wood, stone, iron, diamond); stone needs a pickaxe to drop cobblestone, ores need the right tier, tools wear out. Broken blocks drop item entities with physics that the player walks over to collect. Placing respects support rules for torches and plants and never overlaps the player or a mob.
 - **Crafting and smelting.** `src/shared/recipes.ts` holds shaped and shapeless recipes (planks, sticks, crafting table, torches, furnace, stone bricks, sandstone, bricks, wool, and pickaxe / axe / shovel / sword in four tiers) with mirrored matching, plus smelting recipes and fuel values. Inventory screens follow Minecraft click semantics (pick up, split, merge, swap, shift-move, craft all).
 - **Mobs.** `src/shared/mobs.ts` runs pigs, cows, sheep and chickens (wander, herd spawns on lit grass, drop meat and materials) and zombies, skeletons and creepers (spawn in darkness and at night, chase within 20 blocks, melee or a three-second creeper fuse that explodes and craters the terrain, burn in daylight). Every random roll comes from a seeded hash of the tick and mob id.
+- **Sound.** `src/client/sounds.ts` synthesises every clip into an `AudioBuffer` at boot (per-material dig / step / hit noises, hurt, fall, pop, XP orb, level-up, eating, splash, explosion, creeper fuse, and pig / cow / sheep / chicken / zombie / skeleton voices) and registers them with the public Audio Feature. The host maps rule events to clips; mob voices are positional through the Web Audio listener, and playback unlocks on the first click or key.
 - **Saving.** The Save/Load Feature persists seed, chunk edits, furnace contents, player transform and vitals, the slot-precise inventory, mobs, statistics, time of day and game mode to browser storage (an in-memory adapter in test mode). Autosave runs every thirty seconds of play; `F` saves immediately; the title screen offers **Continue World** when a save exists. Dying in survival scatters the inventory as item drops, as in Minecraft without `keepInventory`.
 
 ## Designed for a future authoritative server
@@ -49,7 +50,7 @@ Everything under `src/shared/` (blocks, items, recipes, terrain, world, lighting
 
 ## Public Feature composition
 
-The showcase imports no framework internals. One public Client Runtime installs ten Features:
+The showcase imports no framework internals. One public Client Runtime installs eleven Features:
 
 | Feature id | Public entrypoint | Role in Craftlands |
 | --- | --- | --- |
@@ -60,6 +61,7 @@ The showcase imports no framework internals. One public Client Runtime installs 
 | `save-load.client` | `@three-game-kit/client/genre` | Versioned world document with validation and restore |
 | `ui-hud` | `@three-game-kit/client/gameplay` | Framework-neutral HUD state rendered through a DOM adapter (hearts, hunger, air, XP, hotbar, screens, chat, F3) |
 | `debug-devtools.client` | `@three-game-kit/client/advanced` | Player and world diagnostic providers |
+| `audio` | `@three-game-kit/client/audio` | Web Audio playback of the runtime-synthesised clip bank (silent driver in test mode) |
 | `craftlands.camera` | game-specific | Publishes the first- or third-person eye transform in the camera-view phase |
 | `particles` | `@three-game-kit/client/particles` | Instanced block-debris emitter presented by the Runtime |
 | `three-rendering` | `@three-game-kit/client/rendering` | Scene, chunk meshes, sky, mobs, drops and held item |
