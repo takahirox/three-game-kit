@@ -34,6 +34,23 @@ Open <http://127.0.0.1:4174/showcases/craftlands/index.html>. The title screen o
 | `F` | Save now (the world also autosaves every 30 s of play and when quitting) |
 | **Options…** (title / game menu) | Render distance, FOV, mouse sensitivity and sound volume as Minecraft-style slider buttons, saved in browser storage |
 
+### Touch (phones and tablets)
+
+On a coarse-pointer device the HUD switches to pocket-edition style controls (`?touch=1` forces them, `?touch=0` disables them):
+
+| Gesture | Action |
+| --- | --- |
+| Touch and drag on the left half | Floating joystick; push it to the rim for a moment to sprint |
+| Drag on the right half | Look around |
+| Tap the world | Place the held block / use a crafting table, furnace, chest or bed |
+| Press and hold the world | Mine or attack; with food in hand, eat |
+| ▲ / ▼ buttons | Jump (hold to keep swimming up or, in creative, fly up; double-tap to toggle flight) / sneak toggle (fly down) |
+| … / ⤓ beside the hotbar | Inventory (long-press a slot to shift-move it; ✕ closes) / drop one item |
+| ◎ / ▐▐ | Camera perspective / game menu |
+| Tap a hotbar slot | Select it |
+
+Phones default to a four-chunk render distance and a 1.5× pixel ratio; both can be raised in **Options…**. Landscape orientation is recommended.
+
 ## Game structure
 
 - **World.** `src/shared/terrain.ts` derives biome, height, caves, ore veins and trees for any column from the seed alone, so chunks generate identically in any order (trees whose canopy crosses a border are stamped by both chunks). `src/shared/world.ts` keeps a map of loaded 16 × 128 × 16 chunks, a per-chunk edit journal that survives unloading and is what the save stores, furnace and chest block entities, and flood-fill **sky and block lighting** (torches, lava, glowstone and lit furnaces emit light; placing or breaking blocks re-propagates or removes light). The rules load chunks in rings around the player every tick and unload distant ones.
@@ -74,4 +91,4 @@ The kit's static-world Collision Feature is not used because a voxel world chang
 
 ## Deterministic test mode
 
-Append `?test=1` to disable the animation-frame loop, use an in-memory save adapter and a three-chunk simulation distance. `window.__CRAFTLANDS__` exposes `start`, `continueWorld`, `setMove`, `setLook`, `look`, `setHeld`, `press`, `clickSlot(container, index, button, shift)`, `command`, `give`, `setMode`, `advance(seconds)`, `loadScenario("spawn" | "tree" | "stone" | "iron" | "diamond" | "cliff" | "water" | "cave" | "night" | "crafting" | "furnace" | "chest" | "mobs")`, `setTimeOfDay`, frozen `snapshot()`, `events()`, `errors()`, `inspectRuntime()`, `inspectRenderer()`, `inspectWorld()`, `inspectSave()`, `inspectInventory()`, `inspectLeaks()`, and `dispose()`. `pnpm run verify:craftlands` runs the public-import boundary check, the asset intake gate, the showcase typecheck, and the Playwright acceptance test.
+Append `?test=1` to disable the animation-frame loop, use an in-memory save adapter and a three-chunk simulation distance. `window.__CRAFTLANDS__` exposes `start`, `continueWorld`, `setMove`, `setLook`, `look`, `setHeld`, `press`, `clickSlot(container, index, button, shift)`, `command`, `give`, `setMode`, `advance(seconds)`, `loadScenario("spawn" | "tree" | "stone" | "iron" | "diamond" | "cliff" | "water" | "cave" | "night" | "crafting" | "furnace" | "chest" | "mobs")`, `setTimeOfDay`, frozen `snapshot()`, `events()`, `errors()`, `inspectRuntime()`, `inspectRenderer()`, `inspectWorld()`, `inspectSave()`, `inspectInventory()`, `inspectLeaks()`, `inspectTouch()`, and `dispose()`. `pnpm run verify:craftlands` runs the public-import boundary check, the asset intake gate, the showcase typecheck, and the Playwright acceptance test.

@@ -2,7 +2,8 @@
 <html lang="en">
   <head>
     <meta charset="utf-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, user-scalable=no" />
+    <meta name="apple-mobile-web-app-capable" content="yes" />
     <title>Craftlands</title>
     <link rel="stylesheet" href="./styles.css" />
   </head>
@@ -28,6 +29,15 @@
         <div id="toast" class="toast" hidden><i class="slot"></i><div><small>Advancement Made!</small><b></b></div></div>
         <div id="lock-hint" class="lock-hint" hidden>Click to capture the mouse</div>
         <div id="loading" class="loading" hidden><b>Loading world…</b><small>Building terrain</small></div>
+        <div id="touch" class="touch" hidden>
+          <div id="joystick" class="joystick" hidden><i></i></div>
+          <button type="button" class="touch-button pause" data-touch="pause" aria-label="Pause">▐▐</button>
+          <button type="button" class="touch-button perspective" data-touch="perspective" aria-label="Camera">◎</button>
+          <button type="button" class="touch-button jump" data-touch="jump" aria-label="Jump">▲</button>
+          <button type="button" class="touch-button sneak" data-touch="sneak" aria-label="Sneak">▼</button>
+          <button type="button" class="touch-button inventory" data-touch="inventory" aria-label="Inventory">…</button>
+          <button type="button" class="touch-button drop" data-touch="drop" aria-label="Drop">⤓</button>
+        </div>
         <div id="cursor-item" class="cursor-item" hidden><span></span></div>
 
         <section class="screen title" data-hud-screen="title">
@@ -82,6 +92,7 @@
 
         <section id="panel" class="panel-screen" hidden>
           <div class="panel">
+            <button type="button" class="panel-close" data-hud-action="close-panel" aria-label="Close">✕</button>
             <div class="panel-title" id="panel-title">Crafting</div>
             <div class="panel-top" id="panel-top"></div>
             <div class="panel-inventory" id="panel-inventory"></div>

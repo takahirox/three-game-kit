@@ -7,12 +7,12 @@ export type Phase = "title" | "playing" | "paused" | "dead";
 export type Screen = "none" | "inventory" | "crafting" | "furnace" | "chest" | "chat";
 export type GameMode = "survival" | "creative";
 export type Action =
-  | "jump" | "attack-start" | "attack-end" | "use-start" | "use-end" | "sprint-start" | "sprint-end" | "sneak-start" | "sneak-end"
+  | "jump" | "jump-end" | "attack-start" | "attack-end" | "use-start" | "use-end" | "sprint-start" | "sprint-end" | "sneak-start" | "sneak-end"
   | "select-1" | "select-2" | "select-3" | "select-4" | "select-5" | "select-6" | "select-7" | "select-8" | "select-9"
   | "next-slot" | "previous-slot" | "drop" | "inventory" | "escape" | "start" | "continue" | "respawn" | "save" | "quit" | "toggle-perspective" | "toggle-debug" | "toggle-hud" | "chat" | "fly-toggle";
 export type Scenario = "spawn" | "tree" | "stone" | "iron" | "diamond" | "cliff" | "water" | "cave" | "night" | "crafting" | "furnace" | "chest" | "mobs";
 
-export interface HeldInput { readonly attack: boolean; readonly use: boolean; readonly sprint: boolean; readonly sneak: boolean; }
+export interface HeldInput { readonly attack: boolean; readonly use: boolean; readonly sprint: boolean; readonly sneak: boolean; readonly jump: boolean; }
 export interface MoveInput { readonly x: number; readonly z: number; }
 
 export interface TargetSnapshot {
@@ -129,7 +129,7 @@ export const DAY_TICKS = 60 * 60 * 20;
 export const START_TIME = 0.3;
 export const AUTOSAVE_TICKS = 60 * 30;
 export const NEUTRAL_MOVE: MoveInput = Object.freeze({ x: 0, z: 0 });
-export const NEUTRAL_HELD: HeldInput = Object.freeze({ attack: false, use: false, sprint: false, sneak: false });
+export const NEUTRAL_HELD: HeldInput = Object.freeze({ attack: false, use: false, sprint: false, sneak: false, jump: false });
 
 export const TUNING = Object.freeze({
   halfWidth: 0.3,

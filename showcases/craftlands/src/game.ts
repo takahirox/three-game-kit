@@ -34,7 +34,7 @@ import { World, isChestState, type ChestState, type FurnaceState, type Vec3 } fr
 
 const MAX_STEPS = 1_200;
 const ACTIONS: readonly Action[] = Object.freeze([
-  "jump", "attack-start", "attack-end", "use-start", "use-end", "sprint-start", "sprint-end", "sneak-start", "sneak-end",
+  "jump", "jump-end", "attack-start", "attack-end", "use-start", "use-end", "sprint-start", "sprint-end", "sneak-start", "sneak-end",
   "select-1", "select-2", "select-3", "select-4", "select-5", "select-6", "select-7", "select-8", "select-9",
   "next-slot", "previous-slot", "drop", "inventory", "escape", "start", "continue", "respawn", "save", "quit", "toggle-perspective", "toggle-debug", "toggle-hud", "chat", "fly-toggle",
 ]);
@@ -360,6 +360,8 @@ class Game implements CraftlandsGame {
       case "sprint-end": this.held = Object.freeze({ ...this.held, sprint: false }); return;
       case "sneak-start": this.held = Object.freeze({ ...this.held, sneak: true }); return;
       case "sneak-end": this.held = Object.freeze({ ...this.held, sneak: false }); return;
+      case "jump": this.held = Object.freeze({ ...this.held, jump: true }); this.pressed.add(action); return;
+      case "jump-end": this.held = Object.freeze({ ...this.held, jump: false }); return;
       default: this.pressed.add(action);
     }
   }
@@ -716,16 +718,16 @@ class Game implements CraftlandsGame {
     const jump = this.pressed.has("jump") && !uiOpen;
     if (jump && this.mode === "creative" && tick - player.lastSpaceTick < 18 && tick - player.lastSpaceTick > 2) { player.flying = !player.flying; vy = 0; }
     if (jump) player.lastSpaceTick = tick;
+    // Holding jump keeps rising while flying and keeps swimming up, as in Minecraft.
+    const holdingJump = this.held.jump && !uiOpen;
     if (player.flying) {
-      const up = (this.held.attack && false ? 0 : 0) + (jump || (this.held.sprint && false) ? 0 : 0);
-      void up;
-      const rise = (this.pressed.has("jump") || this.flyUp) ? 1 : 0;
+      const rise = jump || holdingJump ? 1 : 0;
       const sink = this.held.sneak ? 1 : 0;
       vy = (rise - sink) * TUNING.flySpeed * 0.8;
     } else {
-      if (jump) {
+      if (jump || holdingJump) {
         if (inWater || player.inLava) vy = TUNING.swimSpeed;
-        else if (player.grounded) { vy = TUNING.jumpSpeed; player.grounded = false; player.lastJumpTick = tick; this.addExhaustion(player.sprinting ? 0.2 : 0.05); this.emit("jumped", PLAYER_ID); }
+        else if (jump && player.grounded) { vy = TUNING.jumpSpeed; player.grounded = false; player.lastJumpTick = tick; this.addExhaustion(player.sprinting ? 0.2 : 0.05); this.emit("jumped", PLAYER_ID); }
       }
       if (player.inLava) { vy -= 12 * DT; if (vy < -1.5) vy = -1.5; vx *= 0.5; vz *= 0.5; }
       else vy -= (inWater ? TUNING.waterGravity : TUNING.gravity) * DT;
@@ -777,7 +779,6 @@ class Game implements CraftlandsGame {
     if (player.inLava) { this.hurt(4, "lava", 30); }
   }
 
-  private flyUp = false;
   private wasInWater = false;
 
   /** Sound family of the block under any corner of the player's footprint (edges count as the block still under a foot). */
@@ -1669,11 +1670,11 @@ class Game implements CraftlandsGame {
 
   setHeld(patch: Partial<HeldInput>): void {
     if (this.isDisposed) return;
-    const next = Object.freeze({ attack: patch.attack ?? this.held.attack, use: patch.use ?? this.held.use, sprint: patch.sprint ?? this.held.sprint, sneak: patch.sneak ?? this.held.sneak });
+    const next = Object.freeze({ attack: patch.attack ?? this.held.attack, use: patch.use ?? this.held.use, sprint: patch.sprint ?? this.held.sprint, sneak: patch.sneak ?? this.held.sneak, jump: patch.jump ?? this.held.jump });
     if (patch.attack === true && !this.held.attack) this.pressed.add("attack-start");
     if (patch.use === true && !this.held.use) this.pressed.add("use-start");
+    if (patch.jump === true && !this.held.jump) this.pressed.add("jump");
     this.held = next;
-    if (patch.sprint === true) this.flyUp = false;
   }
 
   press(action: Action): void {
