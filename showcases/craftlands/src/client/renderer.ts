@@ -503,8 +503,9 @@ class Renderer implements CraftlandsRenderer {
       const dawn = 1 - smoothstep(0, 0.2, Math.abs(sunHeight));
       this.daylight = 0.22 + daylight * 0.78;
       const underwater = snapshot.player.eyeInWater;
-      const sky = SKY_NIGHT.clone().lerp(SKY_DAY, daylight).lerp(SKY_DAWN, dawn * daylight * 0.7);
-      const fogColor = SKY_NIGHT.clone().lerp(FOG_DAY, daylight).lerp(SKY_DAWN, dawn * daylight * 0.6);
+      // Minecraft keeps the zenith blue while the horizon fog turns orange at sunrise and sunset.
+      const sky = SKY_NIGHT.clone().lerp(SKY_DAY, daylight).lerp(SKY_DAWN, dawn * daylight * 0.2);
+      const fogColor = SKY_NIGHT.clone().lerp(FOG_DAY, daylight).lerp(SKY_DAWN, dawn * Math.max(0.35, daylight) * 0.9);
       if (underwater) { sky.set(0x0d2f6b); fogColor.set(0x0d2f6b); }
       // Underground the horizon fog goes nearly black so unloaded space beyond a cavern never reads as sky.
       const eyeSky = this.world === null ? 15 : this.world.skyLight(Math.floor(this.eye.x), Math.floor(this.eye.y), Math.floor(this.eye.z));
