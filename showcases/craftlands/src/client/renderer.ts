@@ -96,7 +96,7 @@ void main() {
   float sky = vLight.x * daylight;
   float level = max(sky, vLight.y);
   float brightness = level / (4.0 - 3.0 * level);
-  brightness = 0.035 + 0.965 * brightness;
+  brightness = 0.05 + 0.95 * brightness;
   float warm = clamp(vLight.y - sky, 0.0, 1.0);
   vec3 lit = tex.rgb * vColor * brightness * mix(vec3(1.0), vec3(1.05, 0.96, 0.84), warm * 0.6);
   float fog = smoothstep(fogNear, fogFar, vDist);
@@ -143,6 +143,9 @@ class Renderer implements CraftlandsRenderer {
   private readonly handArmMaterial: THREE.MeshBasicMaterial;
   private readonly mobs: MobRenderer;
   private readonly items = new Map<number, ItemEntry>();
+  private readonly arrows = new Map<number, THREE.Mesh>();
+  private readonly arrowGeometry: THREE.BoxGeometry;
+  private readonly arrowMaterial: THREE.MeshBasicMaterial;
   private readonly itemBlockGeometry: THREE.BoxGeometry;
   private readonly itemFlatGeometry: THREE.PlaneGeometry;
   private readonly chunks = new Map<string, ChunkEntry>();
@@ -258,6 +261,8 @@ class Renderer implements CraftlandsRenderer {
     this.handItem.visible = false;
     this.handArm.visible = false;
 
+    this.arrowGeometry = this.geo(new THREE.BoxGeometry(0.05, 0.05, 0.6));
+    this.arrowMaterial = this.mat(new THREE.MeshBasicMaterial({ color: 0xd9c9a0 }));
     this.itemBlockGeometry = this.geo(new THREE.BoxGeometry(0.25, 0.25, 0.25));
     this.itemFlatGeometry = this.geo(new THREE.PlaneGeometry(0.3, 0.3));
     this.mobs = createMobRenderer(this.scene, this.atlas, tileUv);
@@ -445,6 +450,19 @@ class Renderer implements CraftlandsRenderer {
     for (const event of events) if (event.kind === "block-mined" || event.kind === "block-placed" || event.kind === "attack" || event.kind === "use") this.swing = 1;
     if (snapshot.held.attack && target !== null && playing) this.swing = Math.max(this.swing, 0.4);
     this.syncItems(snapshot);
+    this.syncArrows(snapshot);
+  }
+
+  private syncArrows(snapshot: CraftlandsSnapshot): void {
+    const seen = new Set<number>();
+    for (const arrow of snapshot.arrows) {
+      seen.add(arrow.id);
+      let mesh = this.arrows.get(arrow.id);
+      if (mesh === undefined) { mesh = new THREE.Mesh(this.arrowGeometry, this.arrowMaterial); this.scene.add(mesh); this.arrows.set(arrow.id, mesh); }
+      mesh.position.set(arrow.position.x, arrow.position.y, arrow.position.z);
+      if (!arrow.stuck) { const v = arrow.velocity; const length = Math.hypot(v.x, v.y, v.z); if (length > 0.01) mesh.lookAt(arrow.position.x + v.x / length, arrow.position.y + v.y / length, arrow.position.z + v.z / length); }
+    }
+    for (const [id, mesh] of this.arrows) if (!seen.has(id)) { this.scene.remove(mesh); this.arrows.delete(id); }
   }
 
   private syncItems(snapshot: CraftlandsSnapshot): void {
@@ -501,7 +519,7 @@ class Renderer implements CraftlandsRenderer {
       const sunHeight = Math.sin(theta);
       const daylight = smoothstep(-0.12, 0.16, sunHeight);
       const dawn = 1 - smoothstep(0, 0.2, Math.abs(sunHeight));
-      this.daylight = 0.22 + daylight * 0.78;
+      this.daylight = 0.3 + daylight * 0.7;
       const underwater = snapshot.player.eyeInWater;
       // Minecraft keeps the zenith blue while the horizon fog turns orange at sunrise and sunset.
       const sky = SKY_NIGHT.clone().lerp(SKY_DAY, daylight).lerp(SKY_DAWN, dawn * daylight * 0.2);
@@ -668,6 +686,8 @@ class Renderer implements CraftlandsRenderer {
     this.dirty.clear();
     for (const entry of this.items.values()) { this.scene.remove(entry.group); entry.material.dispose(); }
     this.items.clear();
+    for (const mesh of this.arrows.values()) this.scene.remove(mesh);
+    this.arrows.clear();
     this.mobs.dispose();
     for (const geometry of new Set(this.geometries)) geometry.dispose();
     for (const material of new Set(this.materials)) material.dispose();

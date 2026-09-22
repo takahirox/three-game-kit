@@ -133,6 +133,7 @@ function clampUnit(value: number): number {
 }
 
 interface ItemEntity { id: number; key: string; count: number; damage: number; position: Vec3; velocity: Vec3; age: number; pickupDelay: number; }
+interface Arrow { id: number; position: Vec3; velocity: Vec3; age: number; stuck: boolean; }
 
 interface Player {
   position: Vec3;
@@ -229,6 +230,7 @@ class Game implements CraftlandsGame {
   private craftResult: SlotValue = null;
   private furnacePos: Vec3 | null = null;
   private items: ItemEntity[] = [];
+  private arrows: Arrow[] = [];
   private mobs: Mob[] = [];
   private nextEntityId = 1;
   private eating = 0;
@@ -448,6 +450,7 @@ class Game implements CraftlandsGame {
     this.craft.clear();
     this.cursor = null;
     this.items = [];
+    this.arrows = [];
     this.mobs = [];
     this.nextEntityId = 1;
     this.stats = { mined: 0, placed: 0, crafted: 0, kills: 0, deaths: 0, eaten: 0, minedByKey: {} };
@@ -622,6 +625,7 @@ class Game implements CraftlandsGame {
     } else { this.miningProgress = 0; this.eating = 0; }
     this.stepItems(tick);
     this.stepMobs(tick);
+    this.stepArrows(tick);
     this.stepFurnaces();
     this.stepBlocks(tick);
     this.stepAdvancements(tick);
@@ -1065,10 +1069,40 @@ class Game implements CraftlandsGame {
         this.emit("mob-killed", event.mobKind, this.stats.kills);
       } else if (event.kind === "explosion") {
         this.explode(event.x, event.y, event.z, event.radius, tick);
+      } else if (event.kind === "shoot") {
+        this.arrows.push({ id: this.nextEntityId++, position: vec3(event.x, event.y, event.z), velocity: vec3(event.vx, event.vy, event.vz), age: 0, stuck: false });
+        if (this.arrows.length > 64) this.arrows.shift();
+        this.emit("arrow-shot", String(event.mobId));
       } else if (event.kind === "mob-spawned") {
         this.emit("mob-spawned", event.mobKind, event.mobId);
       }
     }
+  }
+
+  private stepArrows(tick: number): void {
+    const player = this.player;
+    const survivors: Arrow[] = [];
+    for (const arrow of this.arrows) {
+      arrow.age += 1;
+      if (arrow.age > 60 * 20) continue;
+      if (arrow.stuck) { survivors.push(arrow); continue; }
+      const vy = arrow.velocity.y - TUNING.gravity * 0.6 * DT;
+      const next = vec3(arrow.position.x + arrow.velocity.x * DT, arrow.position.y + vy * DT, arrow.position.z + arrow.velocity.z * DT);
+      if (this.world.isSolid(Math.floor(next.x), Math.floor(next.y), Math.floor(next.z))) { arrow.stuck = true; arrow.velocity = vec3(0, 0, 0); this.emit("arrow-hit", "block"); survivors.push(arrow); continue; }
+      const hitsPlayer = this.phase === "playing" && this.mode !== "creative" && next.x > player.position.x - TUNING.halfWidth && next.x < player.position.x + TUNING.halfWidth && next.y > player.position.y && next.y < player.position.y + TUNING.height && next.z > player.position.z - TUNING.halfWidth && next.z < player.position.z + TUNING.halfWidth;
+      if (hitsPlayer) {
+        this.hurt(2, "arrow", 20);
+        const push = Math.max(0.1, Math.hypot(arrow.velocity.x, arrow.velocity.z));
+        player.velocity = vec3(player.velocity.x + arrow.velocity.x / push * 4, Math.max(player.velocity.y, 3), player.velocity.z + arrow.velocity.z / push * 4);
+        this.emit("arrow-hit", PLAYER_ID, 2);
+        continue;
+      }
+      arrow.position = next;
+      arrow.velocity = vec3(arrow.velocity.x * 0.995, vy, arrow.velocity.z * 0.995);
+      survivors.push(arrow);
+    }
+    this.arrows = survivors;
+    void tick;
   }
 
   private explode(x: number, y: number, z: number, radius: number, tick: number): void {
@@ -1503,6 +1537,7 @@ class Game implements CraftlandsGame {
       chest: (() => { const state = this.currentChest(); return state === null ? null : Object.freeze(state.slots.map((slot) => (slot === null ? null : stack(slot.key, slot.count, slot.damage)))); })(),
       heldItem: this.heldStack(),
       items: Object.freeze(items),
+      arrows: Object.freeze(this.arrows.map((arrow) => Object.freeze({ id: arrow.id, position: arrow.position, velocity: arrow.velocity, stuck: arrow.stuck }))),
       mobs: Object.freeze(mobs),
       eating: this.eating,
       swing: this.swing,

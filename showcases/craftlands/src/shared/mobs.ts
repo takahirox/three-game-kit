@@ -75,6 +75,7 @@ export type MobEvent = Readonly<
   | { readonly kind: "attack-player"; readonly mobId: number; readonly damage: number; readonly knockbackX: number; readonly knockbackZ: number }
   | { readonly kind: "mob-died"; readonly mobId: number; readonly mobKind: MobKind; readonly x: number; readonly y: number; readonly z: number; readonly drops: readonly Readonly<{ readonly key: string; readonly count: number }>[]; readonly xp: number }
   | { readonly kind: "explosion"; readonly mobId: number; readonly x: number; readonly y: number; readonly z: number; readonly radius: number }
+  | { readonly kind: "shoot"; readonly mobId: number; readonly x: number; readonly y: number; readonly z: number; readonly vx: number; readonly vy: number; readonly vz: number }
   | { readonly kind: "mob-spawned"; readonly mobId: number; readonly mobKind: MobKind }
   | { readonly kind: "mob-despawned"; readonly mobId: number }
 >;
@@ -234,7 +235,28 @@ export function stepMobs(mobs: Mob[], context: MobWorldContext): MobEvent[] {
         } else if (distance > 6) {
           mob.fuse = Math.max(0, mob.fuse - 1);
         }
-      } else if (horizontal <= definition.attackReach && Math.abs(dy) < 2 && mob.attackCooldown === 0) {
+      } else if (mob.kind === "skeleton" && distance <= 15 && distance > 3 && mob.attackCooldown === 0) {
+        // Skeletons keep their distance and loose an arrow every two seconds with a slight lob.
+        mob.moving = distance > 8;
+        const ox = mob.position.x; const oy = mob.position.y + definition.eyeHeight; const oz = mob.position.z;
+        const tx = player.position.x - ox; const ty = player.position.y + 0.9 - oy; const tz = player.position.z - oz;
+        const flat = Math.max(0.01, Math.hypot(tx, tz));
+        const speed = 18;
+        const lob = flat * 0.02;
+        events.push(Object.freeze({ kind: "shoot" as const, mobId: mob.id, x: ox, y: oy, z: oz, vx: tx / flat * speed, vy: (ty / flat + lob) * speed * 0.9, vz: tz / flat * speed }));
+        mob.attackCooldown = 120;
+      } else if (mob.kind === "skeleton" && distance <= 8) {
+        mob.moving = false;
+        if (distance <= 3 && horizontal <= definition.attackReach && mob.attackCooldown === 0) {
+          const length = Math.max(1e-4, horizontal);
+          events.push(Object.freeze({ kind: "attack-player" as const, mobId: mob.id, damage: definition.attackDamage, knockbackX: dx / length, knockbackZ: dz / length }));
+          mob.attackCooldown = 60;
+        }
+      } else if (mob.kind === "skeleton" && distance <= 3 && horizontal <= definition.attackReach && mob.attackCooldown === 0) {
+        const length = Math.max(1e-4, horizontal);
+        events.push(Object.freeze({ kind: "attack-player" as const, mobId: mob.id, damage: definition.attackDamage, knockbackX: dx / length, knockbackZ: dz / length }));
+        mob.attackCooldown = 60;
+      } else if (mob.kind !== "skeleton" && horizontal <= definition.attackReach && Math.abs(dy) < 2 && mob.attackCooldown === 0) {
         const length = Math.max(1e-4, horizontal);
         events.push(Object.freeze({ kind: "attack-player" as const, mobId: mob.id, damage: definition.attackDamage, knockbackX: dx / length, knockbackZ: dz / length }));
         mob.attackCooldown = 60;

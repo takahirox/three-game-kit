@@ -497,6 +497,8 @@ function wireSounds(target: CraftlandsGame): void {
       case "mob-killed": playSound(`mob.${event.subject ?? "pig"}`, 0.9, 0.6); break;
       case "mob-say": playSound(`mob.${event.subject ?? "pig"}`, 0.8, pitch(tick, 0.1), mobAt(event.value)); break;
       case "creeper-fuse": playSound("fuse", 1, 1, mobAt(event.value)); break;
+      case "arrow-shot": playSound("click", 0.5, 0.6); break;
+      case "arrow-hit": playSound(event.subject === "block" ? "hit.wood" : "punch", 0.6, 1.3); break;
       case "explosion": playSound("explode", 1, pitch(tick, 0.1)); break;
       case "splash": playSound("splash", 0.8, pitch(tick, 0.1)); break;
       case "screen-opened": case "screen-closed": playSound("click", 0.3, 1.2); break;
