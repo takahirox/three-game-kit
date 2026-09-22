@@ -300,7 +300,7 @@ class Game implements CraftlandsGame {
       const renderer = this.renderer;
       features.push(
         feature("craftlands.camera", "Publishes the first-person eye transform each presentation frame", { kind: "system", id: "craftlands.camera.view", domain: "client-presentation", phase: "camera-view", priority: 0, run: () => renderer.setCamera(this.eyePosition(), this.player.yaw, this.player.pitch) }),
-        createParticleFeature({ emitters: [renderer.debris] }),
+        createParticleFeature({ emitters: [renderer.debris, renderer.flames] }),
         createRenderingFeature({ renderer }),
       );
     }

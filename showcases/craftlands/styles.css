@@ -116,6 +116,7 @@ button.mc:active { box-shadow: inset -2px -2px 0 #b9b9b9, inset 2px 2px 0 #4a4a4
 .tooltip { position: fixed; z-index: 31; padding: 4px 6px; background: #100010f0; border: 2px solid #250050; color: #fff; font-size: 14px; text-shadow: var(--shadow); pointer-events: none; white-space: nowrap; }
 .tooltip small { display: block; color: #aaa; font-size: 12px; }
 #status { position: fixed; z-index: 11; right: 6px; bottom: 4px; margin: 0; color: #ffffff66; font: 700 9px/1 inherit; white-space: nowrap; }
+body[data-mode="normal"] #status { display: none; }
 
 @media (max-width: 700px) { .bottom, .bars, .xp { width: 300px; } .hotbar .slot { width: 33px; height: 33px; } .menu { width: 300px; } .logo { font-size: 44px; } .corner.right { display: none; } }
 @media (prefers-reduced-motion: reduce) { *, *::before, *::after { transition-duration: .01ms !important; animation-duration: .01ms !important; } }

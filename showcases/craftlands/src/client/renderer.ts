@@ -42,6 +42,7 @@ export interface CraftlandsRendererInspection {
 
 export interface CraftlandsRenderer extends RenderingFeatureAdapter {
   readonly debris: ParticleEmitter;
+  readonly flames: ParticleEmitter;
   readonly disposed: boolean;
   readonly screenshotReady: boolean;
   readonly atlasCanvas: HTMLCanvasElement;
@@ -115,11 +116,12 @@ function smoothstep(edge0: number, edge1: number, value: number): number {
   return t * t * (3 - 2 * t);
 }
 
-interface ChunkEntry { readonly opaque: THREE.Mesh; readonly cutout: THREE.Mesh; readonly water: THREE.Mesh; }
+interface ChunkEntry { readonly opaque: THREE.Mesh; readonly cutout: THREE.Mesh; readonly water: THREE.Mesh; readonly torches: readonly Vec3[]; }
 interface ItemEntry { readonly group: THREE.Group; readonly material: THREE.MeshBasicMaterial; key: string; }
 
 class Renderer implements CraftlandsRenderer {
   readonly debris: ParticleEmitter;
+  readonly flames: ParticleEmitter;
   readonly atlasCanvas: HTMLCanvasElement;
   private readonly renderer: THREE.WebGLRenderer;
   private readonly scene = new THREE.Scene();
@@ -291,6 +293,18 @@ class Renderer implements CraftlandsRenderer {
       lighting: { ambient: 0.6, intensity: 0.7, direction: { x: 0.4, y: 1, z: 0.35 } },
       blending: "normal",
     });
+    // Torch flames and smoke: tiny rising billboards, emitted each frame above nearby torches.
+    this.flames = createParticleEmitter(this.scene, {
+      capacity: 256,
+      seed: 11,
+      shape: { kind: "box", halfExtents: { x: 0.04, y: 0.02, z: 0.04 } },
+      speed: [0.05, 0.25],
+      lifetimeMs: [350, 700],
+      size: [0.05, 0.09],
+      acceleration: { x: 0, y: 0.6, z: 0 },
+      drag: 0.4,
+      blending: "additive",
+    });
     this.resize(testMode ? 1280 : innerWidth, testMode ? 720 : innerHeight);
   }
 
@@ -372,7 +386,10 @@ class Renderer implements CraftlandsRenderer {
     water.renderOrder = 10;
     cutout.renderOrder = 1;
     this.scene.add(opaque, cutout, water);
-    this.chunks.set(key, { opaque, cutout, water });
+    const torches: Vec3[] = [];
+    const torchId = blockByKey("torch")!.id;
+    for (let y = 0; y < HEIGHT; y += 1) for (let lz = 0; lz < CHUNK; lz += 1) for (let lx = 0; lx < CHUNK; lx += 1) if (chunk.blocks[(y * CHUNK + lz) * CHUNK + lx] === torchId) torches.push({ x: cx * CHUNK + lx + 0.5, y: y + 0.85, z: cz * CHUNK + lz + 0.5 });
+    this.chunks.set(key, { opaque, cutout, water, torches });
     this.chunkRebuilds += 1;
   }
 
@@ -605,6 +622,12 @@ class Renderer implements CraftlandsRenderer {
       this.handItemMaterial.color.setScalar(brightness);
       this.handArmMaterial.color.setScalar(brightness);
       this.mobs.sync(snapshot.mobs, snapshot.time, (x, y, z) => this.brightnessAt(x, y, z));
+      if (!this.testMode && this.frameCount % 3 === 0) {
+        for (const entry of this.chunks.values()) for (const torch of entry.torches) {
+          if (Math.abs(torch.x - eye.x) > 24 || Math.abs(torch.z - eye.z) > 24) continue;
+          this.flames.emit(1, { position: { x: torch.x, y: torch.y, z: torch.z }, color: (this.frameCount % 6 === 0) ? 0xffd14a : 0x555555, seed: (this.frameCount * 7 + Math.floor(torch.x) * 13 + Math.floor(torch.z) * 31) >>> 0 });
+        }
+      }
       this.mobs.setPlayerModel(snapshot.thirdPerson && snapshot.phase !== "title" ? { position: snapshot.player.position, yaw: snapshot.player.yaw, pitch: snapshot.player.pitch, walkPhase: snapshot.player.walkPhase, swing: this.swing, sneaking: snapshot.player.sneaking, hurtTicks: snapshot.player.hurtTicks } : null);
       this.highlight.visible = this.highlight.visible && snapshot.phase === "playing";
     }

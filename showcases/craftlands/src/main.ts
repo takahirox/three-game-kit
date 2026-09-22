@@ -61,6 +61,7 @@ const hud = requireElement<HTMLElement>("#hud");
 const statusElement = requireElement<HTMLElement>("#status");
 const params = new URLSearchParams(location.search);
 const mode: HostMode = params.get("test") === "1" ? "test" : "normal";
+document.body.dataset["mode"] = mode;
 const seedParam = Number(params.get("seed"));
 const distanceParam = Number(params.get("distance"));
 const hostErrors: HostError[] = [];
