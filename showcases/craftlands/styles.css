@@ -17,6 +17,9 @@ body:has(.screen.title:not([hidden])) #status { opacity: 0; }
 #hud.is-low-health #hearts i { animation: heart-jitter .35s steps(2) infinite; }
 #hud.is-low-health #hearts i:nth-child(odd) { animation-delay: .17s; }
 @keyframes heart-jitter { from { transform: translateY(0); } to { transform: translateY(-2px); } }
+.burning { position: absolute; inset: auto 0 0; height: 45%; background: linear-gradient(#ff6a0000, #ff7a1a99 60%, #ffb040cc); opacity: 0; }
+#hud.is-burning .burning { opacity: 1; animation: burn .18s steps(2) infinite alternate; }
+@keyframes burn { from { transform: translateY(0) scaleY(1); } to { transform: translateY(6px) scaleY(.94); } }
 .crosshair { position: absolute; left: 50%; top: 50%; width: 18px; height: 18px; transform: translate(-50%, -50%); mix-blend-mode: difference; }
 .crosshair::before, .crosshair::after { content: ""; position: absolute; background: #ddd; }
 .crosshair::before { left: 8px; top: 0; width: 2px; height: 18px; } .crosshair::after { top: 8px; left: 0; width: 18px; height: 2px; }

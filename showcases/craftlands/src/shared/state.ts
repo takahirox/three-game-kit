@@ -33,6 +33,7 @@ export interface PlayerSnapshot {
   readonly grounded: boolean;
   readonly inWater: boolean;
   readonly eyeInWater: boolean;
+  readonly inLava: boolean;
   readonly sprinting: boolean;
   readonly sneaking: boolean;
   readonly flying: boolean;

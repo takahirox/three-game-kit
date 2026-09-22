@@ -1578,7 +1578,7 @@ class Game implements CraftlandsGame {
       mode: this.mode,
       seed: this.world.seed,
       spawn: this.spawn,
-      player: Object.freeze({ position: player.position, velocity: player.velocity, yaw: player.yaw, pitch: player.pitch, grounded: player.grounded, inWater: player.inWater, eyeInWater: player.eyeInWater, sprinting: player.sprinting, sneaking: player.sneaking, flying: player.flying, health: player.health, maximumHealth: TUNING.maximumHealth, hunger: player.hunger, saturation: player.saturation, air: player.air, xp: player.xp, level: player.level, xpProgress: player.xp / xpForLevel(player.level), hurtTicks: player.hurtTicks, eyeHeight: this.eyeHeight(), walkPhase: player.walkPhase }),
+      player: Object.freeze({ position: player.position, velocity: player.velocity, yaw: player.yaw, pitch: player.pitch, grounded: player.grounded, inWater: player.inWater, eyeInWater: player.eyeInWater, inLava: player.inLava, sprinting: player.sprinting, sneaking: player.sneaking, flying: player.flying, health: player.health, maximumHealth: TUNING.maximumHealth, hunger: player.hunger, saturation: player.saturation, air: player.air, xp: player.xp, level: player.level, xpProgress: player.xp / xpForLevel(player.level), hurtTicks: player.hurtTicks, eyeHeight: this.eyeHeight(), walkPhase: player.walkPhase }),
       move: this.move,
       held: this.held,
       target: this.target,
