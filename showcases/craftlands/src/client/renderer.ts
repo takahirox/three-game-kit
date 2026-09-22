@@ -499,10 +499,15 @@ class Renderer implements CraftlandsRenderer {
       const sky = SKY_NIGHT.clone().lerp(SKY_DAY, daylight).lerp(SKY_DAWN, dawn * daylight * 0.7);
       const fogColor = SKY_NIGHT.clone().lerp(FOG_DAY, daylight).lerp(SKY_DAWN, dawn * daylight * 0.6);
       if (underwater) { sky.set(0x0d2f6b); fogColor.set(0x0d2f6b); }
-      const caveDark = this.world === null ? 1 : Math.max(0.35, this.world.skyLight(Math.floor(this.eye.x), Math.floor(this.eye.y), Math.floor(this.eye.z)) / 15);
+      // Underground the horizon fog goes nearly black so unloaded space beyond a cavern never reads as sky.
+      const eyeSky = this.world === null ? 15 : this.world.skyLight(Math.floor(this.eye.x), Math.floor(this.eye.y), Math.floor(this.eye.z));
+      const caveDark = Math.max(0.08, Math.pow(eyeSky / 15, 1.5));
       (this.scene.background as THREE.Color).copy(sky).lerp(fogColor.clone().multiplyScalar(caveDark), 1 - caveDark);
-      const fogNear = underwater ? 1 : this.renderDistance * CHUNK * 0.55;
-      const fogFar = underwater ? 16 : this.renderDistance * CHUNK * 0.95;
+      this.sunDisc.visible = this.sunDisc.visible && caveDark > 0.5;
+      this.moonDisc.visible = this.moonDisc.visible && caveDark > 0.5;
+      this.clouds.visible = caveDark > 0.3;
+      const fogNear = underwater ? 1 : this.renderDistance * CHUNK * 0.72;
+      const fogFar = underwater ? 16 : this.renderDistance * CHUNK * 1.0;
       for (const material of [this.opaqueMaterial, this.cutoutMaterial, this.waterMaterial]) {
         material.uniforms["daylight"]!.value = this.daylight;
         (material.uniforms["fogColor"]!.value as THREE.Color).copy(fogColor).multiplyScalar(underwater ? 1 : caveDark);
@@ -551,7 +556,7 @@ class Renderer implements CraftlandsRenderer {
       this.handBlock.rotation.set(0.1 - swingAngle * 0.9, -0.6 - swingAngle * 0.4, 0.05);
       this.handItem.position.set(0.62 + bobX, -0.5 + bobY - swingAngle * 0.3 - eat, -0.95 - swingAngle * 0.15);
       this.handItem.rotation.set(-0.25 - swingAngle * 1.2, -0.45 - swingAngle * 0.5, 0.35);
-      this.handArm.position.set(0.6 + bobX, -0.62 + bobY - swingAngle * 0.35, -0.85 - swingAngle * 0.2);
+      this.handArm.position.set(0.66 + bobX, -0.7 + bobY - swingAngle * 0.35, -0.85 - swingAngle * 0.2);
       this.handArm.rotation.set(-0.55 - swingAngle * 1.1, -0.3 - swingAngle * 0.4, 0.25);
       this.handVisible = snapshot.phase === "playing" && !snapshot.thirdPerson && !snapshot.hudHidden;
       const brightness = this.brightnessAt(eye.x, eye.y, eye.z);

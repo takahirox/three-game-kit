@@ -228,7 +228,8 @@ export function meshChunk(world: World, chunk: Chunk, tileUv: TileUv): ChunkMesh
         continue;
       }
       if (neighbourDefinition.opaque && neighbourDefinition.solid) continue;
-      if (!definition.opaque && neighbour === id) continue;
+      // Glass, ice and water hide faces between equal neighbours; leaves keep every face like Minecraft's fancy graphics so holes never line up.
+      if (!definition.opaque && neighbour === id && definition.tint !== "foliage") continue;
       if (neighbour === WATER && !definition.opaque && definition.solid && face.normal[1] === 1) continue;
       const ao: [number, number, number, number] = [3, 3, 3, 3];
       const light: (readonly [number, number])[] = [];
