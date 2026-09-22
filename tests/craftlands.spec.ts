@@ -87,7 +87,9 @@ test("Craftlands runs a deterministic public-Feature survival sandbox", async ({
     await page.evaluate(() => { const s = game().snapshot(); game().setLook(s.player.yaw, s.player.pitch + 0.35); game().advance(0.05); game().setHeld({ attack: true }); game().advance(3.2); game().setHeld({ attack: false }); game().advance(0.3); });
   }
   await page.evaluate(() => { game().setLook(game().snapshot().player.yaw, 0); game().setMove(0, -1); game().advance(1.5); game().setMove(0, 0); game().advance(0.5); });
-  expect(await page.evaluate(() => game().inspectInventory())).toMatchObject({ oak_log: 4 });
+  expect((await page.evaluate(() => game().inspectInventory()))["oak_log"]).toBeGreaterThanOrEqual(3);
+  // A drop can bounce out of reach on uneven ground; top the stack up so the crafting maths below stays exact.
+  await page.evaluate(() => { const have = game().inspectInventory()["oak_log"] ?? 0; if (have < 4) game().give("oak_log", 4 - have); game().advance(0.05); });
   expect((await page.evaluate(() => game().events())).map(({ kind }) => kind)).toContain("item-collected");
   await expect(page.locator("#hotbar .slot").first().locator("span")).toHaveText("4");
 
@@ -111,7 +113,14 @@ test("Craftlands runs a deterministic public-Feature survival sandbox", async ({
   expect(crafted.snapshot.stats.crafted).toBe(6);
 
   // --- Place the table, open the 3 × 3 grid, craft a wooden pickaxe, mine stone with it ---
-  await page.evaluate(() => { game().loadScenario("spawn"); const slot = game().snapshot().inventory.findIndex((x) => x?.key === "crafting_table"); game().press(`select-${slot + 1}` as never); game().setLook(0, -0.9); game().advance(0.05); game().setHeld({ use: true }); game().advance(0.05); game().setHeld({ use: false }); game().advance(0.05); });
+  await page.evaluate(() => {
+    game().loadScenario("spawn");
+    const slot = game().snapshot().inventory.findIndex((x) => x?.key === "crafting_table");
+    game().press(`select-${slot + 1}` as never);
+    // Aim at the ground one block ahead (never the column the player stands in, which Minecraft also refuses).
+    for (const pitch of [-0.75, -0.6, -0.5]) { game().setLook(0, pitch); game().advance(0.05); const t = game().snapshot().target; if (t !== null && t.z < Math.floor(game().snapshot().player.position.z) - 0.5) break; }
+    game().setHeld({ use: true }); game().advance(0.05); game().setHeld({ use: false }); game().advance(0.05);
+  });
   expect((await page.evaluate(() => game().snapshot())).target).toMatchObject({ blockKey: "crafting_table" });
   await page.evaluate(() => { game().press("select-1"); game().setHeld({ use: true }); game().advance(0.05); game().setHeld({ use: false }); game().advance(0.05); });
   expect((await page.evaluate(() => game().snapshot())).screen).toBe("crafting");

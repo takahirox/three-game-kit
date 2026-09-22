@@ -153,7 +153,7 @@ export const TUNING = Object.freeze({
   maximumAir: 300,
   regenIntervalTicks: 60 * 4,
   starveIntervalTicks: 60 * 4,
-  pickupRadius: 1.2,
+  pickupRadius: 1.5,
   itemPickupDelayTicks: 20,
   dropPickupDelayTicks: 60 * 2,
   eatTicks: 96,
