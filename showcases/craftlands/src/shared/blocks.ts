@@ -45,6 +45,7 @@ export const CLAY = 39;
 export const SAPLING = 40;
 export const CHEST = 41;
 export const BED = 42;
+export const SNOW_LAYER = 43;
 
 /** Atlas tile indices: a 16 × 16 grid of 16 px tiles (256 × 256 px), row-major. Rows 0–3 are blocks, 4–7 items, 8–11 mob skins. */
 export const TILE = Object.freeze({
@@ -85,6 +86,8 @@ export interface BlockDefinition {
   /** Experience orbs dropped when mined with the correct tool. */
   readonly xp: Readonly<[number, number]>;
   readonly replaceable: boolean;
+  /** Height of slab-shaped blocks in block units. */
+  readonly slabHeight: number;
   readonly sound: "stone" | "grass" | "gravel" | "sand" | "wood" | "cloth" | "glass" | "snow" | "none";
 }
 
@@ -109,6 +112,7 @@ interface BlockOptions {
   readonly color: number;
   readonly xp?: readonly [number, number];
   readonly replaceable?: boolean;
+  readonly slabHeight?: number;
   readonly sound?: BlockDefinition["sound"];
 }
 
@@ -137,6 +141,7 @@ function block(id: number, key: string, name: string, options: BlockOptions): Bl
     color: options.color,
     xp: Object.freeze<[number, number]>([options.xp?.[0] ?? 0, options.xp?.[1] ?? 0]),
     replaceable: options.replaceable ?? false,
+    slabHeight: options.slabHeight ?? 0.5,
     sound: options.sound ?? "stone",
   });
 }
@@ -184,6 +189,7 @@ const DEFINITIONS: readonly BlockDefinition[] = [
   block(CLAY, "clay", "Clay", { hardness: 0.6, tool: "shovel", drop: "clay_ball", dropCount: [4, 4], top: TILE.clay, color: 0x9ea4b0, sound: "gravel" }),
   block(SAPLING, "sapling", "Oak Sapling", { solid: false, opaque: false, shape: "cross", hardness: 0, top: TILE.sapling, color: 0x4f8a2a, sound: "grass" }),
   block(BED, "bed", "Bed", { opaque: false, shape: "slab", hardness: 0.2, top: TILE.bedTop, side: TILE.bedSide, bottom: TILE.planks, color: 0xb02e26, sound: "wood" }),
+  block(SNOW_LAYER, "snow", "Snow", { solid: false, opaque: false, shape: "slab", slabHeight: 0.125, hardness: 0.1, tool: "shovel", drop: "snowball", top: TILE.snow, color: 0xf4fbfb, replaceable: true, sound: "snow" }),
   block(CHEST, "chest", "Chest", { opaque: false, hardness: 2.5, tool: "axe", top: TILE.chestTop, side: TILE.chestSide, bottom: TILE.chestTop, front: TILE.chestFront, color: 0x9a6e34, sound: "wood" }),
 ];
 

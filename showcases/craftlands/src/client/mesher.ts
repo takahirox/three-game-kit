@@ -243,7 +243,7 @@ export function meshChunk(world: World, chunk: Chunk, tileUv: TileUv): ChunkMesh
       if (snowy) tile = face.tile === "top" ? TILE.snow : face.tile === "bottom" ? TILE.dirt : TILE.grassSideSnow;
       const tint = snowy ? [1, 1, 1] as const : tintFor(definition, biome, face.tile);
       const builder = definition.opaque ? opaque : cutout;
-      builder.quad(x, y, z, face, tileUv(tile), ao, light, tint, definition.shape === "slab" ? 0.5 : 0, definition.key === "cactus" && face.normal[1] === 0 ? 1 / 16 : 0);
+      builder.quad(x, y, z, face, tileUv(tile), ao, light, tint, definition.shape === "slab" ? 1 - definition.slabHeight : 0, definition.key === "cactus" && face.normal[1] === 0 ? 1 / 16 : 0);
     }
   }
   return Object.freeze({ opaque: opaque.build(), cutout: cutout.build(), water: water.build() });

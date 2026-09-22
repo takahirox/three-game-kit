@@ -69,10 +69,12 @@ varying vec2 vUv;
 varying vec3 vColor;
 varying vec2 vLight;
 varying float vDist;
+varying vec3 vWorld;
 void main() {
   vUv = uv;
   vColor = color;
   vLight = light;
+  vWorld = position;
   vec4 mv = modelViewMatrix * vec4(position, 1.0);
   vDist = length(mv.xyz);
   gl_Position = projectionMatrix * mv;
@@ -86,13 +88,18 @@ uniform float fogNear;
 uniform float fogFar;
 uniform float alphaTest;
 uniform float opacity;
+uniform float ripple;
+uniform float time;
 varying vec2 vUv;
 varying vec3 vColor;
 varying vec2 vLight;
 varying float vDist;
+varying vec3 vWorld;
 void main() {
   vec4 tex = texture2D(atlas, vUv);
   if (tex.a < alphaTest) discard;
+  // Water shimmers with two slow travelling waves, in place of Minecraft's animated water frames.
+  tex.rgb *= 1.0 + ripple * 0.08 * (sin(vWorld.x * 1.7 + vWorld.z * 0.9 + time * 1.6) + sin(vWorld.z * 2.3 - vWorld.x * 0.6 - time * 1.1));
   float sky = vLight.x * daylight;
   float level = max(sky, vLight.y);
   float brightness = level / (4.0 - 3.0 * level);
@@ -194,7 +201,7 @@ class Renderer implements CraftlandsRenderer {
     const chunkMaterial = (alphaTest: number, opacity: number, transparent: boolean, doubleSide: boolean): THREE.ShaderMaterial => this.mat(new THREE.ShaderMaterial({
       vertexShader: CHUNK_VERTEX,
       fragmentShader: CHUNK_FRAGMENT,
-      uniforms: { atlas: { value: this.atlas }, daylight: { value: 1 }, fogColor: { value: FOG_DAY.clone() }, fogNear: { value: 60 }, fogFar: { value: 120 }, alphaTest: { value: alphaTest }, opacity: { value: opacity } },
+      uniforms: { atlas: { value: this.atlas }, daylight: { value: 1 }, fogColor: { value: FOG_DAY.clone() }, fogNear: { value: 60 }, fogFar: { value: 120 }, alphaTest: { value: alphaTest }, opacity: { value: opacity }, ripple: { value: transparent ? 1 : 0 }, time: { value: 0 } },
       transparent,
       depthWrite: !transparent,
       side: doubleSide ? THREE.DoubleSide : THREE.FrontSide,
@@ -539,6 +546,7 @@ class Renderer implements CraftlandsRenderer {
         (material.uniforms["fogColor"]!.value as THREE.Color).copy(fogColor).multiplyScalar(underwater ? 1 : caveDark);
         material.uniforms["fogNear"]!.value = fogNear;
         material.uniforms["fogFar"]!.value = fogFar;
+        material.uniforms["time"]!.value = snapshot.time % 1000;
       }
       const eye = this.eye;
       this.sunDisc.position.set(eye.x + Math.cos(theta) * SUN_RADIUS, eye.y + sunHeight * SUN_RADIUS, eye.z);

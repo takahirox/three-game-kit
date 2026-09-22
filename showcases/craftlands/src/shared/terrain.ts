@@ -3,7 +3,7 @@
  * (seed, x, z) so any runtime — browser or a future authoritative server — generates identical chunks.
  */
 import {
-  AIR, BEDROCK, BIRCH_LEAVES, BIRCH_LOG, CACTUS, CLAY, COAL_ORE, DANDELION, DEAD_BUSH, DIAMOND_ORE, DIRT, GOLD_ORE, GRASS, GRAVEL, IRON_ORE, LAVA, LEAVES, LOG, POPPY, SAND, SANDSTONE, SNOW, STONE, TALL_GRASS, WATER,
+  AIR, BEDROCK, BIRCH_LEAVES, BIRCH_LOG, CACTUS, CLAY, COAL_ORE, DANDELION, DEAD_BUSH, DIAMOND_ORE, DIRT, GOLD_ORE, GRASS, GRAVEL, IRON_ORE, LAVA, LEAVES, LOG, POPPY, SAND, SANDSTONE, SNOW_LAYER, STONE, TALL_GRASS, WATER,
 } from "./blocks.js";
 import { fbm2, hash2, hash3, valueNoise3 } from "./noise.js";
 
@@ -61,9 +61,9 @@ export class TerrainGenerator {
       if (height < SEA_LEVEL - 1) biome = BIOME.ocean;
       else if (height <= SEA_LEVEL + 1) biome = BIOME.beach;
       else if (height > SEA_LEVEL + 34 || (erosion > 0.62 && height > SEA_LEVEL + 20)) biome = BIOME.mountains;
-      else if (temperature < 0.35) biome = BIOME.snowy;
-      else if (temperature > 0.66 && humidity < 0.45) biome = BIOME.desert;
-      else if (humidity > 0.58) biome = temperature > 0.5 ? BIOME.forest : BIOME.birchForest;
+      else if (temperature < 0.42) biome = BIOME.snowy;
+      else if (temperature > 0.6 && humidity < 0.5) biome = BIOME.desert;
+      else if (humidity > 0.56) biome = temperature > 0.5 ? BIOME.forest : BIOME.birchForest;
       else biome = BIOME.plains;
     }
     const info = Object.freeze({ height, biome });
@@ -105,7 +105,7 @@ export class TerrainGenerator {
         blocks[chunkIndex(lx, y, lz)] = id;
       }
       for (let y = height + 1; y <= SEA_LEVEL; y += 1) blocks[chunkIndex(lx, y, lz)] = biome === BIOME.snowy && y === SEA_LEVEL ? WATER : WATER;
-      if (biome === BIOME.snowy && height > SEA_LEVEL && height + 1 < HEIGHT && blocks[chunkIndex(lx, height + 1, lz)] === AIR) blocks[chunkIndex(lx, height + 1, lz)] = SNOW;
+      if (biome === BIOME.snowy && height > SEA_LEVEL && height + 1 < HEIGHT && blocks[chunkIndex(lx, height + 1, lz)] === AIR) blocks[chunkIndex(lx, height + 1, lz)] = SNOW_LAYER;
     }
     this.placeOres(cx, cz, blocks);
     this.decorate(cx, cz, blocks);

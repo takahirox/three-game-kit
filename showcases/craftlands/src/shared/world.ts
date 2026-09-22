@@ -302,7 +302,7 @@ export class World {
       for (let dx = -radius; dx <= radius; dx += 8) for (let dz = -radius; dz <= radius; dz += 8) {
         if (Math.max(Math.abs(dx), Math.abs(dz)) !== radius) continue;
         const column = this.generator.column(dx, dz);
-        if (column.height <= SEA_LEVEL + 1 || column.height > SEA_LEVEL + 24 || column.biome === 0 || column.biome === 1 || column.biome === 8 || column.biome === 5) continue;
+        if (column.height <= SEA_LEVEL + 1 || column.height > SEA_LEVEL + 24 || column.biome === 0 || column.biome === 1 || column.biome === 8 || column.biome === 5 || column.biome === 6) continue;
         let flat = true;
         for (let nx = -2; nx <= 2 && flat; nx += 1) for (let nz = -2; nz <= 2; nz += 1) {
           if (Math.abs(this.generator.column(dx + nx, dz + nz).height - column.height) > 1) { flat = false; break; }
