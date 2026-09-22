@@ -256,6 +256,7 @@ function createCraftlandsHudAdapter(root: HTMLElement, onAction: (action: string
       else if (nameTimer > 0) { nameTimer -= 1; if (nameTimer === 0) itemName.classList.remove("show"); }
       root.classList.toggle("is-underwater", snapshot.player.eyeInWater);
       root.classList.toggle("is-hurt", snapshot.player.hurtTicks > 0);
+      root.classList.toggle("is-low-health", snapshot.mode !== "creative" && snapshot.player.health <= 4);
       root.classList.toggle("hud-hidden", snapshot.hudHidden);
       saved.hidden = !(snapshot.lastSaveTick !== null && snapshot.tick - snapshot.lastSaveTick < 90);
       const toast = requireElement<HTMLElement>("#toast");

@@ -13,6 +13,10 @@ body:has(.screen.title:not([hidden])) #status { opacity: 0; }
 #hud.is-underwater .underwater { opacity: .35; }
 .hurt { position: absolute; inset: 0; background: radial-gradient(circle, #ff000000 40%, #ff000066 100%); opacity: 0; transition: opacity .08s ease; }
 #hud.is-hurt .hurt { opacity: 1; }
+#hud.is-hurt #hearts { filter: brightness(1.8); }
+#hud.is-low-health #hearts i { animation: heart-jitter .35s steps(2) infinite; }
+#hud.is-low-health #hearts i:nth-child(odd) { animation-delay: .17s; }
+@keyframes heart-jitter { from { transform: translateY(0); } to { transform: translateY(-2px); } }
 .crosshair { position: absolute; left: 50%; top: 50%; width: 18px; height: 18px; transform: translate(-50%, -50%); mix-blend-mode: difference; }
 .crosshair::before, .crosshair::after { content: ""; position: absolute; background: #ddd; }
 .crosshair::before { left: 8px; top: 0; width: 2px; height: 18px; } .crosshair::after { top: 8px; left: 0; width: 18px; height: 2px; }
