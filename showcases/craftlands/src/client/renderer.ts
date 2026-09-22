@@ -465,7 +465,8 @@ class Renderer implements CraftlandsRenderer {
   prepare(snapshot: CraftlandsSnapshot, events: readonly CraftlandsEvent[]): void {
     if (this.isDisposed) return;
     this.snapshot = snapshot;
-    this.flushDirty(this.testMode ? 64 : 4);
+    // Meshing costs ~10 ms per chunk on the main thread; two per frame keeps streaming hitches short while edits near the player rebuild first.
+    this.flushDirty(this.testMode ? 64 : 2);
     const target = snapshot.target;
     const playing = snapshot.phase === "playing" && snapshot.screen === "none";
     this.highlight.visible = target !== null && snapshot.phase === "playing";

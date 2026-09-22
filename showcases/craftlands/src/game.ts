@@ -616,7 +616,7 @@ class Game implements CraftlandsGame {
     if (uiOpen) { this.held = Object.freeze({ ...this.held, attack: false, use: false }); }
 
     // Streaming: a few chunks per tick near the player, unload far ones.
-    this.loadChunksAround(player.position, this.simulationDistance, this.testMode ? 64 : 3);
+    this.loadChunksAround(player.position, this.simulationDistance, this.testMode ? 64 : 2);
     if (tick % 120 === 0) this.world.unloadBeyond(Math.floor(player.position.x / CHUNK), Math.floor(player.position.z / CHUNK), this.simulationDistance + 2);
 
     this.stepMovement(tick);
