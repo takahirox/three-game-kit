@@ -134,6 +134,7 @@ function clampUnit(value: number): number {
 
 interface ItemEntity { id: number; key: string; count: number; damage: number; position: Vec3; velocity: Vec3; age: number; pickupDelay: number; }
 interface Arrow { id: number; position: Vec3; velocity: Vec3; age: number; stuck: boolean; }
+interface XpOrb { id: number; position: Vec3; velocity: Vec3; value: number; age: number; }
 
 interface Player {
   position: Vec3;
@@ -231,6 +232,7 @@ class Game implements CraftlandsGame {
   private furnacePos: Vec3 | null = null;
   private items: ItemEntity[] = [];
   private arrows: Arrow[] = [];
+  private orbs: XpOrb[] = [];
   private mobs: Mob[] = [];
   private nextEntityId = 1;
   private eating = 0;
@@ -451,6 +453,7 @@ class Game implements CraftlandsGame {
     this.cursor = null;
     this.items = [];
     this.arrows = [];
+    this.orbs = [];
     this.mobs = [];
     this.nextEntityId = 1;
     this.stats = { mined: 0, placed: 0, crafted: 0, kills: 0, deaths: 0, eaten: 0, minedByKey: {} };
@@ -627,6 +630,7 @@ class Game implements CraftlandsGame {
     this.stepItems(tick);
     this.stepMobs(tick);
     this.stepArrows(tick);
+    this.stepOrbs();
     this.stepFurnaces();
     this.stepBlocks(tick);
     this.stepAdvancements(tick);
@@ -929,7 +933,7 @@ class Game implements CraftlandsGame {
         const count = definition.drop.min + Math.floor(hash3(x, y, z, this.tick) * (definition.drop.max - definition.drop.min + 1));
         if (count > 0) this.spawnItem(definition.drop.key, count, 0, vec3(x + 0.5, y + 0.3, z + 0.5), hash3(x, y, z, 7) * Math.PI * 2, 0.8);
         const xp = definition.xp[0] + Math.floor(hash3(x, y, z, 11) * (definition.xp[1] - definition.xp[0] + 1));
-        if (xp > 0) this.addXp(xp);
+        if (xp > 0) this.spawnOrbs(xp, vec3(x + 0.5, y + 0.5, z + 0.5), tick);
       }
       if (definition.bonus !== null && hash3(x, y, z, 13) < definition.bonus.chance) this.spawnItem(definition.bonus.key, 1, 0, vec3(x + 0.5, y + 0.3, z + 0.5), 0, 0.5);
       if (tool.type !== "none" && (definition.tool === tool.type || definition.hardness > 0)) this.inventory.set(this.selectedSlot, wearTool(this.heldStack()));
@@ -1065,7 +1069,7 @@ class Game implements CraftlandsGame {
       } else if (event.kind === "mob-died") {
         this.stats.kills += 1;
         for (const drop of event.drops) this.spawnItem(drop.key, drop.count, 0, vec3(event.x, event.y + 0.5, event.z), hash3(event.mobId, tick, 1, 2) * Math.PI * 2, 1);
-        if (event.xp > 0) this.addXp(event.xp);
+        if (event.xp > 0) this.spawnOrbs(event.xp, vec3(event.x, event.y + 0.5, event.z), tick);
         this.renderer?.emitDebris(vec3(event.x, event.y + 0.5, event.z), 0xdddddd, 16, tick);
         this.emit("mob-killed", event.mobKind, this.stats.kills);
       } else if (event.kind === "explosion") {
@@ -1126,6 +1130,43 @@ class Game implements CraftlandsGame {
     this.renderer?.emitDebris(vec3(x, y, z), 0x777777, 80, tick);
     this.dirtySinceSave = true;
     this.emit("explosion", `${Math.floor(x)},${Math.floor(y)},${Math.floor(z)}`, radius);
+  }
+
+  /** Splits experience into Minecraft-style orbs that drift toward the player and are collected on contact. */
+  private spawnOrbs(amount: number, origin: Vec3, tick: number): void {
+    let remaining = amount;
+    let index = 0;
+    while (remaining > 0 && index < 8) {
+      const value = remaining >= 7 ? 7 : remaining >= 3 ? 3 : 1;
+      remaining -= value;
+      const angle = hash3(tick, index, 21, this.world.seed) * Math.PI * 2;
+      this.orbs.push({ id: this.nextEntityId++, position: origin, velocity: vec3(Math.cos(angle) * 1.5, 3, Math.sin(angle) * 1.5), value, age: 0 });
+      index += 1;
+    }
+    if (this.orbs.length > 96) this.orbs.splice(0, this.orbs.length - 96);
+  }
+
+  private stepOrbs(): void {
+    const player = this.player;
+    const survivors: XpOrb[] = [];
+    for (const orb of this.orbs) {
+      orb.age += 1;
+      if (orb.age > 60 * 60 * 5) continue;
+      const dx = player.position.x - orb.position.x;
+      const dy = player.position.y + 0.9 - orb.position.y;
+      const dz = player.position.z - orb.position.z;
+      const distance = Math.hypot(dx, dy, dz);
+      if (distance < 1 && orb.age > 10 && this.phase === "playing") { this.addXp(orb.value); continue; }
+      let vx = orb.velocity.x * 0.9;
+      let vy = orb.velocity.y - 12 * DT;
+      let vz = orb.velocity.z * 0.9;
+      if (distance < 8) { const pull = (1 - distance / 8) * 40 * DT; vx += dx / distance * pull * 6; vy += dy / distance * pull * 6; vz += dz / distance * pull * 6; }
+      const resolved = moveWithCollision(this.world, orb.position, 0.12, 0.25, vx * DT, vy * DT, vz * DT);
+      orb.position = resolved.position;
+      orb.velocity = vec3(resolved.hitX ? 0 : vx, resolved.hitY ? 0 : vy, resolved.hitZ ? 0 : vz);
+      survivors.push(orb);
+    }
+    this.orbs = survivors;
   }
 
   private addXp(amount: number): void {
@@ -1538,6 +1579,7 @@ class Game implements CraftlandsGame {
       chest: (() => { const state = this.currentChest(); return state === null ? null : Object.freeze(state.slots.map((slot) => (slot === null ? null : stack(slot.key, slot.count, slot.damage)))); })(),
       heldItem: this.heldStack(),
       items: Object.freeze(items),
+      orbs: Object.freeze(this.orbs.map((orb) => Object.freeze({ id: orb.id, position: orb.position, value: orb.value }))),
       arrows: Object.freeze(this.arrows.map((arrow) => Object.freeze({ id: arrow.id, position: arrow.position, velocity: arrow.velocity, stuck: arrow.stuck }))),
       mobs: Object.freeze(mobs),
       eating: this.eating,

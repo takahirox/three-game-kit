@@ -90,6 +90,7 @@ export interface CraftlandsSnapshot {
   readonly chest: readonly SlotValue[] | null;
   readonly heldItem: SlotValue;
   readonly items: readonly ItemEntitySnapshot[];
+  readonly orbs: readonly Readonly<{ readonly id: number; readonly position: Vec3; readonly value: number }>[];
   readonly arrows: readonly Readonly<{ readonly id: number; readonly position: Vec3; readonly velocity: Vec3; readonly stuck: boolean }>[];
   readonly mobs: readonly MobSnapshot[];
   readonly eating: number;

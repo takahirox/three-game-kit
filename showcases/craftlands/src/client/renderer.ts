@@ -153,6 +153,9 @@ class Renderer implements CraftlandsRenderer {
   private readonly mobs: MobRenderer;
   private readonly items = new Map<number, ItemEntry>();
   private readonly arrows = new Map<number, THREE.Mesh>();
+  private readonly orbs = new Map<number, THREE.Mesh>();
+  private readonly orbGeometry: THREE.PlaneGeometry;
+  private readonly orbMaterial: THREE.MeshBasicMaterial;
   private readonly arrowGeometry: THREE.BoxGeometry;
   private readonly arrowMaterial: THREE.MeshBasicMaterial;
   private readonly itemBlockGeometry: THREE.BoxGeometry;
@@ -270,6 +273,9 @@ class Renderer implements CraftlandsRenderer {
     this.handItem.visible = false;
     this.handArm.visible = false;
 
+    this.orbGeometry = this.geo(new THREE.PlaneGeometry(0.28, 0.28));
+    this.setPlaneTile(this.orbGeometry, MOB_TILE.xpOrb);
+    this.orbMaterial = this.mat(new THREE.MeshBasicMaterial({ map: this.atlas, transparent: true, alphaTest: 0.3, depthWrite: false, blending: THREE.AdditiveBlending, side: THREE.DoubleSide }));
     this.arrowGeometry = this.geo(new THREE.BoxGeometry(0.05, 0.05, 0.6));
     this.arrowMaterial = this.mat(new THREE.MeshBasicMaterial({ color: 0xd9c9a0 }));
     this.itemBlockGeometry = this.geo(new THREE.BoxGeometry(0.25, 0.25, 0.25));
@@ -475,6 +481,21 @@ class Renderer implements CraftlandsRenderer {
     if (snapshot.held.attack && target !== null && playing) this.swing = Math.max(this.swing, 0.4);
     this.syncItems(snapshot);
     this.syncArrows(snapshot);
+    this.syncOrbs(snapshot);
+  }
+
+  private syncOrbs(snapshot: CraftlandsSnapshot): void {
+    const seen = new Set<number>();
+    for (const orb of snapshot.orbs) {
+      seen.add(orb.id);
+      let mesh = this.orbs.get(orb.id);
+      if (mesh === undefined) { mesh = new THREE.Mesh(this.orbGeometry, this.orbMaterial); mesh.renderOrder = 12; this.scene.add(mesh); this.orbs.set(orb.id, mesh); }
+      mesh.position.set(orb.position.x, orb.position.y + 0.15 + Math.sin(snapshot.time * 6 + orb.id) * 0.04, orb.position.z);
+      mesh.quaternion.copy(this.camera.quaternion);
+      const pulse = 0.85 + 0.15 * Math.sin(snapshot.time * 9 + orb.id);
+      mesh.scale.setScalar(pulse * (orb.value >= 7 ? 1.4 : orb.value >= 3 ? 1.15 : 1));
+    }
+    for (const [id, mesh] of this.orbs) if (!seen.has(id)) { this.scene.remove(mesh); this.orbs.delete(id); }
   }
 
   private syncArrows(snapshot: CraftlandsSnapshot): void {
@@ -726,6 +747,8 @@ class Renderer implements CraftlandsRenderer {
     this.items.clear();
     for (const mesh of this.arrows.values()) this.scene.remove(mesh);
     this.arrows.clear();
+    for (const mesh of this.orbs.values()) this.scene.remove(mesh);
+    this.orbs.clear();
     this.mobs.dispose();
     for (const geometry of new Set(this.geometries)) geometry.dispose();
     for (const material of new Set(this.materials)) material.dispose();
