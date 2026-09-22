@@ -6,6 +6,7 @@ import type { HudState } from "@three-game-kit/shared/gameplay";
 import { createInMemorySaveAdapter, type SaveAdapter } from "@three-game-kit/shared/genre";
 import { createIconPainter, type IconPainter } from "./client/icons.js";
 import { synthesiseMusic, synthesiseSoundBank } from "./client/sounds.js";
+import { detectTouchDevice, installTouchControls, type TouchControls } from "./client/touch.js";
 import { blockByKey } from "./shared/blocks.js";
 import { createCraftlandsRenderer, type CraftlandsRenderer, type CraftlandsRendererInspection } from "./client/renderer.js";
 import { createCraftlandsGame, type CraftlandsGame, type CraftlandsLeakInspection, type CraftlandsRuntimeInspection, type CraftlandsSaveInspection, type CraftlandsWorldInspection, type SlotContainer } from "./game.js";
@@ -46,6 +47,7 @@ export interface CraftlandsHandle {
   inspectSave(): CraftlandsSaveInspection | null;
   inspectInventory(): Readonly<Record<string, number>> | null;
   inspectLeaks(): Readonly<{ hostListeners: number; rafActive: boolean; pointerLocked: boolean; hostDisposed: boolean; game: CraftlandsLeakInspection | null }>;
+  inspectTouch(): Readonly<{ enabled: boolean; moveTouch: boolean; lookTouch: boolean; holding: string | null; sneaking: boolean }>;
 }
 
 declare global { interface Window { __CRAFTLANDS__?: CraftlandsHandle; } }
@@ -62,6 +64,10 @@ const statusElement = requireElement<HTMLElement>("#status");
 const params = new URLSearchParams(location.search);
 const mode: HostMode = params.get("test") === "1" ? "test" : "normal";
 document.body.dataset["mode"] = mode;
+/** Touch UI: on by default for coarse pointers, forced with `?touch=1`, off with `?touch=0`. */
+const touchMode = params.get("touch") === "1" || (params.get("touch") !== "0" && detectTouchDevice());
+document.body.classList.toggle("is-touch", touchMode);
+let touchControls: TouchControls | null = null;
 const seedParam = Number(params.get("seed"));
 const distanceParam = Number(params.get("distance"));
 const hostErrors: HostError[] = [];
@@ -329,6 +335,7 @@ function pointerLocked(): boolean {
 
 /** Pointer lock can be refused (no user gesture, sandboxed frame); that is not a game error. */
 function lockPointer(): void {
+  if (touchMode) return;
   try {
     const outcome = canvas.requestPointerLock?.() as unknown;
     if (outcome instanceof Promise) outcome.catch(() => undefined);
@@ -374,11 +381,12 @@ listen(window, "keyup", ((event: KeyboardEvent) => {
   if (!GAME_KEYS.has(event.code)) return;
   held.delete(event.code);
   if (MOVE_KEYS.has(event.code)) { updateMove(); if ((event.code === "KeyW" || event.code === "ArrowUp") && !held.has("ControlLeft") && !held.has("ControlRight")) game?.press("sprint-end"); }
+  else if (event.code === "Space") game?.press("jump-end");
   else if (event.code === "ShiftLeft" || event.code === "ShiftRight") game?.press("sneak-end");
   else if (event.code === "ControlLeft" || event.code === "ControlRight") game?.press("sprint-end");
   stepTestFrame();
 }) as EventListener);
-listen(window, "blur", (() => { held.clear(); updateMove(); game?.press("sprint-end"); game?.press("sneak-end"); game?.press("attack-end"); game?.press("use-end"); }) as EventListener);
+listen(window, "blur", (() => { held.clear(); updateMove(); game?.press("sprint-end"); game?.press("sneak-end"); game?.press("attack-end"); game?.press("use-end"); game?.press("jump-end"); }) as EventListener);
 listen(canvas, "click", (() => {
   if (mode === "normal" && game?.snapshot().phase === "playing" && game.snapshot().screen === "none" && !pointerLocked()) lockPointer();
 }) as EventListener);
@@ -401,7 +409,7 @@ listen(document, "mousemove", ((event: MouseEvent) => {
     } else tooltip.hidden = true;
   }
   if (!pointerLocked() && mode === "normal") return;
-  if (uiCaptured()) return;
+  if (uiCaptured() || touchMode) return;
   const sensitivity = 0.0022 * options.sensitivity / 100;
   game?.look(-event.movementX * sensitivity, -event.movementY * sensitivity);
 }) as EventListener);
@@ -414,12 +422,38 @@ listen(document, "mousedown", ((event: MouseEvent) => {
     stepTestFrame();
     return;
   }
+  if (slot !== null && touchMode && slot.dataset["container"] === "inventory" && game?.snapshot().screen === "none") {
+    // Hotbar tap selects the slot in touch mode.
+    event.preventDefault();
+    game.press(`select-${Number(slot.dataset["index"]) + 1}` as Action);
+    stepTestFrame();
+    return;
+  }
   if (event.target !== canvas) return;
+  if (touchMode) return;
   if (mode === "normal" && !pointerLocked()) return;
   if (event.button === 0) game?.press("attack-start");
   if (event.button === 2) { event.preventDefault(); game?.press("use-start"); }
   stepTestFrame();
 }) as EventListener);
+let slotPressTimer: ReturnType<typeof setTimeout> | null = null;
+listen(document, "touchstart", ((event: TouchEvent) => {
+  unlockAudio();
+  const slot = (event.target as HTMLElement | null)?.closest<HTMLElement>(".panel .slot[data-container]") ?? null;
+  if (slot === null || game === null || game.snapshot().screen === "none") return;
+  if (slotPressTimer !== null) clearTimeout(slotPressTimer);
+  slotPressTimer = setTimeout(() => {
+    slotPressTimer = null;
+    game?.clickSlot(slot.dataset["container"] as SlotContainer, Number(slot.dataset["index"]), "left", true);
+    slot.dataset["longPressed"] = "1";
+    playSound("click", 0.4, 1.1);
+  }, 420);
+}) as EventListener, { passive: true });
+listen(document, "touchend", ((event: TouchEvent) => {
+  if (slotPressTimer !== null) { clearTimeout(slotPressTimer); slotPressTimer = null; }
+  const slot = (event.target as HTMLElement | null)?.closest<HTMLElement>(".panel .slot[data-container]") ?? null;
+  if (slot !== null && slot.dataset["longPressed"] === "1") { delete slot.dataset["longPressed"]; event.preventDefault(); }
+}) as EventListener, { passive: false });
 listen(document, "mouseup", ((event: MouseEvent) => {
   if (event.button === 0) game?.press("attack-end");
   if (event.button === 2) game?.press("use-end");
@@ -550,6 +584,10 @@ function loadOptions(): void {
   } catch { /* ignored */ }
 }
 
+function localStorageHasOptions(): boolean {
+  try { return localStorage.getItem(OPTIONS_KEY) !== null; } catch { return false; }
+}
+
 function saveOptions(): void {
   if (mode === "test") return;
   try { localStorage.setItem(OPTIONS_KEY, JSON.stringify(options)); } catch { /* ignored */ }
@@ -610,6 +648,7 @@ function boot(): void {
     if (action === "start") game?.start();
     if (action === "continue") game?.continueWorld();
     if (action === "respawn") game?.press("respawn");
+    if (action === "close-panel") game?.press("escape");
     if (action === "quit") game?.press("quit");
     if (action === "save") game?.press("save");
     if (action === "mode") { const current = game?.snapshot().mode; game?.setMode(current === "creative" ? "survival" : "creative"); }
@@ -618,6 +657,21 @@ function boot(): void {
   });
   game = createCraftlandsGame({ renderer, hudAdapter: adapter, saveAdapter: createSaveAdapter(), testMode: mode === "test", audio, ...(Number.isSafeInteger(seedParam) && seedParam > 0 ? { seed: seedParam } : {}), ...(Number.isSafeInteger(distanceParam) && distanceParam > 0 ? { simulationDistance: distanceParam } : {}) });
   wireSounds(game);
+  if (touchMode) {
+    const bound = game;
+    touchControls = installTouchControls(requireElement<HTMLElement>("#touch"), canvas, {
+      snapshot: () => bound.snapshot(),
+      press: (action) => { bound.press(action); stepTestFrame(); },
+      setMove: (x, z) => bound.setMove(x, z),
+      setHeld: (patch) => { bound.setHeld(patch); stepTestFrame(); },
+      look: (yaw, pitch) => bound.look(yaw, pitch),
+      sensitivity: () => options.sensitivity / 100,
+      onGesture: () => unlockAudio(),
+    });
+    requireElement<HTMLElement>("#touch").hidden = false;
+    // Phones: shorter render distance by default unless the user already chose one.
+    if (!Number.isSafeInteger(distanceParam) && !localStorageHasOptions()) options.distance = 4;
+  }
   if (Number.isSafeInteger(distanceParam) && distanceParam > 0) options.distance = distanceParam;
   else if (mode === "test") options.distance = game.inspectWorld().simulationDistance;
   applyOptions();
@@ -652,6 +706,8 @@ const handle: CraftlandsHandle = Object.freeze({
     disposed = true;
     if (raf !== null) { cancelAnimationFrame(raf); raf = null; }
     if (pointerLocked()) document.exitPointerLock();
+    touchControls?.dispose();
+    touchControls = null;
     game?.dispose();
     for (const remove of removers.splice(0)) remove();
     held.clear();
@@ -678,6 +734,7 @@ const handle: CraftlandsHandle = Object.freeze({
   inspectWorld() { return game?.inspectWorld() ?? null; },
   inspectSave() { return game?.inspectSave() ?? null; },
   inspectInventory() { return game?.inspectInventory() ?? null; },
+  inspectTouch() { return touchControls === null ? Object.freeze({ enabled: touchMode, moveTouch: false, lookTouch: false, holding: null, sneaking: false }) : Object.freeze({ enabled: true, ...touchControls.inspect() }); },
   inspectLeaks() { return Object.freeze({ hostListeners: removers.length, rafActive: raf !== null, pointerLocked: pointerLocked(), hostDisposed: disposed, game: game?.inspectLeaks() ?? null }); },
 });
 

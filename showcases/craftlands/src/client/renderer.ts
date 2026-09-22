@@ -190,7 +190,9 @@ class Renderer implements CraftlandsRenderer {
     // Minecraft shades in gamma space: raw texel × light with no linear conversion anywhere.
     THREE.ColorManagement.enabled = false;
     this.renderer = new THREE.WebGLRenderer({ canvas, antialias: false, powerPreference: "high-performance" });
-    this.renderer.setPixelRatio(testMode ? 1 : Math.min(devicePixelRatio, 2));
+    // Phones ship 3× screens; rendering at more than 1.5× costs far more than the pixel art gains.
+    const coarse = typeof matchMedia === "function" && matchMedia("(pointer: coarse)").matches;
+    this.renderer.setPixelRatio(testMode ? 1 : Math.min(devicePixelRatio, coarse ? 1.5 : 2));
     this.renderer.outputColorSpace = THREE.LinearSRGBColorSpace;
     this.renderer.info.autoReset = false;
     this.scene.background = SKY_DAY.clone();

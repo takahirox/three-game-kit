@@ -270,3 +270,95 @@ test("Craftlands runs a deterministic public-Feature survival sandbox", async ({
   expect(leaks.leaks).toMatchObject({ hostListeners: 0, rafActive: false, pointerLocked: false, hostDisposed: true, game: { activeListeners: 0, activeFeatures: 0, disposed: true } });
   expect(leaks.renderer).toMatchObject({ disposed: true, chunks: 0 });
 });
+
+test.describe("touch", () => {
+  test.use({ hasTouch: true, isMobile: true, viewport: { width: 844, height: 390 } });
+
+  test("Craftlands plays with pocket-edition style touch controls", async ({ page }, testInfo) => {
+    const pageErrors: string[] = [];
+    page.on("pageerror", (error) => pageErrors.push(error.message));
+    await page.goto("/showcases/craftlands/index.html?test=1&distance=2&touch=1");
+    await expect.poll(() => page.evaluate(() => window.__CRAFTLANDS__?.ready), { timeout: 60_000 }).toBe(true);
+    await page.evaluate(() => { Object.assign(window, { game: () => window.__CRAFTLANDS__! }); });
+    expect(await page.evaluate(() => document.body.classList.contains("is-touch"))).toBe(true);
+    await page.tap('[data-hud-action="start"]');
+    await page.evaluate(() => game().advance(0.5));
+    expect((await page.evaluate(() => game().snapshot())).phase).toBe("playing");
+    await expect(page.locator('[data-touch="jump"]')).toBeVisible();
+    await expect(page.locator("#lock-hint")).toBeHidden();
+
+    const touch = (type: string, touches: readonly { id: number; x: number; y: number }[]): Promise<void> => page.evaluate(([kind, list]) => {
+      const canvas = document.querySelector("#game-canvas")!;
+      const items = list.map((t) => new Touch({ identifier: t.id, target: canvas, clientX: t.x, clientY: t.y, pageX: t.x, pageY: t.y }));
+      const ending = kind === "touchend";
+      canvas.dispatchEvent(new TouchEvent(kind, { bubbles: true, cancelable: true, touches: ending ? [] : items, changedTouches: items, targetTouches: ending ? [] : items }));
+    }, [type, touches] as const);
+
+    // Left-half joystick walks forward; pushing to the rim sprints; release stops.
+    const start = await page.evaluate(() => game().snapshot().player.position);
+    await touch("touchstart", [{ id: 1, x: 150, y: 250 }]);
+    await touch("touchmove", [{ id: 1, x: 150, y: 190 }]);
+    await expect(page.locator("#joystick")).toBeVisible();
+    await page.evaluate(() => game().advance(0.4));
+    await page.waitForTimeout(300);
+    await touch("touchmove", [{ id: 1, x: 150, y: 188 }]);
+    await page.evaluate(() => game().advance(0.6));
+    const walking = await page.evaluate(() => ({ position: game().snapshot().player.position, sprinting: game().snapshot().player.sprinting, touch: game().inspectTouch() }));
+    expect(start.z - walking.position.z).toBeGreaterThan(2);
+    expect(walking.sprinting).toBe(true);
+    expect(walking.touch.moveTouch).toBe(true);
+    await touch("touchend", [{ id: 1, x: 150, y: 188 }]);
+    await page.evaluate(() => game().advance(0.1));
+    expect((await page.evaluate(() => game().snapshot())).move).toEqual({ x: 0, z: 0 });
+
+    // Right-half drag looks around.
+    const yaw = await page.evaluate(() => game().snapshot().player.yaw);
+    await touch("touchstart", [{ id: 2, x: 600, y: 200 }]);
+    await touch("touchmove", [{ id: 2, x: 700, y: 230 }]);
+    await touch("touchend", [{ id: 2, x: 700, y: 230 }]);
+    expect((await page.evaluate(() => game().snapshot())).player.yaw).toBeLessThan(yaw - 0.3);
+
+    // Long press mines; a quick tap places the held block.
+    await page.evaluate(() => { game().setLook(Math.PI, -0.75); game().advance(0.05); });
+    await touch("touchstart", [{ id: 3, x: 600, y: 200 }]);
+    await page.waitForTimeout(400);
+    expect((await page.evaluate(() => game().inspectTouch())).holding).toBe("attack");
+    await page.evaluate(() => game().advance(1.2));
+    await touch("touchend", [{ id: 3, x: 600, y: 200 }]);
+    expect((await page.evaluate(() => game().snapshot())).stats.mined).toBeGreaterThanOrEqual(1);
+    await page.evaluate(() => { game().give("cobblestone", 8); const i = game().snapshot().inventory.findIndex((x) => x?.key === "cobblestone"); game().press(`select-${i + 1}` as never); game().setLook(Math.PI, -0.6); game().advance(0.05); });
+    await touch("touchstart", [{ id: 4, x: 600, y: 200 }]);
+    await touch("touchend", [{ id: 4, x: 600, y: 200 }]);
+    await page.waitForTimeout(120);
+    await page.evaluate(() => game().advance(0.1));
+    expect((await page.evaluate(() => game().snapshot())).stats.placed).toBe(1);
+
+    // Buttons: jump, sneak toggle, inventory (with its close button), hotbar tap, pause.
+    await page.tap('[data-touch="jump"]');
+    await page.evaluate(() => game().advance(0.15));
+    expect((await page.evaluate(() => game().snapshot())).player.grounded).toBe(false);
+    await page.evaluate(() => game().advance(1));
+    await page.tap('[data-touch="sneak"]');
+    await page.evaluate(() => game().advance(0.1));
+    expect((await page.evaluate(() => game().snapshot())).player.sneaking).toBe(true);
+    await page.tap('[data-touch="sneak"]');
+    await page.tap('[data-touch="inventory"]');
+    await page.evaluate(() => game().advance(0.1));
+    expect((await page.evaluate(() => game().snapshot())).screen).toBe("inventory");
+    await page.screenshot({ path: testInfo.outputPath("craftlands-touch-inventory.png") });
+    await page.tap(".panel-close");
+    await page.evaluate(() => game().advance(0.1));
+    expect((await page.evaluate(() => game().snapshot())).screen).toBe("none");
+    await page.tap('#hotbar .slot[data-index="3"]');
+    await page.evaluate(() => game().advance(0.05));
+    expect((await page.evaluate(() => game().snapshot())).selectedSlot).toBe(3);
+    await page.screenshot({ path: testInfo.outputPath("craftlands-touch-play.png") });
+    await page.tap('[data-touch="pause"]');
+    await page.evaluate(() => game().advance(0.1));
+    expect((await page.evaluate(() => game().snapshot())).phase).toBe("paused");
+    expect(pageErrors).toEqual([]);
+    expect(await page.evaluate(() => game().errors())).toEqual([]);
+    await page.evaluate(() => game().dispose());
+    expect((await page.evaluate(() => game().inspectLeaks())).hostListeners).toBe(0);
+  });
+});
