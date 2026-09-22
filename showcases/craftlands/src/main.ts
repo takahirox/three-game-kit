@@ -299,6 +299,14 @@ function pointerLocked(): boolean {
   return document.pointerLockElement === canvas;
 }
 
+/** Pointer lock can be refused (no user gesture, sandboxed frame); that is not a game error. */
+function lockPointer(): void {
+  try {
+    const outcome = canvas.requestPointerLock?.() as unknown;
+    if (outcome instanceof Promise) outcome.catch(() => undefined);
+  } catch { /* ignored */ }
+}
+
 function uiCaptured(): boolean {
   const snapshot = game?.snapshot();
   return snapshot === undefined || snapshot.phase !== "playing" || snapshot.screen !== "none";
@@ -343,7 +351,7 @@ listen(window, "keyup", ((event: KeyboardEvent) => {
 }) as EventListener);
 listen(window, "blur", (() => { held.clear(); updateMove(); game?.press("sprint-end"); game?.press("sneak-end"); game?.press("attack-end"); game?.press("use-end"); }) as EventListener);
 listen(canvas, "click", (() => {
-  if (mode === "normal" && game?.snapshot().phase === "playing" && game.snapshot().screen === "none" && !pointerLocked()) void canvas.requestPointerLock?.();
+  if (mode === "normal" && game?.snapshot().phase === "playing" && game.snapshot().screen === "none" && !pointerLocked()) lockPointer();
 }) as EventListener);
 listen(document, "mousemove", ((event: MouseEvent) => {
   mouseX = event.clientX;
@@ -409,7 +417,7 @@ function boot(): void {
   listen(requireElement<HTMLButtonElement>("#btn-seed"), "click", (() => { const next = prompt("World seed (number)", String(game?.snapshot().seed ?? "")); if (next !== null && Number.isSafeInteger(Number(next)) && Number(next) > 0) { const url = new URL(location.href); url.searchParams.set("seed", next); location.href = url.toString(); } }) as EventListener);
   const chatForm = requireElement<HTMLFormElement>("#chat-form");
   const chatInput = requireElement<HTMLInputElement>("#chat-input");
-  listen(chatForm, "submit", ((event: Event) => { event.preventDefault(); game?.command(chatInput.value); chatInput.value = ""; stepTestFrame(); if (mode === "normal") void canvas.requestPointerLock?.(); }) as EventListener);
+  listen(chatForm, "submit", ((event: Event) => { event.preventDefault(); game?.command(chatInput.value); chatInput.value = ""; stepTestFrame(); if (mode === "normal") lockPointer(); }) as EventListener);
   const adapter = createCraftlandsHudAdapter(hud, (action) => {
     if (action === "start") game?.start();
     if (action === "continue") game?.continueWorld();
@@ -418,7 +426,7 @@ function boot(): void {
     if (action === "save") game?.press("save");
     if (action === "mode") { const current = game?.snapshot().mode; game?.setMode(current === "creative" ? "survival" : "creative"); }
     stepTestFrame();
-    if (mode === "normal" && (action === "start" || action === "continue" || action === "respawn")) void canvas.requestPointerLock?.();
+    if (mode === "normal" && (action === "start" || action === "continue" || action === "respawn")) lockPointer();
   });
   game = createCraftlandsGame({ renderer, hudAdapter: adapter, saveAdapter: createSaveAdapter(), testMode: mode === "test", ...(Number.isSafeInteger(seedParam) && seedParam > 0 ? { seed: seedParam } : {}), ...(Number.isSafeInteger(distanceParam) && distanceParam > 0 ? { simulationDistance: distanceParam } : {}) });
   if (mode === "test") { queueMicrotask(() => renderNow()); return; }
