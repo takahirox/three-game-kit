@@ -116,7 +116,9 @@ export class World {
 
   private markDirty(cx: number, cz: number): void {
     const key = chunkKey(cx, cz);
-    if (!this.chunks.has(key) || this.dirtyChunks.has(key)) return;
+    if (!this.chunks.has(key)) return;
+    // Listeners (the renderer) keep their own dedupe set, so every edit notifies even while a previous
+    // dirty mark is still pending in `dirtyChunks` for pull-style consumers.
     this.dirtyChunks.add(key);
     for (const listener of this.chunkListeners) listener(cx, cz, "dirty");
   }

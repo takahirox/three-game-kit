@@ -12,6 +12,7 @@ import { ATLAS_SIZE, paintAtlas, tileUv } from "./atlas.js";
 import { meshChunk, type ChunkGeometry } from "./mesher.js";
 import { createMobRenderer, type MobRenderer } from "./mob-renderer.js";
 import { hash2 } from "../shared/noise.js";
+import { MOB_TILE } from "../shared/mob-tiles.js";
 
 export interface CraftlandsRendererInspection {
   readonly backend: "three-webgl";
@@ -97,7 +98,7 @@ void main() {
   float brightness = level / (4.0 - 3.0 * level);
   brightness = 0.035 + 0.965 * brightness;
   float warm = clamp(vLight.y - sky, 0.0, 1.0);
-  vec3 lit = tex.rgb * vColor * brightness * mix(vec3(1.0), vec3(1.08, 0.94, 0.72), warm);
+  vec3 lit = tex.rgb * vColor * brightness * mix(vec3(1.0), vec3(1.05, 0.96, 0.84), warm * 0.6);
   float fog = smoothstep(fogNear, fogFar, vDist);
   gl_FragColor = vec4(mix(lit, fogColor, fog), tex.a * opacity);
 }`;
@@ -248,8 +249,8 @@ class Renderer implements CraftlandsRenderer {
     this.handItem = new THREE.Mesh(this.handItemGeometry, this.handItemMaterial);
     this.handItem.frustumCulled = false;
     this.handArmMaterial = this.mat(new THREE.MeshBasicMaterial({ map: this.atlas }));
-    const armGeometry = this.geo(new THREE.BoxGeometry(0.22, 0.22, 0.7));
-    this.setBoxTiles(armGeometry, [TILE.arm, TILE.arm, TILE.arm, TILE.arm, TILE.arm, TILE.arm]);
+    const armGeometry = this.geo(new THREE.BoxGeometry(0.2, 0.2, 0.75));
+    this.setBoxTiles(armGeometry, [MOB_TILE.steveSkin, MOB_TILE.steveSkin, MOB_TILE.steveSkin, MOB_TILE.steveSkin, MOB_TILE.steveSkin, MOB_TILE.steveShirt]);
     this.handArm = new THREE.Mesh(armGeometry, this.handArmMaterial);
     this.handArm.frustumCulled = false;
     this.handScene.add(this.handBlock, this.handItem, this.handArm);
@@ -269,7 +270,7 @@ class Renderer implements CraftlandsRenderer {
       shape: { kind: "box", halfExtents: { x: 0.3, y: 0.3, z: 0.3 } },
       speed: [1.2, 4],
       lifetimeMs: [400, 900],
-      size: [0.07, 0.14],
+      size: [0.05, 0.1],
       acceleration: { x: 0, y: -18, z: 0 },
       drag: 0.7,
       rotation3D: { x: [0, 6.28], y: [0, 6.28], z: [0, 6.28] },
@@ -562,8 +563,8 @@ class Renderer implements CraftlandsRenderer {
       this.handBlock.rotation.set(0.1 - swingAngle * 0.9, -0.6 - swingAngle * 0.4, 0.05);
       this.handItem.position.set(0.62 + bobX, -0.5 + bobY - swingAngle * 0.3 - eat, -0.95 - swingAngle * 0.15);
       this.handItem.rotation.set(-0.25 - swingAngle * 1.2, -0.45 - swingAngle * 0.5, 0.35);
-      this.handArm.position.set(0.66 + bobX, -0.7 + bobY - swingAngle * 0.35, -0.85 - swingAngle * 0.2);
-      this.handArm.rotation.set(-0.55 - swingAngle * 1.1, -0.3 - swingAngle * 0.4, 0.25);
+      this.handArm.position.set(0.72 + bobX, -0.78 + bobY - swingAngle * 0.35, -0.8 - swingAngle * 0.2);
+      this.handArm.rotation.set(-0.75 - swingAngle * 1.1, -0.2 - swingAngle * 0.4, 0.35);
       this.handVisible = snapshot.phase === "playing" && !snapshot.thirdPerson && !snapshot.hudHidden;
       const brightness = this.brightnessAt(eye.x, eye.y, eye.z);
       this.handMaterial.color.setScalar(brightness);

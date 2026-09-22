@@ -80,6 +80,9 @@ test("Craftlands runs a deterministic public-Feature survival sandbox", async ({
   expect(mined.snapshot.items[0]).toMatchObject({ key: "oak_log", count: 1 });
   expect(mined.renderer!.itemEntities).toBe(1);
   expect(mined.snapshot.editCount).toBeGreaterThanOrEqual(1);
+  // Every edit must re-mesh its chunk (regression: a stale dirty set once swallowed later edits).
+  expect(mined.renderer!.chunkRebuilds).toBeGreaterThan(partial.renderer!.chunkRebuilds);
+  expect(mined.renderer!.dirtyChunks).toBe(0);
   for (let index = 0; index < 3; index += 1) {
     await page.evaluate(() => { const s = game().snapshot(); game().setLook(s.player.yaw, s.player.pitch + 0.35); game().advance(0.05); game().setHeld({ attack: true }); game().advance(3.2); game().setHeld({ attack: false }); game().advance(0.3); });
   }
@@ -164,8 +167,10 @@ test("Craftlands runs a deterministic public-Feature survival sandbox", async ({
   const dark = await page.evaluate(() => { const p = game().snapshot().player.position; return { x: Math.floor(p.x), y: Math.floor(p.y), z: Math.floor(p.z), light: game().snapshot().target }; });
   expect(dark.light).toMatchObject({ blockKey: "stone" });
   await page.evaluate(() => { game().setHeld({ use: true }); game().advance(0.05); game().setHeld({ use: false }); game().advance(0.1); });
-  const lit = await page.evaluate(() => ({ target: game().snapshot().target, events: game().events().map(({ kind, subject }) => `${kind}:${subject ?? ""}`) }));
+  const lit = await page.evaluate(() => ({ target: game().snapshot().target, events: game().events().map(({ kind, subject }) => `${kind}:${subject ?? ""}`), renderer: game().inspectRenderer(), tris: game().inspectRenderer()!.triangles }));
   expect(lit.events).toContain("block-placed:torch");
+  expect(lit.target).toMatchObject({ blockKey: "torch" });
+  expect(lit.renderer!.dirtyChunks).toBe(0);
   await page.screenshot({ path: testInfo.outputPath("craftlands-torch.png") });
 
   // --- Hostile mobs attack at night; swords damage them; XP flows ---

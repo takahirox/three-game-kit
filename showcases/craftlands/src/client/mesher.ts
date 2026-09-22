@@ -90,25 +90,26 @@ class GeometryBuilder {
     const x1 = x + 0.5 + r;
     const z0 = z + 0.5 - r;
     const z1 = z + 0.5 + r;
-    const h = 10 / 16;
+    const h = 13 / 16;
     const uw = uv[2] - uv[0];
     const vh = uv[3] - uv[1];
     const su0 = uv[0] + uw * (7 / 16);
     const su1 = uv[0] + uw * (9 / 16);
+    const vTop = uv[1] + vh * (13 / 16);
     const sides: readonly (readonly [number, number, number, number, number, number, number, number])[] = [
       [x0, z0, x1, z0, x1, z0, x0, z0], [x1, z1, x0, z1, x0, z1, x1, z1], [x1, z0, x1, z1, x1, z1, x1, z0], [x0, z1, x0, z0, x0, z0, x0, z1],
     ];
     for (const side of sides) {
       const base = this.positions.length / 3;
       this.positions.push(side[0], y, side[1], side[2], y, side[3], side[4], y + h, side[5], side[6], y + h, side[7]);
-      this.uvs.push(su0, uv[1], su1, uv[1], su1, uv[1] + vh * (10 / 16), su0, uv[1] + vh * (10 / 16));
-      for (let corner = 0; corner < 4; corner += 1) { this.colors.push(0.95, 0.95, 0.95); this.lights.push(light[0], light[1]); }
+      this.uvs.push(su0, uv[1], su1, uv[1], su1, vTop, su0, vTop);
+      for (let corner = 0; corner < 4; corner += 1) { this.colors.push(1, 1, 1); this.lights.push(light[0], light[1]); }
       this.indices.push(base, base + 1, base + 2, base, base + 2, base + 3, base, base + 2, base + 1, base, base + 3, base + 2);
       this.quadCount += 2;
     }
     const base = this.positions.length / 3;
     this.positions.push(x0, y + h, z1, x1, y + h, z1, x1, y + h, z0, x0, y + h, z0);
-    this.uvs.push(su0, uv[1] + vh * (8 / 16), su1, uv[1] + vh * (8 / 16), su1, uv[1] + vh * (10 / 16), su0, uv[1] + vh * (10 / 16));
+    this.uvs.push(su0, uv[1] + vh * (11 / 16), su1, uv[1] + vh * (11 / 16), su1, vTop, su0, vTop);
     for (let corner = 0; corner < 4; corner += 1) { this.colors.push(1, 1, 1); this.lights.push(light[0], light[1]); }
     this.indices.push(base, base + 1, base + 2, base, base + 2, base + 3);
     this.quadCount += 1;
