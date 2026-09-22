@@ -71,6 +71,7 @@ export interface CraftlandsGame {
   command(text: string): void;
   give(key: string, count: number): void;
   setMode(mode: GameMode): void;
+  setSimulationDistance(chunks: number): void;
   loadScenario(id: Scenario): void;
   setTimeOfDay(fraction: number): void;
   snapshot(): CraftlandsSnapshot;
@@ -177,7 +178,7 @@ class Game implements CraftlandsGame {
   private spawn: Vec3;
   private readonly renderer: CraftlandsRenderer | null;
   private readonly testMode: boolean;
-  private readonly simulationDistance: number;
+  private simulationDistance: number;
   private readonly movement = createMovementInput();
   private readonly actions = createSemanticActionInput(ACTIONS);
   private readonly pressed = new Set<Action>();
@@ -1273,6 +1274,14 @@ class Game implements CraftlandsGame {
     if (leftover > 0) this.spawnItem(key, leftover, 0, this.eyePosition(), this.player.yaw, 1);
     this.dirtySinceSave = true;
     this.emit("gave", key, count - leftover);
+  }
+
+  setSimulationDistance(chunks: number): void {
+    if (this.isDisposed || !Number.isFinite(chunks)) return;
+    this.simulationDistance = Math.max(2, Math.min(16, Math.round(chunks)));
+    this.renderer?.setRenderDistance(this.simulationDistance);
+    this.world.unloadBeyond(Math.floor(this.player.position.x / CHUNK), Math.floor(this.player.position.z / CHUNK), this.simulationDistance + 2);
+    this.emit("render-distance", PLAYER_ID, this.simulationDistance);
   }
 
   setMode(mode: GameMode): void {

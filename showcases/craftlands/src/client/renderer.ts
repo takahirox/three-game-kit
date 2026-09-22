@@ -50,6 +50,7 @@ export interface CraftlandsRenderer extends RenderingFeatureAdapter {
   prepare(snapshot: CraftlandsSnapshot, events: readonly CraftlandsEvent[]): void;
   resize(width?: number, height?: number): void;
   setRenderDistance(chunks: number): void;
+  setBaseFov(degrees: number): void;
   inspect(): CraftlandsRendererInspection;
 }
 
@@ -155,6 +156,7 @@ class Renderer implements CraftlandsRenderer {
   private swing = 0;
   private bob = 0;
   private fov = BASE_FOV;
+  private baseFov = BASE_FOV;
   private daylight = 1;
   private frameCount = 0;
   private drawCalls = 0;
@@ -318,6 +320,10 @@ class Renderer implements CraftlandsRenderer {
 
   setRenderDistance(chunks: number): void {
     this.renderDistance = Math.max(2, Math.min(16, Math.floor(chunks)));
+  }
+
+  setBaseFov(degrees: number): void {
+    if (Number.isFinite(degrees)) this.baseFov = Math.max(30, Math.min(110, degrees));
   }
 
   private toGeometry(chunk: ChunkGeometry): THREE.BufferGeometry {
@@ -528,7 +534,7 @@ class Renderer implements CraftlandsRenderer {
       this.cloudMaterial.color.set(0xffffff).multiplyScalar(0.3 + daylight * 0.7);
       this.layoutClouds(snapshot.time);
       const speed = Math.hypot(snapshot.player.velocity.x, snapshot.player.velocity.z);
-      const targetFov = BASE_FOV + (snapshot.player.sprinting ? 10 : 0) + (snapshot.player.flying ? 6 : 0) + (underwater ? -6 : 0);
+      const targetFov = this.baseFov + (snapshot.player.sprinting ? this.baseFov * 0.14 : 0) + (snapshot.player.flying ? 6 : 0) + (underwater ? -6 : 0);
       this.fov = this.testMode ? targetFov : this.fov + (targetFov - this.fov) * 0.15;
       if (Math.abs(this.camera.fov - this.fov) > 0.01) { this.camera.fov = this.fov; this.camera.updateProjectionMatrix(); this.handCamera.fov = this.fov; this.handCamera.updateProjectionMatrix(); }
       this.bob += Math.min(1, speed / TUNING.walkSpeed) * (snapshot.player.grounded ? 0.2 : 0.04);

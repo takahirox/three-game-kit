@@ -54,6 +54,12 @@ button.mc { height: 40px; padding: 0 8px; border: 2px solid #000; background: li
 button.mc:hover, button.mc:focus-visible { background: linear-gradient(#a4a9d9, #7f83b4); color: #ffffa0; outline: none; box-shadow: inset 2px 2px 0 #c9cde9, inset -2px -2px 0 #4a4e7a; }
 button.mc:active { box-shadow: inset -2px -2px 0 #b9b9b9, inset 2px 2px 0 #4a4a4a; }
 .pause { background: #00000088; }
+.options { background: #000000cc; z-index: 5; }
+.options-menu label.slider { position: relative; display: flex; align-items: center; justify-content: center; height: 40px; overflow: hidden; }
+.options-menu label.slider span { position: relative; z-index: 2; pointer-events: none; font-size: 15px; }
+.options-menu label.slider input { position: absolute; inset: 0; width: 100%; height: 100%; margin: 0; opacity: 0; cursor: ew-resize; }
+.options-menu label.slider::after { content: ""; position: absolute; top: 2px; bottom: 2px; left: calc(var(--fill, 50%) - 8px); width: 12px; background: linear-gradient(#8d8d8d, #6e6e6e); box-shadow: inset 2px 2px 0 #b9b9b9, inset -2px -2px 0 #4a4a4a; border: 1px solid #000; }
+.options-menu label.slider { background: linear-gradient(#5a5a5a, #444); }
 .dead { background: #a0000099; }
 .dead p { margin: 0 0 14px; font-size: 16px; }
 .dead p b { color: #ffff55; }

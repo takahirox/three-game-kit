@@ -32,6 +32,7 @@ Open <http://127.0.0.1:4174/showcases/craftlands/index.html>. Click **New World*
 | `T` or `/` | Chat and commands: `/time set day\|night`, `/gamemode creative\|survival`, `/give <item> [n]`, `/tp x y z`, `/spawn <mob>`, `/seed`, `/kill` |
 | `F3` / `F5` / `F1` | Debug overlay / third-person camera / hide HUD |
 | `F` | Save now (the world also autosaves every 30 s of play and when quitting) |
+| **Options…** (title / game menu) | Render distance, FOV, mouse sensitivity and sound volume as Minecraft-style slider buttons, saved in browser storage |
 
 ## Game structure
 

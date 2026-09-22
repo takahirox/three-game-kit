@@ -33,6 +33,7 @@
             <button type="button" class="mc" data-hud-action="start">New World</button>
             <button type="button" class="mc" data-hud-action="continue" hidden>Continue World</button>
             <div class="menu-row"><button type="button" class="mc small" id="btn-seed">Seed: <span id="seed-label">0</span></button><button type="button" class="mc small" id="btn-help">Controls</button></div>
+            <button type="button" class="mc" data-options="open">Options…</button>
           </div>
           <div class="corner left">Craftlands 0.1 · three-game-kit</div>
           <div class="corner right">Inspired by Minecraft. Not affiliated with Mojang.</div>
@@ -50,6 +51,7 @@
           <div class="menu">
             <button type="button" class="mc" data-hud-action="continue">Back to Game</button>
             <div class="menu-row"><button type="button" class="mc small" data-hud-action="mode">Toggle Creative</button><button type="button" class="mc small" data-hud-action="save">Save World</button></div>
+            <button type="button" class="mc" data-options="open">Options…</button>
             <button type="button" class="mc" data-hud-action="quit">Save and Quit to Title</button>
           </div>
         </section>
@@ -60,6 +62,17 @@
           <div class="menu">
             <button type="button" class="mc" data-hud-action="respawn">Respawn</button>
             <button type="button" class="mc" data-hud-action="quit">Title Screen</button>
+          </div>
+        </section>
+
+        <section id="options" class="screen options" hidden>
+          <h2>Options</h2>
+          <div class="menu options-menu">
+            <label class="mc slider"><span>Render Distance: <b data-option-value="distance">6</b> chunks</span><input type="range" min="2" max="12" step="1" data-option="distance" /></label>
+            <label class="mc slider"><span>FOV: <b data-option-value="fov">70</b></span><input type="range" min="30" max="110" step="1" data-option="fov" /></label>
+            <label class="mc slider"><span>Mouse Sensitivity: <b data-option-value="sensitivity">100</b>%</span><input type="range" min="20" max="200" step="5" data-option="sensitivity" /></label>
+            <label class="mc slider"><span>Sound: <b data-option-value="volume">100</b>%</span><input type="range" min="0" max="100" step="5" data-option="volume" /></label>
+            <button type="button" class="mc" data-options="close">Done</button>
           </div>
         </section>
 

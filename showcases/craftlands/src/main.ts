@@ -33,6 +33,7 @@ export interface CraftlandsHandle {
   command(text: string): void;
   give(key: string, count: number): void;
   setMode(mode: GameMode): void;
+  setOption(key: "distance" | "fov" | "sensitivity" | "volume", value: number): void;
   advance(seconds: number): number;
   loadScenario(id: Scenario): void;
   setTimeOfDay(fraction: number): void;
@@ -338,7 +339,7 @@ listen(window, "keydown", ((event: KeyboardEvent) => {
   else if (event.code === "KeyE") { game?.press("inventory"); if (mode === "normal" && pointerLocked()) document.exitPointerLock(); }
   else if (event.code === "KeyF") game?.press("save");
   else if (event.code === "KeyT" || event.code === "Slash") { if (snapshot?.phase === "playing" && snapshot.screen === "none") { requireElement<HTMLInputElement>("#chat-input").dataset["prefill"] = event.code === "Slash" ? "/" : ""; game?.press("chat"); if (mode === "normal" && pointerLocked()) document.exitPointerLock(); } }
-  else if (event.code === "Escape") { game?.press("escape"); }
+  else if (event.code === "Escape") { const optionsScreen = document.querySelector<HTMLElement>("#options"); if (optionsScreen !== null && !optionsScreen.hidden) { optionsScreen.hidden = true; saveOptions(); } else game?.press("escape"); }
   else if (event.code === "F1") game?.press("toggle-hud");
   else if (event.code === "F3") game?.press("toggle-debug");
   else if (event.code === "F5") game?.press("toggle-perspective");
@@ -377,7 +378,8 @@ listen(document, "mousemove", ((event: MouseEvent) => {
   }
   if (!pointerLocked() && mode === "normal") return;
   if (uiCaptured()) return;
-  game?.look(-event.movementX * 0.0022, -event.movementY * 0.0022);
+  const sensitivity = 0.0022 * options.sensitivity / 100;
+  game?.look(-event.movementX * sensitivity, -event.movementY * sensitivity);
 }) as EventListener);
 listen(document, "mousedown", ((event: MouseEvent) => {
   unlockAudio();
@@ -497,9 +499,57 @@ function updateListener(snapshot: CraftlandsSnapshot): void {
   }
 }
 
+// --- Options (persisted per browser) -------------------------------------------------------
+
+interface Options { distance: number; fov: number; sensitivity: number; volume: number; }
+const OPTIONS_KEY = "craftlands:options";
+const options: Options = { distance: 6, fov: 70, sensitivity: 100, volume: 100 };
+
+function loadOptions(): void {
+  if (mode === "test") return;
+  try {
+    const raw = localStorage.getItem(OPTIONS_KEY);
+    if (raw === null) return;
+    const parsed = JSON.parse(raw) as Partial<Record<keyof Options, unknown>>;
+    for (const key of ["distance", "fov", "sensitivity", "volume"] as const) { const value = Number(parsed[key]); if (Number.isFinite(value)) options[key] = value; }
+  } catch { /* ignored */ }
+}
+
+function saveOptions(): void {
+  if (mode === "test") return;
+  try { localStorage.setItem(OPTIONS_KEY, JSON.stringify(options)); } catch { /* ignored */ }
+}
+
+function applyOptions(): void {
+  soundVolume = options.volume / 100;
+  renderer?.setBaseFov(options.fov);
+  if (game !== null && game.inspectWorld().simulationDistance !== options.distance) game.setSimulationDistance(options.distance);
+  for (const input of document.querySelectorAll<HTMLInputElement>("input[data-option]")) {
+    const key = input.dataset["option"] as keyof Options;
+    input.value = String(options[key]);
+    const label = document.querySelector<HTMLElement>(`[data-option-value="${key}"]`);
+    if (label !== null) label.textContent = String(options[key]);
+    const fill = (options[key] - Number(input.min)) / (Number(input.max) - Number(input.min));
+    input.parentElement?.style.setProperty("--fill", `${Math.round(fill * 100)}%`);
+  }
+}
+
+function wireOptions(): void {
+  const screen = requireElement<HTMLElement>("#options");
+  for (const button of document.querySelectorAll<HTMLButtonElement>("[data-options]")) {
+    listen(button, "click", (() => { unlockAudio(); playSound("click", 0.6, 1); screen.hidden = button.dataset["options"] !== "open"; if (screen.hidden) saveOptions(); }) as EventListener);
+  }
+  for (const input of document.querySelectorAll<HTMLInputElement>("input[data-option]")) {
+    listen(input, "input", (() => { const key = input.dataset["option"] as keyof Options; options[key] = Number(input.value); applyOptions(); }) as EventListener);
+    listen(input, "change", (() => { saveOptions(); playSound("click", 0.4, 1.2); }) as EventListener);
+  }
+}
+
 function boot(): void {
   renderer = createCraftlandsRenderer(canvas, mode === "test");
   audio = createAudio();
+  loadOptions();
+  wireOptions();
   icons = createIconPainter(renderer.atlasCanvas);
   requireElement<HTMLElement>(".title-bg").style.backgroundImage = `url("${icons.dirt()}")`;
   const splashes = ["A three-game-kit showcase!", "Punch trees!", "Now with creepers!", "Also try Deepfield!", "0 bytes of assets!", "Flood-fill lighting!", "Craft a pickaxe!", "Beware the night!", "Infinite-ish!", "Diamonds below y=16!"];
@@ -524,6 +574,9 @@ function boot(): void {
   });
   game = createCraftlandsGame({ renderer, hudAdapter: adapter, saveAdapter: createSaveAdapter(), testMode: mode === "test", audio, ...(Number.isSafeInteger(seedParam) && seedParam > 0 ? { seed: seedParam } : {}), ...(Number.isSafeInteger(distanceParam) && distanceParam > 0 ? { simulationDistance: distanceParam } : {}) });
   wireSounds(game);
+  if (Number.isSafeInteger(distanceParam) && distanceParam > 0) options.distance = distanceParam;
+  else if (mode === "test") options.distance = game.inspectWorld().simulationDistance;
+  applyOptions();
   if (mode === "test") { queueMicrotask(() => renderNow()); return; }
   lastTime = performance.now();
   const frame = (time: number): void => {
@@ -567,6 +620,7 @@ const handle: CraftlandsHandle = Object.freeze({
   command(text: string) { game?.command(text); },
   give(key: string, count: number) { game?.give(key, count); },
   setMode(next: GameMode) { game?.setMode(next); },
+  setOption(key: keyof Options, value: number) { options[key] = value; applyOptions(); stepTestFrame(); },
   advance(seconds: number) { const steps = game?.advance(seconds) ?? 0; renderNow(); return steps; },
   loadScenario(id: Scenario) { game?.loadScenario(id); game?.advance(1 / 60); renderNow(); },
   setTimeOfDay(fraction: number) { game?.setTimeOfDay(fraction); game?.advance(1 / 60); renderNow(); },
