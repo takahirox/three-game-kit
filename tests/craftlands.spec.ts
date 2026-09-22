@@ -190,7 +190,10 @@ test("Craftlands runs a deterministic public-Feature survival sandbox", async ({
   await expect(page.locator("#debug")).toBeVisible();
   await expect(page.locator("#debug")).toContainText("XYZ:");
   await page.screenshot({ path: testInfo.outputPath("craftlands-third-person.png") });
-  await page.evaluate(() => { game().press("toggle-perspective"); game().press("toggle-debug"); game().command("/time set day"); game().command("/gamemode survival"); game().advance(0.1); });
+  // --- Gravity blocks: sand placed beside a trunk above air falls ---
+  await page.evaluate(() => { game().press("toggle-perspective"); game().press("toggle-debug"); game().press("fly-toggle"); game().loadScenario("tree"); game().give("sand", 4); game().press(`select-${game().snapshot().inventory.findIndex((x) => x?.key === "sand") + 1}` as never); const s = game().snapshot(); game().setLook(s.player.yaw, s.player.pitch + 0.55); game().advance(0.05); game().setHeld({ use: true }); game().advance(0.05); game().setHeld({ use: false }); game().advance(1); });
+  expect((await page.evaluate(() => game().events())).map(({ kind, subject }) => `${kind}:${subject ?? ""}`)).toContain("block-fell:sand");
+  await page.evaluate(() => { game().command("/time set day"); game().command("/gamemode survival"); game().advance(0.1); });
   const commanded = await page.evaluate(() => game().snapshot());
   expect(commanded.mode).toBe("survival");
   expect(commanded.chatLog.some((line) => line.startsWith("Set the time"))).toBe(true);

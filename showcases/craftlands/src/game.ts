@@ -242,6 +242,8 @@ class Game implements CraftlandsGame {
   private pendingCommands: string[] = [];
   private stepDistance = 0;
   private readonly fusing = new Set<number>();
+  /** Positions whose neighbours need a block update (gravity blocks, plant support) on the next tick. */
+  private blockUpdates: number[] = [];
 
   constructor(options: CraftlandsGameOptions) {
     this.world = new World(options.seed ?? DEFAULT_SEED);
@@ -253,6 +255,7 @@ class Game implements CraftlandsGame {
     this.renderer = options.renderer ?? null;
     this.renderer?.attachWorld(this.world);
     this.renderer?.setRenderDistance(this.simulationDistance);
+    this.world.subscribe((x, y, z) => { if (this.blockUpdates.length < 4_096) this.blockUpdates.push(x, y, z); });
     this.health.register(PLAYER_ID, TUNING.maximumHealth);
     this.debug.registerProvider("player", () => ({ x: this.player.position.x, y: this.player.position.y, z: this.player.position.z, health: this.player.health, hunger: this.player.hunger, phase: this.phase, mode: this.mode }));
     this.debug.registerProvider("world", () => ({ seed: this.world.seed, chunks: this.world.loadedChunkCount, edits: this.world.editCount, mobs: this.mobs.length, items: this.items.length }));
@@ -591,6 +594,7 @@ class Game implements CraftlandsGame {
     this.stepItems(tick);
     this.stepMobs(tick);
     this.stepFurnaces();
+    this.stepBlocks(tick);
     if (this.attackCooldown > 0) this.attackCooldown -= 1;
     if (this.swing > 0) this.swing -= 0.1;
     if (player.hurtTicks > 0) player.hurtTicks -= 1;
@@ -1050,6 +1054,85 @@ class Game implements CraftlandsGame {
   }
 
   // --- Furnaces --------------------------------------------------------------------------
+
+  // --- Block updates: gravity blocks, unsupported plants, random ticks for saplings ----------------
+
+  private stepBlocks(tick: number): void {
+    const queue = this.blockUpdates;
+    this.blockUpdates = [];
+    const visited = new Set<string>();
+    for (let cursor = 0; cursor + 2 < queue.length; cursor += 3) {
+      const ox = queue[cursor]!; const oy = queue[cursor + 1]!; const oz = queue[cursor + 2]!;
+      for (const [dx, dy, dz] of [[0, 0, 0], [0, 1, 0], [0, -1, 0], [1, 0, 0], [-1, 0, 0], [0, 0, 1], [0, 0, -1]] as const) {
+        const x = ox + dx; const y = oy + dy; const z = oz + dz;
+        const key = `${x},${y},${z}`;
+        if (visited.has(key)) continue;
+        visited.add(key);
+        this.updateBlock(x, y, z);
+      }
+    }
+    // Random ticks: a few loaded columns near the player each tick, like Minecraft's random block ticks.
+    for (let sample = 0; sample < 3; sample += 1) {
+      const rx = Math.floor(this.player.position.x) + Math.floor((hash3(tick, sample, 1, this.world.seed) - 0.5) * 48);
+      const rz = Math.floor(this.player.position.z) + Math.floor((hash3(tick, sample, 2, this.world.seed) - 0.5) * 48);
+      if (!this.world.isLoaded(rx, rz)) continue;
+      const ry = this.world.heightAt(rx, rz);
+      if (ry < 0) continue;
+      const id = this.world.get(rx, ry, rz);
+      if (id === blockByKey("sapling")!.id && hash3(tick, rx, rz, this.world.seed + 9) < 0.35) this.growTree(rx, ry, rz, tick);
+      else if (id === blockByKey("dirt")!.id && this.world.get(rx, ry + 1, rz) === AIR && this.world.skyLight(rx, ry + 1, rz) >= 9 && hash3(tick, rx, rz, this.world.seed + 10) < 0.2) {
+        // Dirt next to grass grows grass, as in Minecraft.
+        for (const [dx, dz] of [[1, 0], [-1, 0], [0, 1], [0, -1]] as const) if (this.world.get(rx + dx, ry, rz + dz) === blockByKey("grass_block")!.id || this.world.get(rx + dx, ry + 1, rz + dz) === blockByKey("grass_block")!.id || this.world.get(rx + dx, ry - 1, rz + dz) === blockByKey("grass_block")!.id) { this.world.set(rx, ry, rz, blockByKey("grass_block")!.id); break; }
+      }
+    }
+  }
+
+  private updateBlock(x: number, y: number, z: number): void {
+    const id = this.world.get(x, y, z);
+    if (id === AIR) return;
+    const definition = blockById(id);
+    if (definition.key === "sand" || definition.key === "gravel") {
+      const below = blockById(this.world.get(x, y - 1, z));
+      if (y > 0 && (!below.solid || below.replaceable) && !below.solid) {
+        // Gravity: the column slides down one block per tick until it lands, re-queuing itself.
+        this.world.set(x, y, z, AIR);
+        if (below.liquid || below.replaceable || this.world.get(x, y - 1, z) === AIR) this.world.set(x, y - 1, z, id);
+        this.blockUpdates.push(x, y - 1, z);
+        this.emit("block-fell", definition.key, y - 1);
+      }
+      return;
+    }
+    if (definition.shape === "cross" || definition.shape === "torch") {
+      const below = blockById(this.world.get(x, y - 1, z));
+      const wallSupported = definition.shape === "torch" && (this.world.isSolid(x + 1, y, z) || this.world.isSolid(x - 1, y, z) || this.world.isSolid(x, y, z + 1) || this.world.isSolid(x, y, z - 1));
+      if (!below.solid && !wallSupported) {
+        this.world.set(x, y, z, AIR);
+        if (definition.drop !== null && this.mode === "survival") this.spawnItem(definition.drop.key, 1, 0, vec3(x + 0.5, y + 0.2, z + 0.5), 0, 0.3);
+      }
+      return;
+    }
+    if (definition.key === "grass_block" && blockById(this.world.get(x, y + 1, z)).opaque) this.world.set(x, y, z, blockByKey("dirt")!.id);
+  }
+
+  private growTree(x: number, y: number, z: number, tick: number): void {
+    const trunk = 4 + Math.floor(hash3(x, y, z, tick) * 3);
+    if (y + trunk + 2 >= HEIGHT) return;
+    for (let dy = 1; dy <= trunk; dy += 1) if (this.world.get(x, y + dy, z) !== AIR) return;
+    this.world.set(x, y, z, LOG);
+    for (let dy = 1; dy <= trunk; dy += 1) this.world.set(x, y + dy, z, LOG);
+    const leaves = blockByKey("oak_leaves")!.id;
+    for (let dy = trunk - 2; dy <= trunk + 1; dy += 1) {
+      const radius = dy >= trunk ? 1 : 2;
+      for (let dx = -radius; dx <= radius; dx += 1) for (let dz = -radius; dz <= radius; dz += 1) {
+        if (Math.abs(dx) === radius && Math.abs(dz) === radius && (radius === 1 || hash3(x + dx, dy, z + dz, tick) < 0.6)) continue;
+        if (dx === 0 && dz === 0 && dy <= trunk) continue;
+        if (this.world.get(x + dx, y + dy, z + dz) === AIR) this.world.set(x + dx, y + dy, z + dz, leaves);
+      }
+    }
+    if (this.world.get(x, y + trunk + 1, z) === AIR) this.world.set(x, y + trunk + 1, z, leaves);
+    this.dirtySinceSave = true;
+    this.emit("tree-grown", "oak", trunk);
+  }
 
   private stepFurnaces(): void {
     for (const [key, state] of this.world.blockEntities) {
