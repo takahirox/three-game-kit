@@ -1045,7 +1045,21 @@ class Game implements CraftlandsGame {
       }
       survivors.push(item);
     }
-    this.items = survivors;
+    // Nearby stacks of the same item merge, as in Minecraft, so a felled tree leaves one pile per material.
+    for (let a = 0; a < survivors.length; a += 1) {
+      const first = survivors[a]!;
+      if (first.count <= 0) continue;
+      const limit = itemByKey(first.key)?.maxStack ?? 64;
+      for (let b = a + 1; b < survivors.length && first.count < limit; b += 1) {
+        const second = survivors[b]!;
+        if (second.count <= 0 || second.key !== first.key || second.damage !== first.damage) continue;
+        if (Math.abs(second.position.x - first.position.x) > 0.75 || Math.abs(second.position.y - first.position.y) > 0.75 || Math.abs(second.position.z - first.position.z) > 0.75) continue;
+        const moved = Math.min(second.count, limit - first.count);
+        first.count += moved;
+        second.count -= moved;
+      }
+    }
+    this.items = survivors.filter((item) => item.count > 0);
     void tick;
   }
 
