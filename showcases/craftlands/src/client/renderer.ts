@@ -574,6 +574,13 @@ class Renderer implements CraftlandsRenderer {
       const camOffsetY = snapshot.player.hurtTicks > 0 ? Math.sin(snapshot.player.hurtTicks * 0.9) * 0.01 : 0;
       this.camera.position.set(eye.x, eye.y + Math.abs(Math.cos(this.bob)) * 0.025 * Math.min(1, speed / TUNING.walkSpeed) + camOffsetY, eye.z);
       this.camera.rotation.set(this.pitch, this.yaw, snapshot.player.hurtTicks > 0 ? Math.sin(snapshot.player.hurtTicks * 0.8) * 0.015 : 0);
+      if (snapshot.phase === "title") {
+        // Title panorama: a slow orbit above the spawn, like Minecraft's rotating menu backdrop.
+        const orbit = (this.testMode ? 0 : performance.now() / 1000) * 0.06;
+        const height = (this.world?.heightAt(Math.floor(snapshot.spawn.x), Math.floor(snapshot.spawn.z)) ?? snapshot.spawn.y) + 10;
+        this.camera.position.set(snapshot.spawn.x + Math.sin(orbit) * 6, height, snapshot.spawn.z + Math.cos(orbit) * 6);
+        this.camera.rotation.set(-0.28, orbit + Math.PI, 0);
+      }
       if (snapshot.thirdPerson) {
         const back = 4;
         const dir = new THREE.Vector3(-Math.sin(this.yaw) * Math.cos(this.pitch), Math.sin(this.pitch), -Math.cos(this.yaw) * Math.cos(this.pitch));

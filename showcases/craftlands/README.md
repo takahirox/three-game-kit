@@ -14,7 +14,7 @@ pnpm run build
 pnpm exec vite --host 127.0.0.1 --port 4174
 ```
 
-Open <http://127.0.0.1:4174/showcases/craftlands/index.html>. Click **New World**, then click the world to capture the mouse (pointer lock). `Esc` opens the game menu. Append `?seed=42` for a different world and `?distance=8` for a wider simulation / render distance (chunks, default 6).
+Open <http://127.0.0.1:4174/showcases/craftlands/index.html>. The title screen orbits slowly above the spawn of the current seed. Click **New World**, then click the world to capture the mouse (pointer lock). `Esc` opens the game menu. Append `?seed=42` for a different world and `?distance=8` for a wider simulation / render distance (chunks, default 6).
 
 ### Controls
 

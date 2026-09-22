@@ -74,8 +74,8 @@ button.mc:active { box-shadow: inset -2px -2px 0 #b9b9b9, inset 2px 2px 0 #4a4a4
 .dead p { margin: 0 0 14px; font-size: 16px; }
 .dead p b { color: #ffff55; }
 
-.title { background: #2c2116; overflow: hidden; }
-.title-bg { position: absolute; inset: 0; background-color: #4a3524; background-size: 64px 64px; image-rendering: pixelated; filter: brightness(.4); }
+.title { background: transparent; overflow: hidden; }
+.title-bg { position: absolute; inset: 0; background: #00000055; backdrop-filter: blur(6px); }
 .logo { position: relative; z-index: 1; display: flex; gap: 14px; margin-bottom: 40px; font-size: clamp(56px, 8vw, 96px); line-height: .9; letter-spacing: .04em; color: #ddd; text-shadow: 4px 4px 0 #3f3f3f, 6px 6px 0 #1a1a1a; }
 .logo span:last-child { color: #c9c9c9; }
 .splash { position: absolute; right: -60px; top: 52px; transform: rotate(-20deg); color: #ffff00; font-style: normal; font-size: 18px; text-shadow: 2px 2px 0 #3f3f00; animation: splash .5s ease-in-out infinite alternate; white-space: nowrap; }

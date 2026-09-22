@@ -574,7 +574,6 @@ function boot(): void {
   loadOptions();
   wireOptions();
   icons = createIconPainter(renderer.atlasCanvas);
-  requireElement<HTMLElement>(".title-bg").style.backgroundImage = `url("${icons.dirt()}")`;
   const splashes = ["A three-game-kit showcase!", "Punch trees!", "Now with creepers!", "Also try Deepfield!", "0 bytes of assets!", "Flood-fill lighting!", "Craft a pickaxe!", "Beware the night!", "Infinite-ish!", "Diamonds below y=16!"];
   requireElement<HTMLElement>("#splash").textContent = splashes[Math.floor((Date.now() / 60_000) % splashes.length)] ?? splashes[0]!;
   const help = requireElement<HTMLElement>("#help");
