@@ -5,7 +5,7 @@ import { createBrowserStorageSaveAdapter } from "@three-game-kit/client/genre";
 import type { HudState } from "@three-game-kit/shared/gameplay";
 import { createInMemorySaveAdapter, type SaveAdapter } from "@three-game-kit/shared/genre";
 import { createIconPainter, type IconPainter } from "./client/icons.js";
-import { synthesiseSoundBank } from "./client/sounds.js";
+import { synthesiseMusic, synthesiseSoundBank } from "./client/sounds.js";
 import { blockByKey } from "./shared/blocks.js";
 import { createCraftlandsRenderer, type CraftlandsRenderer, type CraftlandsRendererInspection } from "./client/renderer.js";
 import { createCraftlandsGame, type CraftlandsGame, type CraftlandsLeakInspection, type CraftlandsRuntimeInspection, type CraftlandsSaveInspection, type CraftlandsWorldInspection, type SlotContainer } from "./game.js";
@@ -450,6 +450,7 @@ function createAudio(): AudioRuntime {
     const runtime = createAudioRuntime(createWebAudioDriver(audioContext));
     const bank = synthesiseSoundBank(audioContext);
     for (const [id, buffer] of bank.buffers) runtime.registerClip(id, buffer);
+    runtime.registerClip("music.calm", synthesiseMusic(audioContext));
     clipCount = bank.buffers.size;
     return runtime;
   } catch {
@@ -458,10 +459,18 @@ function createAudio(): AudioRuntime {
   }
 }
 
+let musicVoice: { stop(): void; setVolume(volume: number): void; readonly stopped: boolean } | null = null;
+
+function startMusic(): void {
+  if (audio === null || !audioUnlocked || clipCount === 0 || (musicVoice !== null && !musicVoice.stopped)) return;
+  const outcome = audio.playMusic("music.calm", { volume: 0.5 * soundVolume });
+  musicVoice = outcome.ok ? outcome.value : null;
+}
+
 function unlockAudio(): void {
   if (audio === null || audioUnlocked) return;
   audioUnlocked = true;
-  void audio.unlock().then((outcome) => { if (!outcome.ok) audioUnlocked = false; });
+  void audio.unlock().then((outcome) => { if (!outcome.ok) { audioUnlocked = false; return; } startMusic(); });
 }
 
 function pitch(seed: number, spread = 0.12): number {
@@ -622,6 +631,8 @@ function boot(): void {
     game.present(time);
     const snapshot = game.snapshot();
     updateListener(snapshot);
+    if (musicVoice !== null && musicVoice.stopped) startMusic();
+    musicVoice?.setVolume(0.5 * soundVolume);
     statusElement.textContent = statusLine(snapshot);
     raf = requestAnimationFrame(frame);
   };

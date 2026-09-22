@@ -12,7 +12,7 @@ Craftlands contains **no binary assets** and **no third-party binary assets**. E
 | Mobs and third-person player | `src/client/mob-renderer.ts` | Original project code, repository license | Box-part models built per visible mob | 1 material clone per model | atlas (skin tiles) | 0 | 0 / 0 | Procedural leg / arm swing, head tracking, hurt / burn / fuse tints |
 | Item drops, held item, crack overlay, block outline | `src/client/renderer.ts` | Original project code, repository license | 1 per drop + 3 hand meshes + 2 overlays | 6 | atlas | 0 | 0 / 0 | UVs retargeted when the selection changes |
 | HUD icons (hearts, hunger, air, item cubes) | `src/client/icons.ts` | Original project code, repository license | — | — | Small runtime canvases converted to data URLs | 0 | 0 / 0 | Isometric cubes composed from atlas tiles in a 2D canvas |
-| Sound bank | `src/client/sounds.ts` | Original project code, repository license | — | — | 0 | 0 | 0 / 0 | ~35 `AudioBuffer`s synthesised at boot from seeded noise and oscillators; no audio file is fetched |
+| Sound bank | `src/client/sounds.ts` | Original project code, repository license | — | — | 0 | 0 | 0 / 0 | ~35 effect `AudioBuffer`s plus one 48 s stereo music loop synthesised at boot from seeded noise and oscillators; no audio file is fetched |
 | Block debris | `@three-game-kit/client/particles` 0.1.x | First-party package | 1 instanced emitter | 1 | 0 | 0 | 0 / 0 | Manual `emit` with per-block colours and seeds |
 
 Authored binary asset download size is 0 bytes; no glTF, image, font, or audio file is fetched. GPU texture memory is the runtime atlas plus whatever the particle emitter allocates internally, reported through `inspectRenderer().textures`.

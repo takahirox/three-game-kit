@@ -79,6 +79,38 @@ const CLIPS: readonly ClipSpec[] = [
 
 export interface SoundBank { readonly ids: readonly string[]; readonly buffers: ReadonlyMap<string, AudioBuffer>; }
 
+/** A gentle 48-second pentatonic piano-like loop in the spirit of Minecraft's calm menu and overworld music. */
+export function synthesiseMusic(context: AudioContext, seed = 5): AudioBuffer {
+  const sampleRate = context.sampleRate;
+  const seconds = 48;
+  const buffer = context.createBuffer(2, seconds * sampleRate, sampleRate);
+  const left = buffer.getChannelData(0);
+  const right = buffer.getChannelData(1);
+  const random = mulberry(seed);
+  const scale = [261.63, 293.66, 329.63, 392.0, 440.0, 523.25, 587.33, 659.25, 783.99];
+  let t = 0.5;
+  while (t < seconds - 4) {
+    const note = scale[Math.floor(random() * scale.length)]!;
+    const chord = random() < 0.35;
+    const length = 2 + random() * 3;
+    const pan = random() * 0.6 - 0.3;
+    const notes = chord ? [note, note * 1.5, note * 2] : [note];
+    for (const frequency of notes) {
+      const start = Math.floor(t * sampleRate);
+      const end = Math.min(buffer.length, Math.floor((t + length) * sampleRate));
+      for (let i = start; i < end; i += 1) {
+        const local = (i - start) / sampleRate;
+        const envelope = Math.min(1, local / 0.02) * Math.exp(-local * 1.1);
+        const sample = (Math.sin(2 * Math.PI * frequency * local) + 0.35 * Math.sin(4 * Math.PI * frequency * local) + 0.12 * Math.sin(6 * Math.PI * frequency * local)) * envelope * 0.12 / notes.length;
+        left[i] = (left[i] ?? 0) + sample * (1 - pan);
+        right[i] = (right[i] ?? 0) + sample * (1 + pan);
+      }
+    }
+    t += 1.2 + random() * 2.4;
+  }
+  return buffer;
+}
+
 /** Renders every clip into an AudioBuffer of the given context. */
 export function synthesiseSoundBank(context: AudioContext): SoundBank {
   const sampleRate = context.sampleRate;
