@@ -21,6 +21,9 @@ export interface FurnaceState {
 }
 
 export interface ItemSlotData { key: string; count: number; damage: number; }
+export interface ChestState { kind: "chest"; slots: (ItemSlotData | null)[]; }
+export type BlockEntityState = FurnaceState | ChestState;
+export function isChestState(state: BlockEntityState | undefined): state is ChestState { return state !== undefined && (state as ChestState).kind === "chest"; }
 
 export class Chunk {
   readonly blocks = new Uint8Array(CHUNK_VOLUME);
@@ -43,7 +46,7 @@ export class World {
   private readonly chunks = new Map<string, Chunk>();
   /** Persistent journal of edits per chunk key: local index → block id. Survives chunk unloads. */
   private readonly journal = new Map<string, Map<number, number>>();
-  readonly blockEntities = new Map<string, FurnaceState>();
+  readonly blockEntities = new Map<string, BlockEntityState>();
   private readonly blockListeners = new Set<BlockListener>();
   private readonly chunkListeners = new Set<ChunkListener>();
   private readonly dirtyChunks = new Set<string>();
@@ -248,8 +251,11 @@ export class World {
     return applied;
   }
 
-  serializeBlockEntities(): readonly (readonly [string, FurnaceState])[] {
-    return [...this.blockEntities].map(([key, state]) => [key, { input: state.input === null ? null : { ...state.input }, fuel: state.fuel === null ? null : { ...state.fuel }, output: state.output === null ? null : { ...state.output }, burn: state.burn, burnTotal: state.burnTotal, progress: state.progress }] as const);
+  serializeBlockEntities(): readonly (readonly [string, BlockEntityState])[] {
+    return [...this.blockEntities].map(([key, state]) => {
+      if (isChestState(state)) return [key, { kind: "chest", slots: state.slots.map((slot) => (slot === null ? null : { ...slot })) }] as const;
+      return [key, { input: state.input === null ? null : { ...state.input }, fuel: state.fuel === null ? null : { ...state.fuel }, output: state.output === null ? null : { ...state.output }, burn: state.burn, burnTotal: state.burnTotal, progress: state.progress }] as const;
+    });
   }
 
   /** Drops every loaded chunk and journal entry; used when starting a fresh world. */

@@ -18,7 +18,7 @@ import { createDebugDevToolsRuntime, type DebugSnapshot } from "@three-game-kit/
 import { createGameFlowRuntime, createHealthRuntime, createHudStateStore } from "@three-game-kit/shared/gameplay";
 import { createSaveLoadRuntime, type SaveAdapter, type SaveValue } from "@three-game-kit/shared/genre";
 import type { CraftlandsRenderer, CraftlandsRendererInspection } from "./client/renderer.js";
-import { AIR, BEDROCK, CACTUS, COBBLESTONE, CRAFTING_TABLE, DIAMOND_ORE, FURNACE, FURNACE_LIT, IRON_ORE, LAVA, LOG, OBSIDIAN, STONE, TORCH, WATER, blockById, blockByKey, canHarvest, miningSeconds, type BlockDefinition, type ToolType } from "./shared/blocks.js";
+import { AIR, BEDROCK, CACTUS, CHEST, COBBLESTONE, CRAFTING_TABLE, DIAMOND_ORE, FURNACE, FURNACE_LIT, IRON_ORE, LAVA, LOG, OBSIDIAN, STONE, TORCH, WATER, blockById, blockByKey, canHarvest, miningSeconds, type BlockDefinition, type ToolType } from "./shared/blocks.js";
 import { Container, clickSlot, sameItem, stack, transferStack, wearTool, type SlotValue } from "./shared/inventory.js";
 import { CREATIVE_ITEMS, itemByKey } from "./shared/items.js";
 import { MOB_DEFINITIONS, createMob, createMobRng, damageMob, deserializeMobs, serializeMobs, spawnMobs, stepMobs, type Mob, type MobKind } from "./shared/mobs.js";
@@ -30,7 +30,7 @@ import {
   type Action, type CraftlandsEvent, type CraftlandsSnapshot, type FurnaceSnapshot, type GameMode, type HeldInput, type ItemEntitySnapshot, type MobSnapshot, type MoveInput, type Phase, type Scenario, type Screen, type TargetSnapshot,
 } from "./shared/state.js";
 import { BIOME_NAMES, CHUNK, HEIGHT, SEA_LEVEL } from "./shared/terrain.js";
-import { World, type FurnaceState, type Vec3 } from "./shared/world.js";
+import { World, isChestState, type ChestState, type FurnaceState, type Vec3 } from "./shared/world.js";
 
 const MAX_STEPS = 1_200;
 const ACTIONS: readonly Action[] = Object.freeze([
@@ -66,7 +66,7 @@ export interface CraftlandsRuntimeInspection { readonly lifecycleState: string; 
 export interface CraftlandsWorldInspection { readonly seed: number; readonly loadedChunks: number; readonly editCount: number; readonly spawn: Vec3; readonly blockEntities: number; readonly simulationDistance: number; }
 export interface CraftlandsSaveInspection { readonly ready: boolean; readonly lastLoad: string | null; readonly lastSave: string | null; readonly hasSave: boolean; readonly editCount: number; }
 export interface CraftlandsLeakInspection { readonly activeListeners: number; readonly activeFeatures: number; readonly disposed: boolean; }
-export type SlotContainer = "inventory" | "craft" | "furnace-input" | "furnace-fuel" | "furnace-output" | "craft-result" | "creative";
+export type SlotContainer = "inventory" | "craft" | "furnace-input" | "furnace-fuel" | "furnace-output" | "craft-result" | "creative" | "chest";
 
 export interface CraftlandsGame {
   readonly disposed: boolean;
@@ -387,6 +387,12 @@ class Game implements CraftlandsGame {
     if (Array.isArray(data.blockEntities)) for (const entry of data.blockEntities as readonly SaveValue[]) {
       if (!Array.isArray(entry) || typeof entry[0] !== "string" || typeof entry[1] !== "object" || entry[1] === null) continue;
       const raw = entry[1] as Record<string, unknown>;
+      if (raw["kind"] === "chest") {
+        const slots = Array.isArray(raw["slots"]) ? (raw["slots"] as unknown[]).slice(0, 27).map((value) => (typeof value === "object" && value !== null && typeof (value as { key?: unknown }).key === "string" && typeof (value as { count?: unknown }).count === "number" && itemByKey((value as { key: string }).key) !== undefined ? { key: (value as { key: string }).key, count: (value as { count: number }).count, damage: typeof (value as { damage?: unknown }).damage === "number" ? (value as { damage: number }).damage : 0 } : null)) : [];
+        while (slots.length < 27) slots.push(null);
+        this.world.blockEntities.set(entry[0], { kind: "chest", slots });
+        continue;
+      }
       const slot = (value: unknown): FurnaceState["input"] => (typeof value === "object" && value !== null && typeof (value as { key?: unknown }).key === "string" && typeof (value as { count?: unknown }).count === "number") ? { key: (value as { key: string }).key, count: (value as { count: number }).count, damage: typeof (value as { damage?: unknown }).damage === "number" ? (value as { damage: number }).damage : 0 } : null;
       this.world.blockEntities.set(entry[0], { input: slot(raw["input"]), fuel: slot(raw["fuel"]), output: slot(raw["output"]), burn: typeof raw["burn"] === "number" ? raw["burn"] : 0, burnTotal: typeof raw["burnTotal"] === "number" ? raw["burnTotal"] : 0, progress: typeof raw["progress"] === "number" ? raw["progress"] : 0 });
     }
@@ -903,6 +909,11 @@ class Game implements CraftlandsGame {
   }
 
   private breakBlock(x: number, y: number, z: number, definition: BlockDefinition, tool: { type: ToolType; tier: number }, tick: number): void {
+    const entity = this.world.blockEntities.get(`${x},${y},${z}`);
+    if (entity !== undefined) {
+      const contents = isChestState(entity) ? entity.slots : [entity.input, entity.fuel, entity.output];
+      contents.forEach((slot, index) => { if (slot !== null) this.spawnItem(slot.key, slot.count, slot.damage, vec3(x + 0.5, y + 0.5, z + 0.5), hash3(index, tick, 3, 4) * Math.PI * 2, 0.6); });
+    }
     this.world.set(x, y, z, AIR);
     this.stats.mined += 1;
     this.stats.minedByKey[definition.key] = (this.stats.minedByKey[definition.key] ?? 0) + 1;
@@ -936,6 +947,7 @@ class Game implements CraftlandsGame {
       const blockId = blockByKey(target.blockKey)?.id;
       if (!this.player.sneaking) {
         if (blockId === CRAFTING_TABLE) { this.openScreen("crafting"); this.emit("use", "crafting_table"); return; }
+        if (blockId === CHEST) { const key = `${target.x},${target.y},${target.z}`; if (!isChestState(this.world.blockEntities.get(key))) this.world.blockEntities.set(key, { kind: "chest", slots: new Array<null>(27).fill(null) }); this.openScreen("chest", vec3(target.x, target.y, target.z)); this.emit("use", "chest"); return; }
         if (blockId === FURNACE || blockId === FURNACE_LIT) { const key = `${target.x},${target.y},${target.z}`; if (!this.world.blockEntities.has(key)) this.world.blockEntities.set(key, { input: null, fuel: null, output: null, burn: 0, burnTotal: 0, progress: 0 }); this.openScreen("furnace", vec3(target.x, target.y, target.z)); this.emit("use", "furnace"); return; }
       }
       if (item?.block !== null && item !== undefined) this.placeBlock(target, item.block, tick);
@@ -1186,6 +1198,7 @@ class Game implements CraftlandsGame {
 
   private stepFurnaces(): void {
     for (const [key, state] of this.world.blockEntities) {
+      if (isChestState(state)) continue;
       const [x, y, z] = key.split(",").map(Number) as [number, number, number];
       const blockId = this.world.get(x, y, z);
       if (blockId !== FURNACE && blockId !== FURNACE_LIT) { this.world.blockEntities.delete(key); continue; }
@@ -1213,8 +1226,15 @@ class Game implements CraftlandsGame {
   }
 
   private currentFurnace(): FurnaceState | null {
-    if (this.furnacePos === null) return null;
-    return this.world.blockEntities.get(`${this.furnacePos.x},${this.furnacePos.y},${this.furnacePos.z}`) ?? null;
+    if (this.furnacePos === null || this.screen !== "furnace") return null;
+    const state = this.world.blockEntities.get(`${this.furnacePos.x},${this.furnacePos.y},${this.furnacePos.z}`);
+    return state === undefined || isChestState(state) ? null : state;
+  }
+
+  private currentChest(): ChestState | null {
+    if (this.furnacePos === null || this.screen !== "chest") return null;
+    const state = this.world.blockEntities.get(`${this.furnacePos.x},${this.furnacePos.y},${this.furnacePos.z}`);
+    return isChestState(state) ? state : null;
   }
 
   // --- Crafting & slot clicks -------------------------------------------------------------
@@ -1265,9 +1285,21 @@ class Game implements CraftlandsGame {
       this.publishFrame();
       return;
     }
+    const chest = this.currentChest();
+    const chestContainer = (): Container => { const c = new Container(27); chest?.slots.forEach((slot, i) => { if (slot !== null) c.set(i, stack(slot.key, slot.count, slot.damage)); }); return c; };
+    const writeChest = (c: Container): void => { if (chest === null) return; chest.slots = c.slots.map((slot) => (slot === null ? null : { key: slot.key, count: slot.count, damage: slot.damage })); this.dirtySinceSave = true; };
+    if (container === "chest") {
+      if (chest === null) return;
+      const c = chestContainer();
+      if (shift) transferStack(c, index, this.inventory, HOTBAR); else this.cursor = clickSlot(c, index, this.cursor, button);
+      writeChest(c);
+      this.publishFrame();
+      return;
+    }
     if (container === "inventory") {
       if (shift) {
         const slot = this.inventory.get(index);
+        if (slot !== null && chest !== null) { const c = chestContainer(); transferStack(this.inventory, index, c); writeChest(c); this.publishFrame(); return; }
         if (slot !== null) {
           if (this.screen === "furnace" && furnace !== null) {
             const fuelValue = itemByKey(slot.key)?.fuel ?? 0;
@@ -1451,6 +1483,7 @@ class Game implements CraftlandsGame {
       craftGrid: this.craft.snapshot(),
       craftResult: this.craftResult,
       furnace: furnaceSnapshot,
+      chest: (() => { const state = this.currentChest(); return state === null ? null : Object.freeze(state.slots.map((slot) => (slot === null ? null : stack(slot.key, slot.count, slot.damage)))); })(),
       heldItem: this.heldStack(),
       items: Object.freeze(items),
       mobs: Object.freeze(mobs),
@@ -1589,6 +1622,7 @@ class Game implements CraftlandsGame {
       case "night": player.position = this.spawn; this.setTimeOfDay(0.85); break;
       case "crafting": { placeInFront(CRAFTING_TABLE); this.give("oak_log", 8); this.give("cobblestone", 16); this.give("coal", 4); break; }
       case "furnace": { placeInFront(FURNACE); this.give("iron_ore", 4); this.give("coal", 4); this.give("cobblestone", 8); break; }
+      case "chest": { placeInFront(CHEST); this.give("cobblestone", 8); break; }
       case "mobs": { player.position = this.spawn; player.yaw = 0; player.pitch = 0; const x = Math.floor(this.spawn.x); const z = Math.floor(this.spawn.z) - 4; this.mobs.push(createMob(this.nextEntityId++, "pig", vec3(x + 0.5, this.world.topSolid(x, z) + 1, z + 0.5))); this.mobs.push(createMob(this.nextEntityId++, "zombie", vec3(x + 2.5, this.world.topSolid(x + 2, z) + 1, z + 0.5))); break; }
     }
     this.miningProgress = 0;

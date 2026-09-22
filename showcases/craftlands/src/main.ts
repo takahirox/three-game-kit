@@ -184,6 +184,11 @@ function createCraftlandsHudAdapter(root: HTMLElement, onAction: (action: string
     } else if (snapshot.screen === "crafting") {
       panelTitle.textContent = "Crafting";
       panelTop.append(grid(3), arrow(), result("craft-result"));
+    } else if (snapshot.screen === "chest") {
+      panelTitle.textContent = "Chest";
+      const grid = document.createElement("div"); grid.className = "grid nine";
+      for (let index = 0; index < 27; index += 1) grid.append(register(slotElement("chest", index)));
+      panelTop.append(grid);
     } else if (snapshot.screen === "furnace") {
       panelTitle.textContent = "Furnace";
       const column = document.createElement("div"); column.className = "furnace-column";
@@ -205,6 +210,7 @@ function createCraftlandsHudAdapter(root: HTMLElement, onAction: (action: string
     snapshot.inventory.forEach((value, index) => { const element = panelSlots.get(`inventory:${index}`); if (element !== undefined) paintSlot(element, value); });
     snapshot.craftGrid.forEach((value, index) => { const element = panelSlots.get(`craft:${index}`); if (element !== undefined) paintSlot(element, value); });
     const resultSlot = panelSlots.get("craft-result:0"); if (resultSlot !== undefined) paintSlot(resultSlot, snapshot.craftResult);
+    snapshot.chest?.forEach((value, index) => { const element = panelSlots.get(`chest:${index}`); if (element !== undefined) paintSlot(element, value); });
     if (snapshot.furnace !== null) {
       const input = panelSlots.get("furnace-input:0"); if (input !== undefined) paintSlot(input, snapshot.furnace.input);
       const fuel = panelSlots.get("furnace-fuel:0"); if (fuel !== undefined) paintSlot(fuel, snapshot.furnace.fuel);
@@ -257,7 +263,7 @@ function createCraftlandsHudAdapter(root: HTMLElement, onAction: (action: string
       lockHint.hidden = !(mode === "normal" && snapshot.phase === "playing" && snapshot.screen === "none" && !pointerLocked());
       continueButton.hidden = !snapshot.hasSave;
       const seedText = String(snapshot.seed); if (seedText !== lastSeed) { lastSeed = seedText; seedLabel.textContent = seedText; }
-      const panelOpen = snapshot.phase === "playing" && (snapshot.screen === "inventory" || snapshot.screen === "crafting" || snapshot.screen === "furnace");
+      const panelOpen = snapshot.phase === "playing" && (snapshot.screen === "inventory" || snapshot.screen === "crafting" || snapshot.screen === "furnace" || snapshot.screen === "chest");
       panel.hidden = !panelOpen;
       if (panelOpen) paintPanel(snapshot); else { tooltip.hidden = true; cursorItem.hidden = true; }
       const chatOpen = snapshot.phase === "playing" && snapshot.screen === "chat";

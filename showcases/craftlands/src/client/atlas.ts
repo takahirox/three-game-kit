@@ -796,6 +796,13 @@ const PAINTERS: Readonly<Record<number, Painter>> = Object.freeze({
   [TILE.furnaceFrontLit]: overlay((px, py, noise) => cobble(px, py, noise, 0x6e6e6e, 0x424242, 12), FURNACE_MOUTH_LIT),
   [TILE.furnaceTop]: (px, py, noise) => stone(px, py, noise, 0x707070),
   [TILE.torch]: TORCH,
+  [TILE.chestTop]: (px, py, noise) => (px === 0 || py === 0 || px === 15 || py === 15 ? speckle(0x5a3d1c, noise, 0.1) : speckle(0xa5772f, noise, 0.14)),
+  [TILE.chestSide]: (px, py, noise) => (px === 0 || px === 15 || py === 0 || py === 15 || py === 9 ? speckle(0x5a3d1c, noise, 0.1) : speckle(py < 9 ? 0xa5772f : 0x9a6a2a, noise, 0.14)),
+  [TILE.chestFront]: (px, py, noise) => {
+    if (px >= 7 && px <= 8 && py >= 7 && py <= 10) return speckle(px === 7 && py === 8 ? 0x2b2b2b : 0x5c5c5c, noise, 0.1);
+    if (px === 0 || px === 15 || py === 0 || py === 15 || py === 9) return speckle(0x5a3d1c, noise, 0.1);
+    return speckle(py < 9 ? 0xa5772f : 0x9a6a2a, noise, 0.14);
+  },
   [TILE.snow]: (_px, _py, noise) => speckle(0xf4fbfb, noise, 0.08),
   [TILE.grassSideSnow]: (px, py, noise) => {
     const edge = 3 + (hash2(px, 0, 910) < 0.5 ? 1 : 0);

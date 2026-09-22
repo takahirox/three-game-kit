@@ -145,6 +145,20 @@ test("Craftlands runs a deterministic public-Feature survival sandbox", async ({
   expect(await page.evaluate(() => game().inspectInventory())).toMatchObject({ iron_ingot: 1 });
   expect((await page.evaluate(() => game().events())).map(({ kind }) => kind)).toContain("smelted");
 
+  // --- Chest: shift-click cobblestone in, reopen after closing, contents persist ---
+  await page.evaluate(() => { game().loadScenario("chest"); game().setHeld({ use: true }); game().advance(0.05); game().setHeld({ use: false }); game().advance(0.05); });
+  expect((await page.evaluate(() => game().snapshot())).screen).toBe("chest");
+  await expect(page.locator("#panel-title")).toHaveText("Chest");
+  await page.evaluate(() => { const s = game().snapshot(); game().clickSlot("inventory", s.inventory.findIndex((x) => x?.key === "cobblestone"), "left", true); game().advance(0.05); });
+  const chest = await page.evaluate(() => game().snapshot().chest);
+  expect(chest!.filter((slot) => slot !== null)).toHaveLength(1);
+  expect(chest![0]).toMatchObject({ key: "cobblestone" });
+  expect(await page.evaluate(() => game().inspectInventory())).not.toHaveProperty("cobblestone");
+  await page.evaluate(() => { game().press("escape"); game().advance(0.05); game().setHeld({ use: true }); game().advance(0.05); game().setHeld({ use: false }); game().advance(0.05); });
+  expect((await page.evaluate(() => game().snapshot())).chest![0]).toMatchObject({ key: "cobblestone" });
+  await page.evaluate(() => { game().clickSlot("chest", 0, "left", true); game().press("escape"); game().advance(0.05); });
+  expect(await page.evaluate(() => game().inspectInventory())).toMatchObject({ cobblestone: expect.any(Number) });
+
   // --- Torch light: flood-fill block light brightens the placed spot ---
   await page.evaluate(() => { game().loadScenario("cave"); game().give("torch", 1); const slot = game().snapshot().inventory.findIndex((x) => x?.key === "torch"); game().press(`select-${slot + 1}` as never); game().setLook(0, -1.2); game().advance(0.05); });
   const dark = await page.evaluate(() => { const p = game().snapshot().player.position; return { x: Math.floor(p.x), y: Math.floor(p.y), z: Math.floor(p.z), light: game().snapshot().target }; });
