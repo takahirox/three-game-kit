@@ -77,6 +77,8 @@ let lastTime = 0;
 let lastForwardTap = -1000;
 let mouseX = 0;
 let mouseY = 0;
+/** Intentional pointer-lock exits (inventory, chat) must not read as the user pressing Esc. */
+let suppressPauseUntil = 0;
 
 function statusLine(snapshot: CraftlandsSnapshot): string {
   if (snapshot.phase === "title") return "Craftlands · click NEW WORLD, then click the world to capture the mouse";
@@ -337,7 +339,7 @@ listen(window, "keydown", ((event: KeyboardEvent) => {
   unlockAudio();
   const snapshot = game?.snapshot();
   if (snapshot?.screen === "chat") {
-    if (event.code === "Escape") { event.preventDefault(); game?.press("escape"); stepTestFrame(); }
+    if (event.code === "Escape") { event.preventDefault(); game?.press("escape"); stepTestFrame(); if (mode === "normal") lockPointer(); }
     return;
   }
   if (!GAME_KEYS.has(event.code)) return;
@@ -353,10 +355,10 @@ listen(window, "keydown", ((event: KeyboardEvent) => {
   else if (event.code === "ControlLeft" || event.code === "ControlRight") game?.press("sprint-start");
   else if (event.code.startsWith("Digit")) game?.press(`select-${event.code.slice(5)}` as Action);
   else if (event.code === "KeyQ") game?.press("drop");
-  else if (event.code === "KeyE") { game?.press("inventory"); if (mode === "normal" && pointerLocked()) document.exitPointerLock(); }
+  else if (event.code === "KeyE") { const open = snapshot?.screen !== "none"; game?.press("inventory"); if (mode === "normal") { if (!open && pointerLocked()) { suppressPauseUntil = performance.now() + 500; document.exitPointerLock(); } else if (open) lockPointer(); } }
   else if (event.code === "KeyF") game?.press("save");
-  else if (event.code === "KeyT" || event.code === "Slash") { if (snapshot?.phase === "playing" && snapshot.screen === "none") { requireElement<HTMLInputElement>("#chat-input").dataset["prefill"] = event.code === "Slash" ? "/" : ""; game?.press("chat"); if (mode === "normal" && pointerLocked()) document.exitPointerLock(); } }
-  else if (event.code === "Escape") { const optionsScreen = document.querySelector<HTMLElement>("#options"); if (optionsScreen !== null && !optionsScreen.hidden) { optionsScreen.hidden = true; saveOptions(); } else game?.press("escape"); }
+  else if (event.code === "KeyT" || event.code === "Slash") { if (snapshot?.phase === "playing" && snapshot.screen === "none") { requireElement<HTMLInputElement>("#chat-input").dataset["prefill"] = event.code === "Slash" ? "/" : ""; game?.press("chat"); if (mode === "normal" && pointerLocked()) { suppressPauseUntil = performance.now() + 500; document.exitPointerLock(); } } }
+  else if (event.code === "Escape") { const optionsScreen = document.querySelector<HTMLElement>("#options"); if (optionsScreen !== null && !optionsScreen.hidden) { optionsScreen.hidden = true; saveOptions(); } else { const closingScreen = snapshot?.phase === "playing" && snapshot.screen !== "none"; game?.press("escape"); if (closingScreen && mode === "normal") lockPointer(); } }
   else if (event.code === "F1") game?.press("toggle-hud");
   else if (event.code === "F3") game?.press("toggle-debug");
   else if (event.code === "F5") game?.press("toggle-perspective");
@@ -425,7 +427,7 @@ listen(canvas, "wheel", ((event: WheelEvent) => {
   game?.press(event.deltaY > 0 ? "next-slot" : "previous-slot");
   stepTestFrame();
 }) as EventListener, { passive: false });
-listen(document, "pointerlockchange", (() => { if (!pointerLocked()) { held.clear(); updateMove(); game?.press("attack-end"); game?.press("use-end"); const snapshot = game?.snapshot(); if (mode === "normal" && snapshot?.phase === "playing" && snapshot.screen === "none") game?.press("escape"); } }) as EventListener);
+listen(document, "pointerlockchange", (() => { if (!pointerLocked()) { held.clear(); updateMove(); game?.press("attack-end"); game?.press("use-end"); const snapshot = game?.snapshot(); if (mode === "normal" && performance.now() > suppressPauseUntil && snapshot?.phase === "playing" && snapshot.screen === "none") game?.press("escape"); } }) as EventListener);
 listen(window, "resize", (() => renderer?.resize()) as EventListener);
 listen(window, "error", ((event: ErrorEvent) => record("window.error", event.error ?? event.message)) as EventListener);
 listen(window, "unhandledrejection", ((event: PromiseRejectionEvent) => record("unhandledrejection", event.reason)) as EventListener);

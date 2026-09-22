@@ -160,7 +160,8 @@ export const TUNING = Object.freeze({
 });
 
 export function formatClock(timeOfDay: number): string {
-  const minutes = Math.floor((((timeOfDay + 0.25) % 1) + 1) % 1 * 24 * 60);
+  // Sunrise is at 0.25, noon at 0.5, sunset at 0.75, so the fraction maps straight onto a 24-hour clock.
+  const minutes = Math.floor((((timeOfDay % 1) + 1) % 1) * 24 * 60);
   const hours = Math.floor(minutes / 60);
   return `${String(hours).padStart(2, "0")}:${String(minutes % 60).padStart(2, "0")}`;
 }
