@@ -71,6 +71,10 @@
     "test:craftlands-assets": "node scripts/verify-craftlands-assets.mjs",
     "test:craftlands": "playwright test tests/craftlands.spec.ts --project=chromium --workers=1 --retries=0",
     "verify:craftlands": "pnpm run test:craftlands-boundaries && pnpm run test:craftlands-assets && pnpm run typecheck:craftlands && pnpm run test:craftlands",
+    "capture:gallery": "node scripts/capture-gallery-covers.mjs",
+    "test:gallery-assets": "node scripts/verify-gallery.mjs",
+    "test:gallery": "playwright test --config playwright.gallery.config.ts",
+    "verify:gallery": "pnpm run test:gallery-assets && pnpm run test:gallery",
     "build:pages": "vite build --config vite.pages.config.ts",
     "preview:pages": "vite preview --config vite.pages.config.ts --host 127.0.0.1 --port 4175"
   },

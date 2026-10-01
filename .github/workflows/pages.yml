@@ -28,6 +28,8 @@ jobs:
           corepack prepare pnpm@11.24.0 --activate
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
+      - name: Verify gallery links and cover inventory
+        run: pnpm run test:gallery-assets
       - name: Build static showcases
         run: pnpm run build:pages
       - uses: actions/configure-pages@v5
