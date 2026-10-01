@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { createAbilityRuntime, createGeneralPhysicsRuntime, createInMemorySaveAdapter, createInventoryRuntime, createProjectileRuntime, createSaveLoadRuntime, createSimpleAiRuntime } from "@three-game-kit/shared/genre";
+import { createAbilityRuntime, createGeneralPhysicsRuntime, createHitQueryRuntime, createInMemorySaveAdapter, createInventoryRuntime, createLockOnRuntime, createProjectileRuntime, createSaveLoadRuntime, createSimpleAiRuntime } from "@three-game-kit/shared/genre";
 
 test("General Physics is deterministic, queryable, layer-aware, and disposable", () => {
   const runtime = createGeneralPhysicsRuntime({ gravity: { x: 0, y: 0, z: 0 } });
@@ -48,6 +48,9 @@ test("Simple AI Navigation uses replaceable policy hooks and deterministic waypo
   const runtime = createSimpleAiRuntime({ selectBehavior: () => "patrol", selectTarget: () => "hero" });
   runtime.register("guard", { x: 0, y: 0, z: 0 }, 2); runtime.setWaypoints("guard", [{ x: 2, y: 0, z: 0 }]);
   assert.deepEqual(runtime.step(1, 0.5)[0], { id: "guard", behavior: "patrol", position: { x: 1, y: 0, z: 0 }, targetId: "hero", waypointCount: 1 });
+  assert.deepEqual(runtime.setPosition("guard", { x: 5, y: 0, z: 0 }).position, { x: 5, y: 0, z: 0 }, "knockback and encounter resets relocate an agent without re-registering it");
+  assert.deepEqual(runtime.step(2, 0.5)[0].position, { x: 4, y: 0, z: 0 });
+  assert.throws(() => runtime.setPosition("missing", { x: 0, y: 0, z: 0 }), /Unknown AI agent/);
   runtime.dispose(); assert.equal(runtime.disposed, true);
 });
 
@@ -59,4 +62,56 @@ test("Save Load supports versions, migration, validation, removal, and disposal"
   assert.equal((await runtime.load("old")).ok, true); assert.deepEqual(state, { score: 2, migrated: true });
   assert.equal(await runtime.remove("current"), true); assert.deepEqual(await runtime.load("missing"), { ok: false, code: "not-found" });
   await runtime.dispose(); assert.equal(adapter.inspect().disposed, true);
+});
+
+test("Hit Query resolves arc, sphere, and capsule volumes deterministically with filters and limits", () => {
+  const runtime = createHitQueryRuntime();
+  const candidates = [
+    { id: "front", position: { x: 0, y: 0, z: 2 } },
+    { id: "front-far", position: { x: 0, y: 0, z: 5 } },
+    { id: "side", position: { x: 2, y: 0, z: 0 }, radius: 0.5 },
+    { id: "behind", position: { x: 0, y: 0, z: -2 } },
+    { id: "above", position: { x: 0, y: 6, z: 1 } },
+    { id: "edge", position: { x: 1.3, y: 0, z: 1.3 } },
+  ];
+  const arc = runtime.query({ kind: "arc", origin: { x: 0, y: 0, z: 0 }, yaw: 0, radius: 3, angle: Math.PI / 2 }, candidates);
+  assert.deepEqual(arc.map(({ id }) => id), ["edge", "front"], "arc hits are ordered by distance then id and exclude far, behind, side, and vertical outliers");
+  assert.ok(Math.abs(arc[0].direction.x - Math.SQRT1_2) < 1e-12 && arc[0].direction.y === 0 && Math.abs(arc[0].direction.z - Math.SQRT1_2) < 1e-12);
+  assert.deepEqual(runtime.query({ kind: "arc", origin: { x: 0, y: 0, z: 0 }, yaw: Math.PI / 2, radius: 3, angle: 0.2 }, candidates).map(({ id }) => id), ["side"], "candidate radius widens the angular reach");
+  assert.deepEqual(runtime.query({ kind: "sphere", center: { x: 0, y: 0, z: 0 }, radius: 2.1 }, candidates, { maxTargets: 2, exclude: ["front"] }).map(({ id }) => id), ["edge", "behind"]);
+  assert.deepEqual(runtime.query({ kind: "capsule", start: { x: 0, y: 0, z: 0 }, end: { x: 0, y: 0, z: 6 }, radius: 0.5 }, candidates).map(({ id }) => id), ["front", "front-far"]);
+  assert.deepEqual(runtime.inspect(), { disposed: false, queryCount: 4, hitCount: 7, lastHitIds: ["front", "front-far"] });
+  assert.throws(() => runtime.query({ kind: "arc", origin: { x: 0, y: 0, z: 0 }, yaw: 0, radius: 0, angle: 1 }, []), /positive/);
+  assert.throws(() => runtime.query({ kind: "sphere", center: { x: 0, y: 0, z: 0 }, radius: 1 }, [], { maxTargets: 0 }), /positive integer/);
+  runtime.dispose();
+  assert.throws(() => runtime.query({ kind: "sphere", center: { x: 0, y: 0, z: 0 }, radius: 1 }, []), /disposed/);
+});
+
+test("Lock-On acquires, cycles, releases, and drops invalid or distant targets deterministically", () => {
+  const runtime = createLockOnRuntime({ range: 10 });
+  const origin = { x: 0, y: 0, z: 0 };
+  const enemies = [
+    { id: "b", position: { x: 0, y: 0, z: 4 } },
+    { id: "a", position: { x: 0, y: 0, z: 4 } },
+    { id: "far", position: { x: 0, y: 0, z: 30 } },
+    { id: "c", position: { x: 6, y: 0, z: 0 } },
+  ];
+  assert.deepEqual(runtime.acquire(origin, enemies, 1), { kind: "acquired", targetId: "a", reason: null, tick: 1 });
+  assert.equal(runtime.acquire(origin, enemies, 2), null, "re-acquiring the nearest target is a no-op");
+  assert.deepEqual(runtime.cycle(origin, enemies, 3), { kind: "cycled", targetId: "b", reason: null, tick: 3 });
+  assert.deepEqual(runtime.cycle(origin, enemies, 4), { kind: "cycled", targetId: "c", reason: null, tick: 4 });
+  assert.deepEqual(runtime.cycle(origin, enemies, 5), { kind: "cycled", targetId: "a", reason: null, tick: 5 }, "cycling wraps within range and never reaches the distant candidate");
+  assert.deepEqual(runtime.step(6, origin, enemies), []);
+  assert.deepEqual(runtime.step(7, origin, enemies.filter(({ id }) => id !== "a")), [{ kind: "released", targetId: "a", reason: "invalid", tick: 7 }]);
+  assert.equal(runtime.targetId, null);
+  assert.equal(runtime.cycle(origin, [], 8), null, "cycling with nothing in range acquires nothing");
+  assert.deepEqual(runtime.acquire(origin, enemies, 9), { kind: "acquired", targetId: "a", reason: null, tick: 9 });
+  assert.deepEqual(runtime.step(10, { x: 0, y: 0, z: -9 }, enemies), [{ kind: "released", targetId: "a", reason: "out-of-range", tick: 10 }], "release uses the hysteresis range");
+  assert.deepEqual(runtime.acquire(origin, enemies, 11), { kind: "acquired", targetId: "a", reason: null, tick: 11 });
+  assert.deepEqual(runtime.release(12), { kind: "released", targetId: "a", reason: "manual", tick: 12 });
+  assert.equal(runtime.release(13), null);
+  assert.deepEqual(runtime.inspect(), { disposed: false, targetId: null, lockedTick: null, acquireCount: 6, releaseCount: 3, range: 10, releaseRange: 12.5 });
+  assert.throws(() => createLockOnRuntime({ range: 10, releaseRange: 5 }), /at least range/);
+  runtime.dispose();
+  assert.throws(() => runtime.acquire(origin, enemies, 14), /disposed/);
 });

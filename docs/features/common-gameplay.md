@@ -21,6 +21,10 @@ validated, frozen, and ordered by stable IDs. Client and Server wrappers accept 
 same model interfaces, so a game can test rules headlessly and choose the appropriate
 runtime owner without deep imports.
 
+### Checkpoint/Respawn shared model
+
+`createCheckpointRuntime({ checkpoints, initialCheckpointId, respawnDelayTicks })` was extracted from the Relic Frontier melee slice. It keeps a registry of checkpoints with positions and labels, `activate` returns explicit outcomes (`already-active`, `unknown-checkpoint`), `requestRespawn`/`cancelRespawn` schedule or drop a delayed respawn, and `step(tick)` emits exactly one `respawned` event with the checkpoint position when the delay elapses. The restore policy (what resets, what survives death) is deliberately caller-owned; a game-specific scheduled Feature steps the runtime and applies the event. Like HUD it has no lifecycle wrapper yet.
+
 ## Authority boundary
 
 In multiplayer, the Server remains authoritative. Trigger and Health Client Features

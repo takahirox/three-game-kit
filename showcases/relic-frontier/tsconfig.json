@@ -10,6 +10,7 @@
       "@three-game-kit/core": ["../../packages/core/src/index.ts"],
       "@three-game-kit/client": ["../../packages/client/src/index.ts"],
       "@three-game-kit/client/advanced": ["../../packages/client/src/advanced.ts"],
+      "@three-game-kit/client/animation": ["../../packages/client/src/animation.ts"],
       "@three-game-kit/client/asset-manager": ["../../packages/client/src/asset-manager.ts"],
       "@three-game-kit/client/audio": ["../../packages/client/src/audio.ts"],
       "@three-game-kit/client/camera": ["../../packages/client/src/camera.ts"],

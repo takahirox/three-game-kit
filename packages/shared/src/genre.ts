@@ -129,10 +129,10 @@ export function createAbilityRuntime(rawDefinitions: readonly AbilityDefinition[
 
 // Simple AI / Navigation
 export interface AiAgentState { readonly id: string; readonly behavior: string; readonly position: GenreVector3; readonly targetId: string | null; readonly waypointCount: number; }
-export interface SimpleAiRuntime { readonly disposed: boolean; register(id: string, position: GenreVector3, speed: number): AiAgentState; setWaypoints(agentId: string, waypoints: readonly GenreVector3[]): void; step(stepTick: number, dtSeconds: number): readonly AiAgentState[]; inspect(): Readonly<{ disposed: boolean; agents: readonly AiAgentState[]; stepCount: number }>; dispose(): void; }
+export interface SimpleAiRuntime { readonly disposed: boolean; register(id: string, position: GenreVector3, speed: number): AiAgentState; setWaypoints(agentId: string, waypoints: readonly GenreVector3[]): void; setPosition(agentId: string, position: GenreVector3): AiAgentState; step(stepTick: number, dtSeconds: number): readonly AiAgentState[]; inspect(): Readonly<{ disposed: boolean; agents: readonly AiAgentState[]; stepCount: number }>; dispose(): void; }
 export function createSimpleAiRuntime(hooks: Readonly<{ readonly selectBehavior?: (agent: AiAgentState, tick: number) => string; readonly selectTarget?: (agent: AiAgentState, tick: number) => string | null }> = {}): SimpleAiRuntime {
   if (typeof hooks !== "object" || hooks === null || (hooks.selectBehavior !== undefined && typeof hooks.selectBehavior !== "function") || (hooks.selectTarget !== undefined && typeof hooks.selectTarget !== "function")) throw new TypeError("Simple AI hooks are invalid"); const agents = new Map<string, { position: GenreVector3; speed: number; behavior: string; targetId: string | null; waypoints: GenreVector3[] }>(); let stepCount = 0; let disposed = false; function state(agentId: string, agent: { position: GenreVector3; behavior: string; targetId: string | null; waypoints: GenreVector3[] }): AiAgentState { return Object.freeze({ id: agentId, behavior: agent.behavior, position: agent.position, targetId: agent.targetId, waypointCount: agent.waypoints.length }); }
-  const runtime = Object.freeze<SimpleAiRuntime>({ get disposed() { return disposed; }, register(rawId, rawPosition, rawSpeed): AiAgentState { active(disposed, "Simple AI runtime"); const agentId = id(rawId, "AI agent ID"); if (agents.has(agentId)) throw new TypeError(`Duplicate AI agent: ${agentId}`); const agent = { position: vector(rawPosition, "AI position"), speed: positive(rawSpeed, "AI speed"), behavior: "idle", targetId: null, waypoints: [] }; agents.set(agentId, agent); return state(agentId, agent); }, setWaypoints(rawId, rawWaypoints): void { active(disposed, "Simple AI runtime"); const agentId = id(rawId, "AI agent ID"); const agent = agents.get(agentId); if (agent === undefined) throw new RangeError(`Unknown AI agent: ${agentId}`); if (!Array.isArray(rawWaypoints)) throw new TypeError("AI waypoints must be an array"); agent.waypoints = rawWaypoints.map((item) => vector(item, "AI waypoint")); }, step(rawTick, rawDt): readonly AiAgentState[] { active(disposed, "Simple AI runtime"); tick(rawTick, "AI tick"); const dt = positive(rawDt, "AI dt"); const results: AiAgentState[] = []; for (const [agentId, agent] of [...agents].sort(([a], [b]) => compare(a, b))) { const before = state(agentId, agent); agent.behavior = id(hooks.selectBehavior?.(before, rawTick) ?? (agent.waypoints.length > 0 ? "follow-path" : "idle"), "AI behavior"); const target = hooks.selectTarget?.(before, rawTick) ?? null; agent.targetId = target === null ? null : id(target, "AI target ID"); const waypoint = agent.waypoints[0]; if (waypoint !== undefined) { const dx = waypoint.x - agent.position.x; const dy = waypoint.y - agent.position.y; const dz = waypoint.z - agent.position.z; const distance = Math.hypot(dx, dy, dz); const movement = agent.speed * dt; if (distance <= movement) { agent.position = waypoint; agent.waypoints.shift(); } else agent.position = Object.freeze({ x: agent.position.x + dx / distance * movement, y: agent.position.y + dy / distance * movement, z: agent.position.z + dz / distance * movement }); } results.push(state(agentId, agent)); } stepCount += 1; return Object.freeze(results); }, inspect() { return Object.freeze({ disposed, agents: Object.freeze([...agents].sort(([a], [b]) => compare(a, b)).map(([agentId, agent]) => state(agentId, agent))), stepCount }); }, dispose() { if (!disposed) { disposed = true; agents.clear(); } } });
+  const runtime = Object.freeze<SimpleAiRuntime>({ get disposed() { return disposed; }, register(rawId, rawPosition, rawSpeed): AiAgentState { active(disposed, "Simple AI runtime"); const agentId = id(rawId, "AI agent ID"); if (agents.has(agentId)) throw new TypeError(`Duplicate AI agent: ${agentId}`); const agent = { position: vector(rawPosition, "AI position"), speed: positive(rawSpeed, "AI speed"), behavior: "idle", targetId: null, waypoints: [] }; agents.set(agentId, agent); return state(agentId, agent); }, setWaypoints(rawId, rawWaypoints): void { active(disposed, "Simple AI runtime"); const agentId = id(rawId, "AI agent ID"); const agent = agents.get(agentId); if (agent === undefined) throw new RangeError(`Unknown AI agent: ${agentId}`); if (!Array.isArray(rawWaypoints)) throw new TypeError("AI waypoints must be an array"); agent.waypoints = rawWaypoints.map((item) => vector(item, "AI waypoint")); }, setPosition(rawId, rawPosition): AiAgentState { active(disposed, "Simple AI runtime"); const agentId = id(rawId, "AI agent ID"); const agent = agents.get(agentId); if (agent === undefined) throw new RangeError(`Unknown AI agent: ${agentId}`); agent.position = vector(rawPosition, "AI position"); return state(agentId, agent); }, step(rawTick, rawDt): readonly AiAgentState[] { active(disposed, "Simple AI runtime"); tick(rawTick, "AI tick"); const dt = positive(rawDt, "AI dt"); const results: AiAgentState[] = []; for (const [agentId, agent] of [...agents].sort(([a], [b]) => compare(a, b))) { const before = state(agentId, agent); agent.behavior = id(hooks.selectBehavior?.(before, rawTick) ?? (agent.waypoints.length > 0 ? "follow-path" : "idle"), "AI behavior"); const target = hooks.selectTarget?.(before, rawTick) ?? null; agent.targetId = target === null ? null : id(target, "AI target ID"); const waypoint = agent.waypoints[0]; if (waypoint !== undefined) { const dx = waypoint.x - agent.position.x; const dy = waypoint.y - agent.position.y; const dz = waypoint.z - agent.position.z; const distance = Math.hypot(dx, dy, dz); const movement = agent.speed * dt; if (distance <= movement) { agent.position = waypoint; agent.waypoints.shift(); } else agent.position = Object.freeze({ x: agent.position.x + dx / distance * movement, y: agent.position.y + dy / distance * movement, z: agent.position.z + dz / distance * movement }); } results.push(state(agentId, agent)); } stepCount += 1; return Object.freeze(results); }, inspect() { return Object.freeze({ disposed, agents: Object.freeze([...agents].sort(([a], [b]) => compare(a, b)).map(([agentId, agent]) => state(agentId, agent))), stepCount }); }, dispose() { if (!disposed) { disposed = true; agents.clear(); } } });
   return runtime;
 }
 
@@ -147,5 +147,194 @@ export function createInMemorySaveAdapter(): SaveAdapter & { inspect(): Readonly
 export function createSaveLoadRuntime(options: Readonly<{ readonly currentVersion: number; readonly capture: () => SaveValue; readonly restore: (data: SaveValue) => void; readonly validate?: (data: SaveValue) => boolean; readonly migrations?: Readonly<Record<number, (data: SaveValue) => SaveValue>>; readonly adapter: SaveAdapter }>): SaveLoadRuntime {
   if (typeof options !== "object" || options === null || !Number.isSafeInteger(options.currentVersion) || options.currentVersion <= 0 || typeof options.capture !== "function" || typeof options.restore !== "function" || typeof options.adapter !== "object" || options.adapter === null) throw new TypeError("Save Load options are invalid"); let disposed = false; const currentVersion = options.currentVersion;
   const runtime = Object.freeze<SaveLoadRuntime>({ get disposed() { return disposed; }, async save(rawSlot): Promise<SaveLoadOutcome> { active(disposed, "Save Load runtime"); const slot = id(rawSlot, "Save slot"); let saveDocument: SaveDocument; try { saveDocument = Object.freeze({ schemaVersion: currentVersion, data: saveValue(options.capture()) }); if (!(options.validate?.(saveDocument.data) ?? true)) return Object.freeze({ ok: false, code: "validation-failed" }); await options.adapter.write(slot, saveDocument); } catch { return Object.freeze({ ok: false, code: "adapter-failed" }); } return Object.freeze({ ok: true, document: saveDocument }); }, async load(rawSlot): Promise<SaveLoadOutcome> { active(disposed, "Save Load runtime"); let raw: SaveDocument | undefined; try { raw = await options.adapter.read(id(rawSlot, "Save slot")); } catch { return Object.freeze({ ok: false, code: "adapter-failed" }); } if (raw === undefined) return Object.freeze({ ok: false, code: "not-found" }); if (!Number.isSafeInteger(raw.schemaVersion) || raw.schemaVersion <= 0) return Object.freeze({ ok: false, code: "validation-failed" }); if (raw.schemaVersion > currentVersion) return Object.freeze({ ok: false, code: "future-version" }); let data: SaveValue; try { data = saveValue(raw.data); for (let version = raw.schemaVersion; version < currentVersion; version += 1) { const migrate = options.migrations?.[version]; if (migrate === undefined) return Object.freeze({ ok: false, code: "migration-failed" }); data = saveValue(migrate(data)); } } catch { return Object.freeze({ ok: false, code: "migration-failed" }); } if (!(options.validate?.(data) ?? true)) return Object.freeze({ ok: false, code: "validation-failed" }); const saveDocument = Object.freeze({ schemaVersion: currentVersion, data }); try { options.restore(data); } catch { return Object.freeze({ ok: false, code: "validation-failed" }); } return Object.freeze({ ok: true, document: saveDocument }); }, async remove(rawSlot): Promise<boolean> { active(disposed, "Save Load runtime"); try { const slot = id(rawSlot, "Save slot"); if (await options.adapter.read(slot) === undefined) return false; await options.adapter.remove(slot); return true; } catch { return false; } }, async dispose(): Promise<void> { if (!disposed) { disposed = true; await options.adapter.dispose(); } } });
+  return runtime;
+}
+
+// Hit Query: deterministic melee/area spatial queries shared by player attacks, enemy attacks, and bosses.
+export interface HitCandidate { readonly id: string; readonly position: GenreVector3; readonly radius?: number; }
+export type HitVolume =
+  | Readonly<{ readonly kind: "arc"; readonly origin: GenreVector3; readonly yaw: number; readonly radius: number; readonly angle: number }>
+  | Readonly<{ readonly kind: "sphere"; readonly center: GenreVector3; readonly radius: number }>
+  | Readonly<{ readonly kind: "capsule"; readonly start: GenreVector3; readonly end: GenreVector3; readonly radius: number }>;
+export interface HitQueryOptions { readonly maxTargets?: number; readonly exclude?: readonly string[]; readonly verticalTolerance?: number; }
+export interface HitQueryHit { readonly id: string; readonly distance: number; readonly direction: GenreVector3; }
+export interface HitQueryInspection { readonly disposed: boolean; readonly queryCount: number; readonly hitCount: number; readonly lastHitIds: readonly string[]; }
+export interface HitQueryRuntime { readonly disposed: boolean; query(volume: HitVolume, candidates: readonly HitCandidate[], options?: HitQueryOptions): readonly HitQueryHit[]; inspect(): HitQueryInspection; dispose(): void; }
+
+function hitVolume(value: HitVolume): HitVolume {
+  if (typeof value !== "object" || value === null || Array.isArray(value)) throw new TypeError("Hit volume must be an object");
+  const keys = Reflect.ownKeys(value).sort().join("|");
+  if (value.kind === "arc") {
+    if (keys !== "angle|kind|origin|radius|yaw") throw new TypeError("Arc hit volume must contain exactly kind, origin, yaw, radius, and angle");
+    const angle = positive(value.angle, "Arc angle");
+    if (angle > Math.PI * 2) throw new TypeError("Arc angle must be at most a full turn");
+    return Object.freeze({ kind: "arc", origin: vector(value.origin, "Arc origin"), yaw: number(value.yaw, "Arc yaw"), radius: positive(value.radius, "Arc radius"), angle });
+  }
+  if (value.kind === "sphere") {
+    if (keys !== "center|kind|radius") throw new TypeError("Sphere hit volume must contain exactly kind, center, and radius");
+    return Object.freeze({ kind: "sphere", center: vector(value.center, "Sphere center"), radius: positive(value.radius, "Sphere radius") });
+  }
+  if (value.kind === "capsule") {
+    if (keys !== "end|kind|radius|start") throw new TypeError("Capsule hit volume must contain exactly kind, start, end, and radius");
+    return Object.freeze({ kind: "capsule", start: vector(value.start, "Capsule start"), end: vector(value.end, "Capsule end"), radius: positive(value.radius, "Capsule radius") });
+  }
+  throw new TypeError("Hit volume kind is unknown");
+}
+
+function normalizeXZ(dx: number, dz: number): GenreVector3 {
+  const length = Math.hypot(dx, dz);
+  return length === 0 ? Object.freeze({ x: 0, y: 0, z: 1 }) : Object.freeze({ x: dx / length, y: 0, z: dz / length });
+}
+
+export function createHitQueryRuntime(): HitQueryRuntime {
+  let queryCount = 0;
+  let hitCount = 0;
+  let lastHitIds: readonly string[] = Object.freeze([]);
+  let disposed = false;
+  return Object.freeze<HitQueryRuntime>({
+    get disposed() { return disposed; },
+    query(rawVolume, candidates, options = {}): readonly HitQueryHit[] {
+      active(disposed, "Hit query runtime");
+      const volume = hitVolume(rawVolume);
+      if (!Array.isArray(candidates)) throw new TypeError("Hit candidates must be an array");
+      if (typeof options !== "object" || options === null || Array.isArray(options) || !Reflect.ownKeys(options).every((key) => key === "maxTargets" || key === "exclude" || key === "verticalTolerance")) throw new TypeError("Hit query options are invalid");
+      const maxTargets = options.maxTargets === undefined ? Number.POSITIVE_INFINITY : options.maxTargets;
+      if (maxTargets !== Number.POSITIVE_INFINITY && (!Number.isSafeInteger(maxTargets) || maxTargets < 1)) throw new TypeError("Hit query maxTargets must be a positive integer");
+      const verticalTolerance = options.verticalTolerance === undefined ? 2.5 : positive(options.verticalTolerance, "Hit query verticalTolerance");
+      const exclude = new Set((options.exclude ?? []).map((value) => id(value, "Hit query exclusion")));
+      const origin = volume.kind === "arc" ? volume.origin : volume.kind === "sphere" ? volume.center : volume.start;
+      const hits: HitQueryHit[] = [];
+      for (const candidate of candidates) {
+        if (typeof candidate !== "object" || candidate === null || Array.isArray(candidate)) throw new TypeError("Hit candidate must be an object");
+        const candidateId = id(candidate.id, "Hit candidate ID");
+        if (exclude.has(candidateId)) continue;
+        const position = vector(candidate.position, "Hit candidate position");
+        const candidateRadius = candidate.radius === undefined ? 0 : positive(candidate.radius, "Hit candidate radius");
+        let distance: number;
+        let inside: boolean;
+        if (volume.kind === "sphere") {
+          distance = Math.hypot(position.x - volume.center.x, position.y - volume.center.y, position.z - volume.center.z);
+          inside = distance - candidateRadius <= volume.radius;
+        } else if (volume.kind === "capsule") {
+          const ax = volume.end.x - volume.start.x, ay = volume.end.y - volume.start.y, az = volume.end.z - volume.start.z;
+          const lengthSquared = ax * ax + ay * ay + az * az;
+          const t = lengthSquared === 0 ? 0 : Math.max(0, Math.min(1, ((position.x - volume.start.x) * ax + (position.y - volume.start.y) * ay + (position.z - volume.start.z) * az) / lengthSquared));
+          const px = volume.start.x + ax * t, py = volume.start.y + ay * t, pz = volume.start.z + az * t;
+          distance = Math.hypot(position.x - px, position.y - py, position.z - pz);
+          inside = distance - candidateRadius <= volume.radius;
+        } else {
+          const dx = position.x - volume.origin.x, dz = position.z - volume.origin.z;
+          distance = Math.hypot(dx, dz);
+          const within = distance - candidateRadius <= volume.radius && Math.abs(position.y - volume.origin.y) <= verticalTolerance;
+          if (!within) inside = false;
+          else if (distance === 0) inside = true;
+          else {
+            const facingX = Math.sin(volume.yaw), facingZ = Math.cos(volume.yaw);
+            const cosine = Math.max(-1, Math.min(1, (dx * facingX + dz * facingZ) / distance));
+            const offset = Math.acos(cosine);
+            const reach = candidateRadius > 0 && distance > candidateRadius ? Math.asin(Math.min(1, candidateRadius / distance)) : 0;
+            inside = offset - reach <= volume.angle / 2 + 1e-9;
+          }
+        }
+        if (inside) hits.push(Object.freeze({ id: candidateId, distance, direction: normalizeXZ(position.x - origin.x, position.z - origin.z) }));
+      }
+      hits.sort((a, b) => a.distance - b.distance || compare(a.id, b.id));
+      const result = Object.freeze(hits.slice(0, maxTargets === Number.POSITIVE_INFINITY ? hits.length : maxTargets));
+      queryCount += 1;
+      hitCount += result.length;
+      lastHitIds = Object.freeze(result.map(({ id: hitId }) => hitId));
+      return result;
+    },
+    inspect() { return Object.freeze({ disposed, queryCount, hitCount, lastHitIds }); },
+    dispose() { if (!disposed) { disposed = true; lastHitIds = Object.freeze([]); } },
+  });
+}
+
+// Lock-On: deterministic third-person target selection with explicit acquire, cycle, release, and validity stepping.
+export interface LockOnCandidate { readonly id: string; readonly position: GenreVector3; }
+export type LockOnReleaseReason = "manual" | "out-of-range" | "invalid";
+export interface LockOnEvent { readonly kind: "acquired" | "cycled" | "released"; readonly targetId: string; readonly reason: LockOnReleaseReason | null; readonly tick: number; }
+export interface LockOnInspection { readonly disposed: boolean; readonly targetId: string | null; readonly lockedTick: number | null; readonly acquireCount: number; readonly releaseCount: number; readonly range: number; readonly releaseRange: number; }
+export interface LockOnRuntime {
+  readonly disposed: boolean;
+  readonly targetId: string | null;
+  acquire(origin: GenreVector3, candidates: readonly LockOnCandidate[], tick: number): LockOnEvent | null;
+  cycle(origin: GenreVector3, candidates: readonly LockOnCandidate[], tick: number): LockOnEvent | null;
+  release(tick: number, reason?: LockOnReleaseReason): LockOnEvent | null;
+  step(tick: number, origin: GenreVector3, candidates: readonly LockOnCandidate[]): readonly LockOnEvent[];
+  inspect(): LockOnInspection;
+  dispose(): void;
+}
+
+export function createLockOnRuntime(options: Readonly<{ readonly range: number; readonly releaseRange?: number }>): LockOnRuntime {
+  if (typeof options !== "object" || options === null || Array.isArray(options) || !Reflect.ownKeys(options).every((key) => key === "range" || key === "releaseRange")) throw new TypeError("Lock-on options are invalid");
+  const range = positive(options.range, "Lock-on range");
+  const releaseRange = options.releaseRange === undefined ? range * 1.25 : positive(options.releaseRange, "Lock-on releaseRange");
+  if (releaseRange < range) throw new TypeError("Lock-on releaseRange must be at least range");
+  let targetId: string | null = null;
+  let lockedTick: number | null = null;
+  let acquireCount = 0;
+  let releaseCount = 0;
+  let disposed = false;
+  function ordered(origin: GenreVector3, candidates: readonly LockOnCandidate[], limit: number): readonly { readonly id: string; readonly distance: number }[] {
+    if (!Array.isArray(candidates)) throw new TypeError("Lock-on candidates must be an array");
+    const result: { id: string; distance: number }[] = [];
+    for (const candidate of candidates) {
+      if (typeof candidate !== "object" || candidate === null || Array.isArray(candidate)) throw new TypeError("Lock-on candidate must be an object");
+      const candidateId = id(candidate.id, "Lock-on candidate ID");
+      const position = vector(candidate.position, "Lock-on candidate position");
+      const distance = Math.hypot(position.x - origin.x, position.z - origin.z);
+      if (distance <= limit) result.push({ id: candidateId, distance });
+    }
+    return result.sort((a, b) => a.distance - b.distance || compare(a.id, b.id));
+  }
+  function event(kind: LockOnEvent["kind"], subject: string, reason: LockOnReleaseReason | null, at: number): LockOnEvent {
+    return Object.freeze({ kind, targetId: subject, reason, tick: at });
+  }
+  const runtime: LockOnRuntime = Object.freeze<LockOnRuntime>({
+    get disposed() { return disposed; },
+    get targetId() { return targetId; },
+    acquire(rawOrigin, candidates, rawTick) {
+      active(disposed, "Lock-on runtime");
+      const at = tick(rawTick, "Lock-on tick");
+      const nearest = ordered(vector(rawOrigin, "Lock-on origin"), candidates, range)[0];
+      if (nearest === undefined || nearest.id === targetId) return null;
+      targetId = nearest.id; lockedTick = at; acquireCount += 1;
+      return event("acquired", nearest.id, null, at);
+    },
+    cycle(rawOrigin, candidates, rawTick) {
+      active(disposed, "Lock-on runtime");
+      const at = tick(rawTick, "Lock-on tick");
+      const origin = vector(rawOrigin, "Lock-on origin");
+      if (targetId === null) return runtime.acquire(origin, candidates, at);
+      const list = ordered(origin, candidates, range);
+      const index = list.findIndex((entry) => entry.id === targetId);
+      const next = list[(index + 1) % Math.max(1, list.length)];
+      if (next === undefined || next.id === targetId) return null;
+      targetId = next.id; lockedTick = at; acquireCount += 1;
+      return event("cycled", next.id, null, at);
+    },
+    release(rawTick, reason = "manual") {
+      active(disposed, "Lock-on runtime");
+      const at = tick(rawTick, "Lock-on tick");
+      if (!["manual", "out-of-range", "invalid"].includes(reason)) throw new TypeError("Lock-on release reason is invalid");
+      if (targetId === null) return null;
+      const released = targetId;
+      targetId = null; lockedTick = null; releaseCount += 1;
+      return event("released", released, reason, at);
+    },
+    step(rawTick, rawOrigin, candidates) {
+      active(disposed, "Lock-on runtime");
+      const at = tick(rawTick, "Lock-on tick");
+      const origin = vector(rawOrigin, "Lock-on origin");
+      if (targetId === null) { ordered(origin, candidates, Number.POSITIVE_INFINITY); return Object.freeze([]); }
+      const current = ordered(origin, candidates, Number.POSITIVE_INFINITY).find((entry) => entry.id === targetId);
+      if (current === undefined) return Object.freeze([runtime.release(at, "invalid")!]);
+      if (current.distance > releaseRange) return Object.freeze([runtime.release(at, "out-of-range")!]);
+      return Object.freeze([]);
+    },
+    inspect() { return Object.freeze({ disposed, targetId, lockedTick, acquireCount, releaseCount, range, releaseRange }); },
+    dispose() { if (!disposed) { disposed = true; targetId = null; lockedTick = null; } },
+  });
   return runtime;
 }

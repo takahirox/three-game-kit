@@ -8,6 +8,7 @@ const showcaseRoot = path.join(root, "showcases", "relic-frontier");
 const allowed = new Set([
   "@three-game-kit/client",
   "@three-game-kit/client/advanced",
+  "@three-game-kit/client/animation",
   "@three-game-kit/client/asset-manager",
   "@three-game-kit/client/audio",
   "@three-game-kit/client/camera",

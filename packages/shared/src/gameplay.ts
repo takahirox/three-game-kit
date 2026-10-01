@@ -471,3 +471,90 @@ export function createHudStateStore(initial: Partial<Omit<HudState, "revision">>
     dispose(): void { if (!disposed) { disposed = true; listeners.clear(); } },
   });
 }
+
+// Checkpoint/Respawn: authority-neutral checkpoint activation and delayed respawn scheduling.
+export interface CheckpointDefinition { readonly id: string; readonly position: GameplayVector3; readonly label?: string; }
+export interface CheckpointState { readonly id: string; readonly position: GameplayVector3; readonly label: string; }
+export type CheckpointEvent =
+  | Readonly<{ readonly kind: "activated"; readonly checkpointId: string; readonly previousCheckpointId: string; readonly tick: number }>
+  | Readonly<{ readonly kind: "respawn-scheduled"; readonly checkpointId: string; readonly respawnTick: number; readonly tick: number }>
+  | Readonly<{ readonly kind: "respawn-cancelled"; readonly checkpointId: string; readonly tick: number }>
+  | Readonly<{ readonly kind: "respawned"; readonly checkpointId: string; readonly position: GameplayVector3; readonly tick: number }>;
+export type CheckpointOutcome = Readonly<{ readonly ok: true; readonly event: CheckpointEvent }> | Readonly<{ readonly ok: false; readonly code: "unknown-checkpoint" | "already-active" | "respawn-pending" | "no-respawn-pending" }>;
+export interface CheckpointInspection { readonly disposed: boolean; readonly activeCheckpointId: string; readonly respawnTick: number | null; readonly respawnDelayTicks: number; readonly activationCount: number; readonly respawnCount: number; readonly checkpointIds: readonly string[]; }
+export interface CheckpointRuntime {
+  readonly disposed: boolean;
+  readonly activeCheckpointId: string;
+  readonly respawnPending: boolean;
+  activate(checkpointId: string, tick: number): CheckpointOutcome;
+  requestRespawn(tick: number): CheckpointOutcome;
+  cancelRespawn(tick: number): CheckpointOutcome;
+  get(checkpointId: string): CheckpointState | undefined;
+  step(tick: number): readonly CheckpointEvent[];
+  inspect(): CheckpointInspection;
+  dispose(): void;
+}
+
+export function createCheckpointRuntime(options: Readonly<{ readonly checkpoints: readonly CheckpointDefinition[]; readonly initialCheckpointId: string; readonly respawnDelayTicks: number }>): CheckpointRuntime {
+  if (typeof options !== "object" || options === null || Array.isArray(options) || !Reflect.ownKeys(options).every((key) => key === "checkpoints" || key === "initialCheckpointId" || key === "respawnDelayTicks") || !Array.isArray(options.checkpoints)) throw new TypeError("Checkpoint runtime options are invalid");
+  const checkpoints = new Map<string, CheckpointState>();
+  for (const definition of options.checkpoints) {
+    if (typeof definition !== "object" || definition === null || Array.isArray(definition) || !Reflect.ownKeys(definition).every((key) => key === "id" || key === "position" || key === "label")) throw new TypeError("Checkpoint definition is invalid");
+    const checkpointId = stableId(definition.id, "Checkpoint ID");
+    if (checkpoints.has(checkpointId)) throw new TypeError(`Duplicate checkpoint ID: ${checkpointId}`);
+    const label = definition.label === undefined ? checkpointId : definition.label;
+    if (typeof label !== "string" || label.length === 0 || label.length > 128) throw new TypeError("Checkpoint label must be a non-empty string of at most 128 characters");
+    checkpoints.set(checkpointId, Object.freeze({ id: checkpointId, position: vector(definition.position, "Checkpoint position"), label }));
+  }
+  if (checkpoints.size === 0) throw new TypeError("At least one checkpoint is required");
+  let activeCheckpointId = stableId(options.initialCheckpointId, "Initial checkpoint ID");
+  if (!checkpoints.has(activeCheckpointId)) throw new TypeError(`Unknown initial checkpoint: ${activeCheckpointId}`);
+  const respawnDelayTicks = nonNegativeInteger(options.respawnDelayTicks, "Respawn delay ticks");
+  let respawnTick: number | null = null;
+  let activationCount = 0;
+  let respawnCount = 0;
+  let disposed = false;
+  function requireActive(): void { if (disposed) throw new Error("Checkpoint runtime has been disposed"); }
+  return Object.freeze<CheckpointRuntime>({
+    get disposed() { return disposed; },
+    get activeCheckpointId() { return activeCheckpointId; },
+    get respawnPending() { return respawnTick !== null; },
+    activate(rawId, rawTick) {
+      requireActive();
+      const checkpointId = stableId(rawId, "Checkpoint ID");
+      const at = nonNegativeInteger(rawTick, "Checkpoint tick");
+      if (!checkpoints.has(checkpointId)) return Object.freeze({ ok: false, code: "unknown-checkpoint" });
+      if (checkpointId === activeCheckpointId) return Object.freeze({ ok: false, code: "already-active" });
+      const previousCheckpointId = activeCheckpointId;
+      activeCheckpointId = checkpointId;
+      activationCount += 1;
+      return Object.freeze({ ok: true, event: Object.freeze({ kind: "activated", checkpointId, previousCheckpointId, tick: at }) });
+    },
+    requestRespawn(rawTick) {
+      requireActive();
+      const at = nonNegativeInteger(rawTick, "Checkpoint tick");
+      if (respawnTick !== null) return Object.freeze({ ok: false, code: "respawn-pending" });
+      respawnTick = at + respawnDelayTicks;
+      return Object.freeze({ ok: true, event: Object.freeze({ kind: "respawn-scheduled", checkpointId: activeCheckpointId, respawnTick, tick: at }) });
+    },
+    cancelRespawn(rawTick) {
+      requireActive();
+      const at = nonNegativeInteger(rawTick, "Checkpoint tick");
+      if (respawnTick === null) return Object.freeze({ ok: false, code: "no-respawn-pending" });
+      respawnTick = null;
+      return Object.freeze({ ok: true, event: Object.freeze({ kind: "respawn-cancelled", checkpointId: activeCheckpointId, tick: at }) });
+    },
+    get(rawId) { return checkpoints.get(stableId(rawId, "Checkpoint ID")); },
+    step(rawTick) {
+      requireActive();
+      const at = nonNegativeInteger(rawTick, "Checkpoint tick");
+      if (respawnTick === null || at < respawnTick) return Object.freeze([]);
+      respawnTick = null;
+      respawnCount += 1;
+      const checkpoint = checkpoints.get(activeCheckpointId)!;
+      return Object.freeze([Object.freeze({ kind: "respawned", checkpointId: checkpoint.id, position: checkpoint.position, tick: at })]);
+    },
+    inspect() { return Object.freeze({ disposed, activeCheckpointId, respawnTick, respawnDelayTicks, activationCount, respawnCount, checkpointIds: Object.freeze([...checkpoints.keys()]) }); },
+    dispose() { if (!disposed) { disposed = true; respawnTick = null; } },
+  });
+}

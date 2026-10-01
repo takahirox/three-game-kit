@@ -10,8 +10,16 @@ export interface AnimationClipRegistration {
   readonly clip: unknown;
 }
 
+export interface AnimationStateDefinition {
+  readonly clip: string;
+  readonly loop?: boolean;
+  readonly crossFadeSeconds?: number;
+  readonly playbackRate?: number;
+  readonly clampWhenFinished?: boolean;
+}
+
 export interface AnimationStateMap {
-  readonly [state: string]: string;
+  readonly [state: string]: string | AnimationStateDefinition;
 }
 
 export interface AnimationPlayOptions {
@@ -21,14 +29,34 @@ export interface AnimationPlayOptions {
   readonly clampWhenFinished?: boolean;
 }
 
+/** A named point on a clip timeline that fires while playback crosses it. */
+export interface AnimationClipEventDefinition {
+  readonly clipId: string;
+  readonly id: string;
+  readonly seconds: number;
+}
+
+export interface AnimationClipEvent {
+  readonly clipId: string;
+  readonly id: string;
+  readonly seconds: number;
+  readonly elapsedSeconds: number;
+}
+
 export interface AnimationInspection {
   readonly disposed: boolean;
   readonly activeClipId: string | null;
   readonly activeState: string | null;
   readonly activeOneShotClipId: string | null;
+  readonly activeClipSeconds: number;
+  readonly activeClipDuration: number;
+  readonly activePlaybackRate: number;
   readonly elapsedSeconds: number;
   readonly completedOneShotCount: number;
+  readonly interruptedOneShotCount: number;
+  readonly emittedEventCount: number;
   readonly registeredClipIds: readonly string[];
+  readonly registeredEventIds: readonly string[];
 }
 
 export interface AnimationRuntime {
@@ -36,15 +64,48 @@ export interface AnimationRuntime {
   setState(state: string): void;
   play(clipId: string, options?: AnimationPlayOptions): void;
   playOneShot(clipId: string, options?: Omit<AnimationPlayOptions, "loop">): void;
+  cancelOneShot(): boolean;
+  setPlaybackRate(rate: number): void;
   update(seconds: number): void;
   onComplete(listener: (clipId: string) => void): () => void;
+  onEvent(listener: (event: AnimationClipEvent) => void): () => void;
   inspect(): AnimationInspection;
   dispose(): void;
 }
 
+export interface AnimationCharacterInspection {
+  readonly characterId: string;
+  readonly animation: AnimationInspection;
+}
+
+export interface AnimationCharacterSetInspection {
+  readonly disposed: boolean;
+  readonly characters: readonly AnimationCharacterInspection[];
+}
+
+/**
+ * Owns any number of animation runtimes that may be registered after boot
+ * (for example once a glTF character finishes loading) under one Feature.
+ */
+export interface AnimationCharacterSet {
+  readonly disposed: boolean;
+  add(characterId: string, runtime: AnimationRuntime, readState: () => string): void;
+  remove(characterId: string): boolean;
+  get(characterId: string): AnimationRuntime | undefined;
+  advance(seconds: number): void;
+  inspect(): AnimationCharacterSetInspection;
+  dispose(): void;
+}
+
 export interface AnimationFeatureOptions {
+  readonly id?: string;
   readonly runtime: AnimationRuntime;
   readState(): string;
+}
+
+export interface AnimationCharacterSetFeatureOptions {
+  readonly id?: string;
+  readonly characters: AnimationCharacterSet;
 }
 
 function id(value: string, label: string): string {
@@ -54,9 +115,11 @@ function id(value: string, label: string): string {
   return value;
 }
 
+const PLAY_OPTION_KEYS = ["loop", "crossFadeSeconds", "playbackRate", "clampWhenFinished"];
+
 function exactOptions(value: AnimationPlayOptions | undefined): Required<AnimationPlayOptions> {
   if (value !== undefined && (typeof value !== "object" || value === null || Array.isArray(value) ||
-      !Reflect.ownKeys(value).every((key) => typeof key === "string" && ["loop", "crossFadeSeconds", "playbackRate", "clampWhenFinished"].includes(key)))) {
+      !Reflect.ownKeys(value).every((key) => typeof key === "string" && PLAY_OPTION_KEYS.includes(key)))) {
     throw new TypeError("Animation play options are invalid");
   }
   const loop = value?.loop ?? true;
@@ -71,15 +134,27 @@ function exactOptions(value: AnimationPlayOptions | undefined): Required<Animati
   return Object.freeze({ loop, crossFadeSeconds, playbackRate, clampWhenFinished });
 }
 
+function stateDefinition(value: string | AnimationStateDefinition, label: string): Required<AnimationStateDefinition> {
+  if (typeof value === "string") return Object.freeze({ clip: id(value, label), ...exactOptions(undefined) });
+  if (typeof value !== "object" || value === null || Array.isArray(value) ||
+      !Reflect.ownKeys(value).every((key) => typeof key === "string" && (key === "clip" || PLAY_OPTION_KEYS.includes(key)))) {
+    throw new TypeError(`${label} is invalid`);
+  }
+  const { clip, ...options } = value;
+  return Object.freeze({ clip: id(clip, label), ...exactOptions(options) });
+}
+
 export function createThreeAnimationRuntime(options: {
   readonly root: unknown;
   readonly clips: readonly AnimationClipRegistration[];
   readonly states?: AnimationStateMap;
   readonly initialState?: string;
+  readonly events?: readonly AnimationClipEventDefinition[];
 }): AnimationRuntime {
   if (typeof options !== "object" || options === null || Array.isArray(options) ||
-      !Reflect.ownKeys(options).every((key) => typeof key === "string" && ["root", "clips", "states", "initialState"].includes(key)) ||
-      !(options.root instanceof THREE.Object3D) || !Array.isArray(options.clips)) {
+      !Reflect.ownKeys(options).every((key) => typeof key === "string" && ["root", "clips", "states", "initialState", "events"].includes(key)) ||
+      !(options.root instanceof THREE.Object3D) || !Array.isArray(options.clips) ||
+      (options.events !== undefined && !Array.isArray(options.events))) {
     throw new TypeError("Animation runtime options are invalid");
   }
   const root = options.root;
@@ -94,16 +169,16 @@ export function createThreeAnimationRuntime(options: {
     clips.set(clipId, registration.clip);
   }
   if (clips.size === 0) throw new TypeError("At least one animation clip is required");
-  const states = new Map<string, string>();
+  const states = new Map<string, Required<AnimationStateDefinition>>();
   if (options.states !== undefined) {
     if (typeof options.states !== "object" || options.states === null || Array.isArray(options.states)) {
       throw new TypeError("Animation states are invalid");
     }
-    for (const [state, clipId] of Object.entries(options.states)) {
+    for (const [state, definition] of Object.entries(options.states)) {
       const validState = id(state, "Animation state");
-      const validClip = id(clipId, "Animation state clip ID");
-      if (!clips.has(validClip)) throw new TypeError(`Animation state references unknown clip: ${validClip}`);
-      states.set(validState, validClip);
+      const resolved = stateDefinition(definition, "Animation state clip ID");
+      if (!clips.has(resolved.clip)) throw new TypeError(`Animation state references unknown clip: ${resolved.clip}`);
+      states.set(validState, resolved);
     }
   }
   const initialState = options.initialState === undefined
@@ -112,16 +187,43 @@ export function createThreeAnimationRuntime(options: {
   if (initialState !== null && !states.has(initialState)) {
     throw new TypeError(`Unknown initial animation state: ${initialState}`);
   }
+  const events = new Map<string, AnimationClipEventDefinition[]>();
+  const eventIds: string[] = [];
+  for (const definition of options.events ?? []) {
+    if (typeof definition !== "object" || definition === null || Array.isArray(definition) ||
+        Reflect.ownKeys(definition).sort().join("|") !== "clipId|id|seconds") {
+      throw new TypeError("Animation clip event definition is invalid");
+    }
+    const clipId = id(definition.clipId, "Animation event clip ID");
+    const clip = clips.get(clipId);
+    if (clip === undefined) throw new TypeError(`Animation event references unknown clip: ${clipId}`);
+    const eventId = id(definition.id, "Animation event ID");
+    if (!Number.isFinite(definition.seconds) || definition.seconds < 0 || definition.seconds > clip.duration) {
+      throw new TypeError(`Animation event ${eventId} must lie within clip ${clipId}`);
+    }
+    const key = `${clipId} ${eventId}`;
+    if (eventIds.includes(key)) throw new TypeError(`Duplicate animation event ${eventId} on clip ${clipId}`);
+    eventIds.push(key);
+    const list = events.get(clipId) ?? [];
+    list.push(Object.freeze({ clipId, id: eventId, seconds: definition.seconds }));
+    list.sort((a, b) => a.seconds - b.seconds || (a.id < b.id ? -1 : 1));
+    events.set(clipId, list);
+  }
 
   const mixer = new THREE.AnimationMixer(root);
   const actions = new Map<string, THREE.AnimationAction>();
   const listeners = new Set<(clipId: string) => void>();
+  const eventListeners = new Set<(event: AnimationClipEvent) => void>();
   let activeAction: THREE.AnimationAction | null = null;
   let activeClipId: string | null = null;
   let activeState: string | null = null;
   let activeOneShotClipId: string | null = null;
+  let activeRate = 1;
+  let justStarted = false;
   let elapsedSeconds = 0;
   let completedOneShotCount = 0;
+  let interruptedOneShotCount = 0;
+  let emittedEventCount = 0;
   let disposed = false;
 
   function requireActive(): void {
@@ -155,19 +257,51 @@ export function createThreeAnimationRuntime(options: {
     }
     activeAction = next;
     activeClipId = clipId;
+    activeRate = playOptions.playbackRate;
+    justStarted = true;
+  }
+
+  function playState(state: string): void {
+    const definition = states.get(state);
+    if (definition === undefined) throw new RangeError(`Unknown animation state: ${state}`);
+    const { clip, ...playOptions } = definition;
+    playInternal(clip, playOptions);
+  }
+
+  function interruptOneShot(): void {
+    if (activeOneShotClipId !== null) {
+      interruptedOneShotCount += 1;
+      activeOneShotClipId = null;
+    }
+  }
+
+  function emitEvents(clipId: string, before: number, after: number, started: boolean): void {
+    const definitions = events.get(clipId);
+    if (definitions === undefined) return;
+    const duration = clips.get(clipId)?.duration ?? 0;
+    const fire = (definition: AnimationClipEventDefinition): void => {
+      emittedEventCount += 1;
+      const event = Object.freeze({ clipId, id: definition.id, seconds: definition.seconds, elapsedSeconds });
+      for (const listener of [...eventListeners]) listener(event);
+    };
+    if (after < before) {
+      for (const definition of definitions) if (definition.seconds > before && definition.seconds <= duration) fire(definition);
+      for (const definition of definitions) if (definition.seconds <= after) fire(definition);
+      return;
+    }
+    for (const definition of definitions) {
+      if ((started ? definition.seconds >= before : definition.seconds > before) && definition.seconds <= after) fire(definition);
+    }
   }
 
   const finished = (event: { readonly action: THREE.AnimationAction }): void => {
-    if (disposed) return;
+    if (disposed || event.action !== activeAction) return;
     const entry = [...actions.entries()].find(([, action]) => action === event.action);
     if (entry === undefined) return;
     completedOneShotCount += 1;
     if (activeOneShotClipId === entry[0]) {
       activeOneShotClipId = null;
-      if (activeState !== null) {
-        const stateClipId = states.get(activeState);
-        if (stateClipId !== undefined) playInternal(stateClipId, undefined);
-      }
+      if (activeState !== null) playState(activeState);
     }
     for (const listener of [...listeners]) listener(entry[0]);
   };
@@ -179,27 +313,50 @@ export function createThreeAnimationRuntime(options: {
       requireActive();
       const state = id(rawState, "Animation state");
       if (state === activeState) return;
-      const clipId = states.get(state);
-      if (clipId === undefined) throw new RangeError(`Unknown animation state: ${state}`);
+      if (!states.has(state)) throw new RangeError(`Unknown animation state: ${state}`);
       activeState = state;
-      if (activeOneShotClipId === null) playInternal(clipId, undefined);
+      if (activeOneShotClipId === null) playState(state);
     },
     play(clipId: string, playOptions?: AnimationPlayOptions): void {
+      requireActive();
       activeState = null;
-      activeOneShotClipId = null;
+      interruptOneShot();
       playInternal(clipId, playOptions);
     },
     playOneShot(clipId: string, playOptions?: Omit<AnimationPlayOptions, "loop">): void {
-      playInternal(clipId, { ...playOptions, loop: false });
-      activeOneShotClipId = id(clipId, "Animation clip ID");
+      requireActive();
+      const validClipId = id(clipId, "Animation clip ID");
+      interruptOneShot();
+      playInternal(validClipId, { ...playOptions, loop: false });
+      activeOneShotClipId = validClipId;
+    },
+    cancelOneShot(): boolean {
+      requireActive();
+      if (activeOneShotClipId === null) return false;
+      interruptOneShot();
+      if (activeState !== null) playState(activeState);
+      else if (activeAction !== null) { activeAction.stop(); activeAction = null; activeClipId = null; }
+      return true;
+    },
+    setPlaybackRate(rate: number): void {
+      requireActive();
+      if (!Number.isFinite(rate) || rate <= 0) throw new TypeError("Animation playback rate must be positive");
+      activeRate = rate;
+      activeAction?.setEffectiveTimeScale(rate);
     },
     update(seconds: number): void {
       requireActive();
       if (typeof seconds !== "number" || !Number.isFinite(seconds) || seconds < 0 || seconds > 1) {
         throw new TypeError("Animation update must be in [0, 1] seconds");
       }
+      const action = activeAction;
+      const clipId = activeClipId;
+      const before = action?.time ?? 0;
+      const started = justStarted;
+      justStarted = false;
       mixer.update(seconds);
       elapsedSeconds += seconds;
+      if (action !== null && clipId !== null) emitEvents(clipId, before, action.time, started);
     },
     onComplete(listener: (clipId: string) => void): () => void {
       requireActive();
@@ -208,15 +365,28 @@ export function createThreeAnimationRuntime(options: {
       let subscribed = true;
       return () => { if (subscribed) { subscribed = false; listeners.delete(listener); } };
     },
+    onEvent(listener: (event: AnimationClipEvent) => void): () => void {
+      requireActive();
+      if (typeof listener !== "function") throw new TypeError("Animation event listener is invalid");
+      eventListeners.add(listener);
+      let subscribed = true;
+      return () => { if (subscribed) { subscribed = false; eventListeners.delete(listener); } };
+    },
     inspect(): AnimationInspection {
       return Object.freeze({
         disposed,
         activeClipId,
         activeState,
         activeOneShotClipId,
+        activeClipSeconds: activeAction?.time ?? 0,
+        activeClipDuration: activeClipId === null ? 0 : clips.get(activeClipId)?.duration ?? 0,
+        activePlaybackRate: activeRate,
         elapsedSeconds,
         completedOneShotCount,
+        interruptedOneShotCount,
+        emittedEventCount,
         registeredClipIds: Object.freeze([...clips.keys()]),
+        registeredEventIds: Object.freeze(eventIds.map((key) => key.replace(" ", ":"))),
       });
     },
     dispose(): void {
@@ -224,6 +394,7 @@ export function createThreeAnimationRuntime(options: {
       disposed = true;
       mixer.removeEventListener("finished", finished);
       listeners.clear();
+      eventListeners.clear();
       mixer.stopAllAction();
       for (const [clipId, action] of actions) {
         const clip = clips.get(clipId);
@@ -233,6 +404,8 @@ export function createThreeAnimationRuntime(options: {
       mixer.uncacheRoot(root);
       actions.clear();
       clips.clear();
+      events.clear();
+      eventIds.length = 0;
       activeAction = null;
       activeClipId = null;
       activeState = null;
@@ -242,6 +415,67 @@ export function createThreeAnimationRuntime(options: {
 
   if (initialState !== null) runtime.setState(initialState);
   return runtime;
+}
+
+function isRuntime(value: unknown): value is AnimationRuntime {
+  return typeof value === "object" && value !== null &&
+    typeof (value as AnimationRuntime).setState === "function" &&
+    typeof (value as AnimationRuntime).update === "function" &&
+    typeof (value as AnimationRuntime).dispose === "function";
+}
+
+export function createAnimationCharacterSet(): AnimationCharacterSet {
+  const characters = new Map<string, { readonly runtime: AnimationRuntime; readonly readState: () => string }>();
+  let disposed = false;
+  function requireActive(): void {
+    if (disposed) throw new Error("Animation character set has been disposed");
+  }
+  return Object.freeze({
+    get disposed(): boolean { return disposed; },
+    add(rawId: string, runtime: AnimationRuntime, readState: () => string): void {
+      requireActive();
+      const characterId = id(rawId, "Animation character ID");
+      if (!isRuntime(runtime) || typeof readState !== "function") throw new TypeError("Animation character registration is invalid");
+      if (characters.has(characterId)) throw new TypeError(`Duplicate animation character ID: ${characterId}`);
+      characters.set(characterId, Object.freeze({ runtime, readState }));
+    },
+    remove(rawId: string): boolean {
+      requireActive();
+      const characterId = id(rawId, "Animation character ID");
+      const entry = characters.get(characterId);
+      if (entry === undefined) return false;
+      characters.delete(characterId);
+      entry.runtime.dispose();
+      return true;
+    },
+    get(rawId: string): AnimationRuntime | undefined {
+      return characters.get(id(rawId, "Animation character ID"))?.runtime;
+    },
+    advance(seconds: number): void {
+      requireActive();
+      for (const [, entry] of [...characters].sort(([a], [b]) => (a < b ? -1 : a > b ? 1 : 0))) {
+        if (entry.runtime.disposed) continue;
+        entry.runtime.setState(entry.readState());
+        entry.runtime.update(seconds);
+      }
+    },
+    inspect(): AnimationCharacterSetInspection {
+      return Object.freeze({
+        disposed,
+        characters: Object.freeze([...characters].sort(([a], [b]) => (a < b ? -1 : a > b ? 1 : 0)).map(([characterId, entry]) => Object.freeze({ characterId, animation: entry.runtime.inspect() }))),
+      });
+    },
+    dispose(): void {
+      if (disposed) return;
+      disposed = true;
+      let firstError: unknown;
+      for (const entry of characters.values()) {
+        try { entry.runtime.dispose(); } catch (error) { firstError ??= error; }
+      }
+      characters.clear();
+      if (firstError !== undefined) throw firstError;
+    },
+  });
 }
 
 type EmptyConfiguration = Readonly<Record<string, never>>;
@@ -254,29 +488,38 @@ const EMPTY_CONFIGURATION = defineFeatureConfiguration<EmptyConfiguration>({
   },
 });
 
-export function createAnimationFeature(options: AnimationFeatureOptions): ClientFeatureDescriptor<EmptyConfiguration> {
-  if (typeof options !== "object" || options === null || Array.isArray(options) ||
-      Reflect.ownKeys(options).length !== 2 || typeof options.runtime !== "object" || options.runtime === null ||
-      typeof options.runtime.setState !== "function" || typeof options.runtime.update !== "function" ||
-      typeof options.runtime.dispose !== "function" || typeof options.readState !== "function") {
+export function createAnimationFeature(options: AnimationFeatureOptions | AnimationCharacterSetFeatureOptions): ClientFeatureDescriptor<EmptyConfiguration> {
+  if (typeof options !== "object" || options === null || Array.isArray(options)) throw new TypeError("Animation Feature options are invalid");
+  const keys = Reflect.ownKeys(options);
+  const single = "runtime" in options;
+  const validKeys = single ? ["id", "runtime", "readState"] : ["id", "characters"];
+  if (!keys.every((key) => typeof key === "string" && validKeys.includes(key)) ||
+      (options.id !== undefined && typeof options.id !== "string") ||
+      (single
+        ? !isRuntime(options.runtime) || typeof options.readState !== "function"
+        : typeof options.characters !== "object" || options.characters === null || typeof options.characters.advance !== "function" || typeof options.characters.dispose !== "function")) {
     throw new TypeError("Animation Feature options are invalid");
   }
+  const featureId = options.id === undefined ? "animation" : id(options.id, "Animation Feature ID");
+  const advance: (dt: number) => void = single
+    ? (dt) => { options.runtime.setState(options.readState()); options.runtime.update(dt); }
+    : (dt) => options.characters.advance(dt);
+  const owned: { dispose(): void } = single ? options.runtime : options.characters;
   let active = false;
   let disposed = false;
   const contribution = Object.freeze({
     kind: "system" as const,
-    id: "animation-update",
+    id: `${featureId}-update`,
     domain: "client-simulation" as const,
     phase: "presentation-publish" as const,
     priority: 0,
     run({ dt }: { readonly dt: number }): void {
       if (!active || disposed) return;
-      options.runtime.setState(options.readState());
-      options.runtime.update(dt);
+      advance(dt);
     },
   });
   return Object.freeze({
-    id: "animation",
+    id: featureId,
     description: "Advances a deterministic Three.js animation state machine",
     runtimeContributions: Object.freeze([contribution]),
     requires: Object.freeze([]),
@@ -291,7 +534,7 @@ export function createAnimationFeature(options: AnimationFeatureOptions): Client
       if (disposed) return;
       active = false;
       disposed = true;
-      options.runtime.dispose();
+      owned.dispose();
     },
   });
 }

@@ -15,6 +15,7 @@ export default defineConfig({
       "three/examples/jsm/shaders/RGBShiftShader.js",
       "three/examples/jsm/shaders/VignetteShader.js",
       "three/examples/jsm/utils/BufferGeometryUtils.js",
+      "three/examples/jsm/utils/SkeletonUtils.js",
     ],
   },
   resolve: {

@@ -19,13 +19,16 @@
           <label>RELIC GUARDIAN <span data-hud-bind="extra:guardian"></span></label>
           <div class="health-track boss"><i id="guardian-health"></i></div>
         </div>
+        <div class="target" id="target" hidden><small>LOCKED</small><b data-hud-bind="extra:target"></b></div>
+        <div class="toast" id="toast" hidden data-hud-bind="extra:toast"></div>
         <section class="onboarding" id="onboarding" hidden>
           <div class="eyebrow">FIELD BRIEFING</div>
           <h2>Welcome to the frontier</h2>
           <ol>
-            <li><b>WASD</b> move · <b>DRAG</b> look · <b>SHIFT</b> dash · <b>SPACE</b> jump</li>
-            <li><b>LMB</b> attack · <b>RMB / F</b> Relic Pulse · <b>E</b> interact · <b>Q</b> medkit</li>
-            <li>Follow the objective beam and compass cue: recover <b>3 Energy Cells</b>, power the <b>mechanism</b>, defeat the <b>Guardian</b>, claim the <b>Relic</b>, and escape to <b>Base Camp</b>.</li>
+            <li><b>WASD</b> move · <b>MIDDLE-DRAG / WHEEL</b> look · <b>SPACE</b> dodge roll · <b>TAB</b> lock on</li>
+            <li><b>LMB</b> light attack (tap twice to combo) · <b>RMB</b> heavy attack · <b>F</b> Relic Pulse · <b>E</b> interact · <b>Q</b> medkit</li>
+            <li>Read the red wind-up rings and dodge through them. Falling returns you to the last <b>checkpoint beacon</b>.</li>
+            <li>Follow the objective beam: recover <b>3 Energy Cells</b>, power the <b>mechanism</b>, defeat the <b>Guardian</b>, claim the <b>Relic</b>, and escape to <b>Base Camp</b>.</li>
           </ol>
           <button type="button" data-hud-action="dismiss-onboarding">GOT IT <span>→</span></button>
           <small>ESC OR ANY INPUT ALSO CLOSES THIS BRIEFING</small>
@@ -34,9 +37,9 @@
         <div class="vitals">
           <label>SUIT INTEGRITY <span><span data-hud-bind="health">100</span>/<span data-hud-bind="maximumHealth">100</span></span></label>
           <div class="health-track"><i id="player-health"></i></div>
-          <div class="inventory"><span>CELLS <b data-hud-bind="extra:cells">0/3</b></span><span>MEDKITS <b data-hud-bind="extra:medkits">0</b></span><span>PULSE <b data-hud-bind="extra:ability">READY</b></span><span>DASH <b data-hud-bind="extra:dash">READY</b></span></div>
+          <div class="inventory"><span>CELLS <b data-hud-bind="extra:cells">0/3</b></span><span>MEDKITS <b data-hud-bind="extra:medkits">0</b></span><span>PULSE <b data-hud-bind="extra:ability">READY</b></span><span>DODGE <b data-hud-bind="extra:dodge">READY</b></span><span>CHECKPOINT <b data-hud-bind="extra:checkpoint">BASE CAMP</b></span></div>
         </div>
-        <div class="controls">WASD MOVE · DRAG LOOK · LMB ATTACK · RMB/F PULSE · SPACE JUMP · SHIFT DASH · E INTERACT · Q MEDKIT</div>
+        <div class="controls">WASD MOVE · WHEEL LOOK · LMB LIGHT · RMB HEAVY · SPACE DODGE · TAB LOCK ON · F PULSE · E INTERACT · Q MEDKIT</div>
         <section class="overlay" data-hud-screen="title">
           <div class="title-rail"><b>RF–07</b><i></i><span>UNKNOWN TERRITORY</span></div>
           <div class="eyebrow">A THREE-GAME-KIT FIELD EXPERIENCE</div>
@@ -44,9 +47,9 @@
           <p>A dormant signal is calling from the buried chamber. Cross the overgrown ruins, restore its ancient circuit, and bring the Relic home.</p>
           <div class="launch-row">
             <button type="button" data-hud-action="start">ENTER THE FRONTIER <span>↗</span></button>
-            <dl class="mission-meta"><div><dt>WINDOW</dt><dd>10–15 MIN</dd></div><div><dt>MODE</dt><dd>SOLO / LIVE</dd></div></dl>
+            <dl class="mission-meta"><div><dt>WINDOW</dt><dd>5–10 MIN</dd></div><div><dt>MODE</dt><dd>SOLO / MELEE</dd></div></dl>
           </div>
-          <small>MOVE WITH WASD · FOLLOW THE SIGNAL · SURVIVE THE GUARDIAN</small>
+          <small>MOVE WITH WASD · LOCK ON WITH TAB · DODGE THROUGH THE RED RINGS</small>
           <div class="scene-caption"><span>LIVE TERRAIN FEED</span><b>35°41' N<br />139°41' E</b></div>
         </section>
         <section class="overlay result" data-hud-screen="results" hidden>
@@ -56,10 +59,10 @@
           <p class="tally">SCORE <b data-hud-bind="score">0</b> · TIME <b data-hud-bind="timer">0</b>s · CELLS <b data-hud-bind="extra:cells">0/3</b></p>
           <button type="button" data-hud-action="restart">NEW EXPEDITION <span>↻</span></button>
         </section>
-        <section class="overlay result danger" data-hud-screen="defeated" hidden>
+        <section class="downed" data-hud-screen="downed" hidden>
           <div class="eyebrow">SUIT SIGNAL LOST</div>
-          <h1>EXPEDITION<br /><em>FAILED</em></h1>
-          <button type="button" data-hud-action="restart">REDEPLOY <span>↻</span></button>
+          <h1>REDEPLOYING</h1>
+          <p>Returning to <b data-hud-bind="extra:checkpoint">BASE CAMP</b> in <b data-hud-bind="extra:respawn">0.0s</b></p>
         </section>
       </section>
       <output id="status">Initializing expedition…</output>

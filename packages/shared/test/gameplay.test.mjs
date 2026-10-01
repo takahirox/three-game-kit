@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import {
+  createCheckpointRuntime,
   createGameFlowRuntime,
   createHealthRuntime,
   createHudStateStore,
@@ -121,4 +122,36 @@ test("HUD store publishes immutable snapshots and safely cleans subscriptions", 
   assert.throws(() => store.subscribe(() => { throw new Error("initial listener"); }), /initial listener/);
   store.dispose();
   assert.throws(() => store.update({ score: 1 }), /disposed/);
+});
+
+test("Checkpoint runtime activates checkpoints and schedules deterministic respawns", () => {
+  const runtime = createCheckpointRuntime({
+    checkpoints: [
+      { id: "camp", position: { x: 0, y: 0, z: 18 }, label: "Base Camp" },
+      { id: "gate", position: { x: 0, y: 0, z: -14 } },
+    ],
+    initialCheckpointId: "camp",
+    respawnDelayTicks: 3,
+  });
+  assert.equal(runtime.activeCheckpointId, "camp");
+  assert.deepEqual(runtime.get("gate"), { id: "gate", position: { x: 0, y: 0, z: -14 }, label: "gate" });
+  assert.deepEqual(runtime.activate("camp", 1), { ok: false, code: "already-active" });
+  assert.deepEqual(runtime.activate("missing", 1), { ok: false, code: "unknown-checkpoint" });
+  assert.deepEqual(runtime.activate("gate", 2), { ok: true, event: { kind: "activated", checkpointId: "gate", previousCheckpointId: "camp", tick: 2 } });
+  assert.deepEqual(runtime.cancelRespawn(3), { ok: false, code: "no-respawn-pending" });
+  assert.deepEqual(runtime.requestRespawn(10), { ok: true, event: { kind: "respawn-scheduled", checkpointId: "gate", respawnTick: 13, tick: 10 } });
+  assert.deepEqual(runtime.requestRespawn(11), { ok: false, code: "respawn-pending" });
+  assert.equal(runtime.respawnPending, true);
+  assert.deepEqual(runtime.step(12), []);
+  assert.deepEqual(runtime.step(13), [{ kind: "respawned", checkpointId: "gate", position: { x: 0, y: 0, z: -14 }, tick: 13 }]);
+  assert.deepEqual(runtime.step(14), [], "a respawn fires exactly once");
+  assert.deepEqual(runtime.requestRespawn(20), { ok: true, event: { kind: "respawn-scheduled", checkpointId: "gate", respawnTick: 23, tick: 20 } });
+  assert.deepEqual(runtime.cancelRespawn(21), { ok: true, event: { kind: "respawn-cancelled", checkpointId: "gate", tick: 21 } });
+  assert.deepEqual(runtime.step(23), []);
+  assert.deepEqual(runtime.inspect(), { disposed: false, activeCheckpointId: "gate", respawnTick: null, respawnDelayTicks: 3, activationCount: 1, respawnCount: 1, checkpointIds: ["camp", "gate"] });
+  assert.throws(() => createCheckpointRuntime({ checkpoints: [], initialCheckpointId: "camp", respawnDelayTicks: 0 }), /At least one/);
+  assert.throws(() => createCheckpointRuntime({ checkpoints: [{ id: "camp", position: { x: 0, y: 0, z: 0 } }], initialCheckpointId: "x", respawnDelayTicks: 0 }), /Unknown initial/);
+  runtime.dispose();
+  runtime.dispose();
+  assert.throws(() => runtime.step(30), /disposed/);
 });

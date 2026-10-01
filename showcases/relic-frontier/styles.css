@@ -46,3 +46,12 @@ body:has(.overlay[data-hud-screen="title"]:not([hidden])) #status { opacity: 0; 
 @media (max-width: 900px) { .mission-meta, .scene-caption { display: none; }.title-rail { width: min(420px, 75vw); }.topbar { grid-template-columns: 1fr auto; }.objective { position: absolute; top: 54px; left: 0; min-width: 0; text-align: left; padding-left: 12px; }.controls { display: none; }.vitals { width: calc(100% - 60px); }.overlay { padding: 32px; }.overlay::before { inset: 12px; }.overlay h1 { font-size: clamp(55px,14vw,82px); }.overlay p { max-width: 440px; }.title-rail { margin-bottom: 30px; } }
 @media (max-height: 720px) and (min-width: 901px) { .title-rail { margin-bottom: 24px; }.overlay p { margin: 24px 0 20px; }.overlay h1 { font-size: 78px; } }
 @media (prefers-reduced-motion: reduce) { *, *::before, *::after { scroll-behavior: auto !important; transition-duration: .01ms !important; animation-duration: .01ms !important; } }
+
+.target { position: absolute; top: 104px; right: 30px; padding: 9px 14px; text-align: right; color: #ffe0b0; background: #1a120aee; border-right: 2px solid var(--amber); backdrop-filter: blur(9px); font-size: 10px; letter-spacing: .14em; }
+.target[hidden] { display: none; }.target small { display: block; color: var(--amber); font-size: 8px; letter-spacing: .24em; }.target b { display: block; margin-top: 4px; color: white; font-weight: 600; }
+.toast { position: absolute; top: 170px; left: 50%; transform: translateX(-50%); padding: 10px 22px; color: var(--ink); background: var(--mint); font-size: 11px; font-weight: 700; letter-spacing: .2em; clip-path: polygon(0 0,96% 0,100% 40%,100% 100%,4% 100%,0 60%); box-shadow: 0 8px 28px #0006; animation: toast-in .25s ease-out; }
+.toast[hidden], .toast:empty { display: none; }
+@keyframes toast-in { from { opacity: 0; transform: translate(-50%, -8px); } to { opacity: 1; transform: translate(-50%, 0); } }
+.downed { pointer-events: none; position: absolute; inset: 0; display: flex; flex-direction: column; align-items: center; justify-content: center; text-align: center; background: radial-gradient(circle at 50% 50%, #3a101888, #061216e6 70%); }
+.downed[hidden] { display: none; }.downed .eyebrow { color: var(--coral); }.downed h1 { margin: 0; font-size: clamp(48px, 7vw, 92px); letter-spacing: -.05em; color: transparent; -webkit-text-stroke: 1px var(--coral); font-weight: 600; }
+.downed p { margin: 22px 0 0; color: #d7c9c5; font-size: 13px; letter-spacing: .14em; }.downed p b { color: white; font-variant-numeric: tabular-nums; }
