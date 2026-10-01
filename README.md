@@ -58,6 +58,8 @@ Client/Server authority wrappers.
 
 ## Documentation
 
+- [Development flow and language policy](./docs/development-flow.md)
+- [Review guidelines](./docs/review-guidelines.md)
 - [Milestone 0 traceability](./docs/m0-traceability.md)
 - [Milestone 1 verification](./docs/m1-verification.md)
 - [Milestone 2 verification](./docs/m2-verification.md)
