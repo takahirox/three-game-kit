@@ -5,7 +5,7 @@ import { galleryCovers } from "./lib/gallery-covers.mjs";
 const root = new URL("../", import.meta.url);
 const html = await readFile(new URL("index.html", root), "utf8");
 const cards = [...html.matchAll(/<a\b([^>]*\bdata-cover="([^"]+)"[^>]*)>/g)];
-const required = ["craftlands", "relic-frontier", "chroma-strike", "gravetide", "afterglow", "deepfield", "core-run", "particle-atlas"];
+const required = ["metaverse", "craftlands", "relic-frontier", "chroma-strike", "gravetide", "afterglow", "deepfield", "core-run", "particle-atlas"];
 assert.deepEqual(cards.map(card => card[2]).sort(), required.sort(), "Each required showcase needs exactly one card");
 assert.deepEqual(galleryCovers.map(cover => cover.id).sort(), required, "Each required showcase needs a capture recipe");
 let totalBytes = 0;
@@ -26,4 +26,4 @@ for (const { id, path } of galleryCovers) {
 assert(totalBytes <= 1024 * 1024, "Responsive cover inventory must stay below 1 MiB");
 assert(!/<script\b/i.test(html), "The landing page must not need runtime JavaScript");
 assert(!/\b(?:src|srcset)="(?:https?:)?\/\//i.test(html), "Gallery media must stay local");
-console.log(`Gallery verified: ${cards.length} playable links, 16 WebP covers, ${(totalBytes / 1024).toFixed(1)} KiB total.`);
+console.log(`Gallery verified: ${cards.length} playable links, ${cards.length * 2} WebP covers, ${(totalBytes / 1024).toFixed(1)} KiB total.`);

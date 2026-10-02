@@ -46,6 +46,9 @@ jobs:
       - name: Verify Craftlands
         run: pnpm verify:craftlands
 
+      - name: Verify Lantern Court
+        run: pnpm verify:metaverse
+
       - name: Verify showcase gallery in development and Pages
         run: pnpm verify:gallery
 
