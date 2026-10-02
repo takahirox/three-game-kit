@@ -14,8 +14,9 @@ pnpm exec vite --host 127.0.0.1 --port 4174
 
 Open <http://127.0.0.1:4174/showcases/metaverse/index.html> and select **Enter the court**.
 The root gallery links to the showcase, and `pnpm run build:pages` includes it.
-Requires a keyboard/pointer browser with WebGL; touch camera dragging works, but
-mobile movement controls are outside this milestone.
+Requires a browser with WebGL. Issue #42 adds phone/tablet controls without
+changing the single-player game rules. Touch controls appear on touch-capable
+devices; portrait and landscape layouts both work.
 
 | Control | Action |
 | --- | --- |
@@ -26,10 +27,19 @@ mobile movement controls are outside this milestone.
 | E / interaction button | Toggle the lantern when within 2.5 metres |
 | R / Restart | Reset position, animation clock, camera and lantern |
 | Leave | Dispose the runtime and all owned resources; reload to return |
+| Touch movement stick (bottom left) | Camera-relative walk; release to stop |
+| Touch Run toggle | Switch between walk and run; highlighted while enabled |
+| Touch Jump button | Jump once per press |
+| Touch world drag | Orbit with a second finger while moving |
+| Touch lantern button (bottom right) | Light/extinguish the lantern within range |
 
-A profile label identifies the local visitor. Movement input clears when the browser
-loses focus. Animation blends idle, walk and run over 0.18 seconds; the avatar faces
-its movement direction. Simplified solid colliders prevent walking through pillars,
+A profile label identifies the local visitor. Movement input and pointer captures
+clear when the browser loses focus, becomes hidden, resizes or restarts. The touch stick has a small dead
+zone and proportional movement; Run resets on restart/focus loss. Action buttons
+activate on touch press, so they work while a different finger holds the stick.
+The welcome panel scrolls on short screens; controls respect safe-area insets.
+Animation blends idle, walk and run over 0.18 seconds; the avatar faces its movement
+direction. Simplified solid colliders prevent walking through pillars,
 benches, planters, the lantern and perimeter. The camera stays above the visitor and
 uses the public third-person camera transform, shortened by a local scene raycast
 when a roof, prop or wall obstructs the view.
@@ -41,6 +51,13 @@ One Client Runtime installs `movement-input`, `asset-manager`, `character-contro
 `ui-hud`, `three-rendering`, and the showcase-local `metaverse.rules` Feature.
 Animation, input sampling, locomotion and rules run at 60 Hz with the deterministic
 presentation frame source. Three.js lives in the renderer and asset/animation adapters.
+The browser adapter in `src/touch.ts` owns a public `createInputExperienceRuntime`
+(from `input-experience-extensions`) for touch axes, dead-zone/sensitivity shaping
+and action bindings. It samples on browser events and publishes through the same
+`setMove` / `press` semantic methods and `movement-input` Feature as desktop;
+no second simulation sampler or device-specific rules are needed. Camera drag
+uses finite client-coordinate deltas and the existing orbit camera path. The host
+owns and disposes the adapter's listeners, pointer captures and input runtime.
 There are no Core or reusable Feature changes.
 
 The existing [Interaction capability](../../docs/features/interaction.md) is a
@@ -93,6 +110,11 @@ pnpm run build:pages
 ```
 
 The asset gate also checks public imports and the authority-neutral world module.
+`tests/metaverse-touch.spec.ts` uses real Chromium touch dispatch in 390×844,
+844×390 and 1024×768 contexts, including simultaneous pointers and touch-only
+lantern interaction. It verifies cancellation, finite camera input, normalized
+diagonals, dead-zone behavior and cleanup. Desktop acceptance remains in
+`tests/metaverse.spec.ts`; both files run with `pnpm run test:metaverse`.
 Browser tests cover asset loading, actual animated bone poses, walk/run speed,
 facing, jumping, inclusive proximity and range rejection, toggle rendering, camera,
 pillar/boundary collision, deterministic reset/replay, physical controls, focus loss,

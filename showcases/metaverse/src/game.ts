@@ -217,7 +217,7 @@ export async function createCourtGame(
       screen: phase,
       extras: {
         prompt: nearby
-          ? `E · ${active ? "Extinguish" : "Light"} the courtyard lantern`
+          ? `${active ? "Extinguish" : "Light"} the courtyard lantern`
           : "Find the lantern in the central mosaic",
         movement: locomotion,
         lantern: active ? "The court is glowing." : "A quiet place to meet.",
