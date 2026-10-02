@@ -10,6 +10,14 @@ Work should normally begin with an Issue stating the problem, expected outcome,
 and relevant context. The Issue defines scope and completion, not a mandatory
 implementation plan. Use the [Issue template](../.github/ISSUE_TEMPLATE/issue.md).
 
+By default, completion criteria should be executable and verifiable by an AI
+agent. Require human checks, such as physical-device testing, subjective
+evaluation, or external approval, only when there is a necessary reason to do so.
+
+When human work is required, state why it is necessary and what result is
+expected. Distinguish optional additional validation from mandatory completion
+criteria.
+
 If scope is unclear, clarify the Issue before implementation instead of inventing
 requirements during the change.
 
