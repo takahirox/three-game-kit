@@ -20,6 +20,7 @@ export default mergeConfig(
       rollupOptions: {
         input: {
           index: page("./index.html"),
+          metaverse: page("./showcases/metaverse/index.html"),
           craftlands: page("./showcases/craftlands/index.html"),
           deepfield: page("./showcases/deepfield/index.html"),
           gravetide: page("./showcases/gravetide/index.html"),

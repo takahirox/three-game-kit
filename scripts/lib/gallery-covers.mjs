@@ -1,6 +1,19 @@
 /** Capture recipes use only the demos' public deterministic QA handles. */
 export const galleryCovers = [
   {
+    id: "metaverse", path: "showcases/metaverse/index.html", handle: "__METAVERSE__",
+    query: "test=1", canvas: "#world",
+    prepare(game) {
+      game.start();
+      game.setMove(0, -1);
+      game.advance(2.5);
+      game.setMove(0, 0);
+      game.press("interact");
+      game.setLook(-0.35);
+      game.advance(0.2);
+    },
+  },
+  {
     id: "craftlands", path: "showcases/craftlands/index.html", handle: "__CRAFTLANDS__",
     query: "test=1&seed=8675309&distance=5", canvas: "#game-canvas",
     prepare(game) {

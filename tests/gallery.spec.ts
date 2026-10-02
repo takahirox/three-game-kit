@@ -1,7 +1,9 @@
 import { expect, test } from "@playwright/test";
+import type {} from "../showcases/metaverse/src/main.js";
 
 const showcases = [
   ["craftlands", "Craftlands", "showcases/craftlands/index.html"],
+  ["metaverse", "Lantern Court", "showcases/metaverse/index.html"],
   ["relic-frontier", "Relic Frontier", "showcases/relic-frontier/index.html"],
   ["afterglow", "Afterglow", "showcases/afterglow/index.html"],
   ["gravetide", "Gravetide", "showcases/gravetide/index.html"],
@@ -11,14 +13,14 @@ const showcases = [
   ["core-run", "Core Run", "showcases/core-run/index.html"],
 ] as const;
 
-test("all eight playable links and both cover sizes resolve within the deployment base", async ({ page, request, baseURL }) => {
+test("all playable links and both cover sizes resolve within the deployment base", async ({ page, request, baseURL }) => {
   const errors: string[] = [];
   const remoteRequests: string[] = [];
   page.on("pageerror", error => errors.push(error.message));
   page.on("console", message => { if (message.type() === "error") errors.push(message.text()); });
   page.on("request", req => { if (new URL(req.url()).origin !== new URL(baseURL!).origin) remoteRequests.push(req.url()); });
   await page.goto("./");
-  await expect(page.locator(".game-card")).toHaveCount(8);
+  await expect(page.locator(".game-card")).toHaveCount(showcases.length);
   for (const [id, title, path] of showcases) {
     const card = page.locator(`[data-cover="${id}"]`);
     await expect(card).toHaveAttribute("href", `./${path}`);
@@ -51,6 +53,28 @@ test("all eight playable links and both cover sizes resolve within the deploymen
   expect(remoteRequests).toEqual([]);
   // The dev server injects its HMR client; the built gallery has no scripts.
   if (new URL(baseURL!).pathname !== "/") await expect(page.locator("script")).toHaveCount(0);
+});
+
+test("Lantern Court loads and plays with local assets under the deployment base", async ({ page }) => {
+  const errors: string[] = [];
+  page.on("pageerror", error => errors.push(error.message));
+  await page.goto("./showcases/metaverse/index.html?test=1");
+  await expect.poll(() => page.evaluate(() => window.__METAVERSE__?.ready)).toBe(true);
+  const state = await page.evaluate(() => {
+    const court = window.__METAVERSE__;
+    court.start();
+    court.setMove(0, -1);
+    court.advance(2.5);
+    court.setMove(0, 0);
+    court.press("interact");
+    court.advance(.2);
+    return { snapshot: court.snapshot(), assets: court.inspectAssets(), errors: court.errors() };
+  });
+  expect(state.snapshot?.interaction).toMatchObject({ active: true, toggles: 1 });
+  expect(state.assets.cachedIds).toEqual(["visitor", "court"]);
+  expect(state.errors).toEqual([]);
+  await page.evaluate(() => window.__METAVERSE__.dispose());
+  expect(errors).toEqual([]);
 });
 
 for (const [name, width, height] of [["desktop", 1440, 1000], ["tablet", 834, 1112], ["phone", 390, 844], ["small-phone", 320, 740]] as const) {

@@ -1,7 +1,7 @@
 # Playable showcase gallery
 
 The root `index.html` and `gallery/style.css` form a semantic HTML/CSS gallery with no runtime
-JavaScript, framework, remote font, or live game canvas. Craftlands is featured; five games form
+JavaScript, framework, remote font, or live game canvas. Craftlands is featured; six worlds form
 the main two-column grid; Particle Atlas and Core Run sit in a smaller Feature Lab. On phones,
 both grids become one column. Whole-card anchors work with keyboard, pointer, and touch; the
 skip link bypasses navigation. Motion is limited to a small image/arrow hover transform and is
@@ -14,7 +14,7 @@ components, branding, or media are included.
 
 ## Cover provenance
 
-All sixteen checked-in `covers/*.webp` files are captures of this repository's own rendered demos,
+All eighteen checked-in `covers/*.webp` files are captures of this repository's own rendered demos,
 using their public `?test=1` QA handles. No external imagery or generated game art is used.
 The initial scenes were captured from upstream checkpoint
 `854b0d0e0dcb4378f6705f2ef1eb3a0ecc99886b` with Playwright 1.62.1's bundled Chromium.
@@ -24,6 +24,7 @@ the playable demos are unchanged.
 
 | Cover | Source | Authored capture state |
 | --- | --- | --- |
+| Lantern Court | `showcases/metaverse` | Original visitor at the lit lantern, camera yaw −0.35; captured for Issue #40 |
 | Craftlands | `showcases/craftlands` | Seed 8675309, distance 5, daytime spawn overlooking a pond |
 | Relic Frontier | `showcases/relic-frontier` | Loaded ranger model, guardian encounter, onboarding dismissed |
 | Afterglow | `showcases/afterglow` | Start scenario, throttle and boost, 1.2 seconds advanced |
@@ -70,7 +71,7 @@ pnpm run build:pages
 pnpm run preview:pages       # open http://127.0.0.1:4175/three-game-kit/
 ```
 
-The browser suite checks all eight destinations and sixteen images against both server modes,
+The browser suite checks all nine destinations and eighteen images against both server modes,
 including actual decoded dimensions, local-only requests, desktop/tablet/phone layouts,
 reserved space while images load, keyboard focus/navigation, touch activation, and reduced
 motion. Desktop and mobile screenshots are saved under `test-results` for visual review.

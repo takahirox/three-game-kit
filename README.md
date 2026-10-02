@@ -78,6 +78,7 @@ Client/Server authority wrappers.
 - [Deepfield voxel sandbox showcase](./showcases/deepfield/README.md)
 - [Gravetide survivor-run showcase](./showcases/gravetide/README.md)
 - [Craftlands Minecraft-inspired survival showcase](./showcases/craftlands/README.md)
+- [Lantern Court walkable Web3D showcase](./showcases/metaverse/README.md)
 - [Afterglow neon survival sprint showcase](./showcases/afterglow/README.md)
 - [Interaction contract](./docs/features/interaction.md)
 - [Client-only Feature authoring](./docs/authoring/client-only-feature.md)
