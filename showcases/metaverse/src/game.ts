@@ -184,8 +184,8 @@ export async function createCourtGame(
             s = Math.sin(yaw);
           const isPlaying = phase === "playing";
           const result = {
-            x: isPlaying ? move.x * c + move.z * s : 0,
-            z: isPlaying ? -move.x * s + move.z * c : 0,
+            x: isPlaying ? move.x * c - move.z * s : 0,
+            z: isPlaying ? move.x * s + move.z * c : 0,
             run,
             jump: isPlaying && jump,
           };

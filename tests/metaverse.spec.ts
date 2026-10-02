@@ -169,7 +169,7 @@ test("Lantern Court composes deterministic avatar locomotion, camera and interac
     await page.evaluate(
       () => window.__METAVERSE__.snapshot()?.avatar.position.x,
     ),
-  ).toBeCloseTo(-2.4, 2);
+  ).toBeCloseTo(2.4, 2);
   const camera = await page.evaluate(
     () => window.__METAVERSE__.inspectRenderer()?.camera,
   );
@@ -291,6 +291,61 @@ test("Lantern Court composes deterministic avatar locomotion, camera and interac
     },
   });
   expect(await page.evaluate(() => window.__METAVERSE__.errors())).toEqual([]);
+  expect(errors).toEqual([]);
+});
+
+test("forward and right movement follow the rendered camera at rotated yaw", async ({
+  page,
+}) => {
+  const errors: string[] = [];
+  page.on("pageerror", (e) => errors.push(e.message));
+  await page.goto("/showcases/metaverse/index.html?test=1");
+  await expect
+    .poll(() => page.evaluate(() => window.__METAVERSE__?.ready))
+    .toBe(true);
+
+  for (const yaw of [Math.PI / 4, -Math.PI / 4, Math.PI / 2, -Math.PI / 2]) {
+    for (const direction of ["forward", "right"] as const) {
+      const result = await page.evaluate(({ yaw, direction }) => {
+        const g = window.__METAVERSE__;
+        g.reset();
+        g.setLook(yaw);
+        g.advance(0.2);
+        const camera = g.inspectRenderer()!.camera;
+        const forwardX = camera.target[0]! - camera.position[0]!;
+        const forwardZ = camera.target[2]! - camera.position[2]!;
+        const length = Math.hypot(forwardX, forwardZ);
+        // Project the rendered camera's forward and right directions onto the ground.
+        const axis =
+          direction === "forward"
+            ? { x: forwardX / length, z: forwardZ / length }
+            : { x: -forwardZ / length, z: forwardX / length };
+        const before = g.snapshot()!.avatar.position;
+        g.setMove(
+          direction === "right" ? 1 : 0,
+          direction === "forward" ? -1 : 0,
+        );
+        g.advance(0.5);
+        const after = g.snapshot()!.avatar;
+        return {
+          axis,
+          displacement: {
+            x: after.position.x - before.x,
+            z: after.position.z - before.z,
+          },
+          facing: after.facing,
+        };
+      }, { yaw, direction });
+      const context = `${direction} at yaw ${yaw}`;
+      expect(result.displacement.x, context).toBeCloseTo(result.axis.x * 1.2, 3);
+      expect(result.displacement.z, context).toBeCloseTo(result.axis.z * 1.2, 3);
+      expect(Math.sin(result.facing), context).toBeCloseTo(result.axis.x, 5);
+      expect(Math.cos(result.facing), context).toBeCloseTo(result.axis.z, 5);
+    }
+  }
+
+  expect(await page.evaluate(() => window.__METAVERSE__.errors())).toEqual([]);
+  await page.evaluate(() => window.__METAVERSE__.dispose());
   expect(errors).toEqual([]);
 });
 
