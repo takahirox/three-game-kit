@@ -18,6 +18,18 @@ When human work is required, state why it is necessary and what result is
 expected. Distinguish optional additional validation from mandatory completion
 criteria.
 
+Mandatory pre-merge acceptance criteria must be achievable and verifiable before
+merge. Record required checks possible only after merge separately as post-merge
+verification; they must not be prerequisites for pre-merge PR approval. This
+distinction preserves all implementation requirements and applicable pre-merge
+tests.
+
+For example, for a merge-triggered deployment, validate the code and deployment
+configuration, local builds, and applicable automated tests before merge. Verify
+publication and the newly published site's expected behavior after merge. Report
+required post-merge verification as pending until performed, rather than claiming
+that pre-merge validation proves publication.
+
 If scope is unclear, clarify the Issue before implementation instead of inventing
 requirements during the change.
 
@@ -27,6 +39,10 @@ Propose the implementation through a PR associated with the Issue. Use the
 [PR template](../.github/pull_request_template.md) to explain what changed, the
 outcome (including before/after behavior when useful), validation, and related
 Issues.
+
+Record pre-merge validation results and required post-merge verification
+separately in the PR's validation report. Keep post-merge checks marked as pending
+until performed, and report failed or unperformed pre-merge checks accurately.
 
 Only claim to close an Issue when the PR fully addresses it. Intentional partial
 work is fine, but state what remains, avoid closing keywords, and keep the Issue
@@ -51,9 +67,20 @@ or insufficient validation, update the PR and review it again.
 
 ## 5. Merge after scope and correctness are satisfied
 
-Merge only when the reviewed change is complete for the Issue it claims to
-resolve, no broader than necessary, correct, and appropriately validated.
+Merge only when the reviewed implementation is complete for the Issue it claims
+to resolve, no broader than necessary, correct, and satisfies mandatory pre-merge
+acceptance criteria with appropriate validation. Required post-merge verification
+must be recorded separately as pending and must not block pre-merge PR approval.
 Passing tests alone is not sufficient.
+
+## 6. Perform post-merge verification
+
+After merge, perform the recorded post-merge checks and report their actual
+results. For a merge-triggered deployment, verify that deployment succeeds and
+the newly published site has the expected behavior. Keep checks pending until
+performed; approval, merge, or a successful local build does not prove they passed.
+Record failures and required follow-up work without claiming full verification
+while required checks remain pending or have failed.
 
 ## Demonstrate reusable responsibilities first
 

@@ -6,9 +6,12 @@ against that scope. Follow the [development flow and language policy](./developm
 
 ## Check for missing work
 
-Verify every requirement the PR claims to resolve. Do not approve it as closing
-an Issue while required work remains. Intentional partial implementation must
-state what remains and leave the Issue open.
+Verify every implementation requirement and mandatory pre-merge acceptance
+criterion the PR claims to resolve. Do not approve it as closing an Issue while
+required implementation work or pre-merge acceptance remains incomplete.
+Intentional partial implementation must state what remains and leave the Issue
+open. Required post-merge verification must be recorded separately as pending
+until performed, as described below.
 
 ## Check for unnecessary work
 
@@ -41,14 +44,31 @@ where applicable. Use the relevant existing checks and record their results;
 the [AI workflow](./ai-workflow.md) describes deterministic validation and the
 [release checklist](./release-checklist.md) defines release-candidate evidence.
 
+## Distinguish pre-merge acceptance from post-merge verification
+
+Mandatory pre-merge acceptance criteria must be achievable and verifiable before
+merge. Checks possible only after merge must not be prerequisites for pre-merge
+PR approval. Confirm that required post-merge verification is recorded separately
+and reported as pending until performed, following the
+[post-merge workflow](./development-flow.md#6-perform-post-merge-verification).
+
+For example, for a merge-triggered deployment, review the code and deployment
+configuration, local build results, and applicable automated tests before merge.
+Verify deployment and the newly published site's expected behavior after merge.
+Pending post-merge verification does not excuse missing implementation, skipped
+applicable pre-merge tests, or inaccurate validation reporting. Do not report
+post-merge checks as passed based on pre-merge evidence.
+
 ## Review outcome
 
 The three merge conditions are:
 
-1. **Complete:** the PR fully addresses the Issue it claims to resolve.
+1. **Complete:** the implementation fully addresses the Issue it claims to
+   resolve, and required post-merge verification is recorded separately.
 2. **Scoped:** the PR introduces no unjustified scope or complexity.
 3. **Validated:** the implementation is correct and sufficiently tested or
-   otherwise verified.
+   otherwise verified against mandatory pre-merge acceptance criteria, with
+   post-merge checks accurately reported as pending until performed.
 
 Passing tests alone is not sufficient. If any condition is unmet, request
 changes and review again after revision. A deliberately partial PR may be
