@@ -4,6 +4,7 @@ import type { GLTF } from "three/examples/jsm/loaders/GLTFLoader.js";
 import { createCourtGame, type CourtGame } from "./game.js";
 import { createCourtRenderer, type CourtRenderer } from "./renderer.js";
 import type { Action } from "./world.js";
+import { installCourtControls } from "./touch.js";
 
 const canvas = document.querySelector<HTMLCanvasElement>("#world")!;
 const hud = document.querySelector<HTMLElement>("#hud")!;
@@ -47,6 +48,7 @@ function listen(target: EventTarget, type: string, fn: EventListener) {
 }
 function resetInput() {
   held.clear();
+  controls.reset();
   game?.setMove(0, 0);
 }
 function keyboardMovement() {
@@ -71,10 +73,7 @@ function dispose(): Promise<void> {
   raf = null;
   for (const remove of listeners.splice(0)) remove();
   held.clear();
-  dragging = false;
-  if (pointerId !== null && canvas.hasPointerCapture(pointerId))
-    canvas.releasePointerCapture(pointerId);
-  pointerId = null;
+  controls.dispose();
   disposal = (async () => {
     await game?.dispose();
     // Also cover disposal during pending assets or a failed boot.
@@ -159,7 +158,8 @@ const handle = {
       hostListeners: listeners.length,
       rafActive: raf !== null,
       heldKeys: held.size,
-      pointerCaptured: pointerId !== null && canvas.hasPointerCapture(pointerId),
+      pointerCaptured: controls.inspect().lookPointer !== null,
+      touch: controls.inspect(),
       game: game?.inspectLeaks() ?? null,
     };
   },
@@ -231,34 +231,14 @@ listen(window, "keyup", (raw) => {
   held.delete((raw as KeyboardEvent).code);
   keyboardMovement();
 });
-let dragging = false,
-  pointerId: number | null = null;
-listen(canvas, "pointerdown", (raw) => {
-  const e = raw as PointerEvent;
-  dragging = true;
-  pointerId = e.pointerId;
-  canvas.setPointerCapture(e.pointerId);
-  canvas.focus();
-});
-listen(canvas, "pointermove", (raw) => {
-  if (dragging) {
-    yaw -= (raw as PointerEvent).movementX * 0.006;
+const controls = installCourtControls(hud, canvas, {
+  playing: () => game?.snapshot().phase === "playing" && !disposed,
+  setMove: (x, z, run) => game?.setMove(x, z, run),
+  press: (action) => game?.press(action),
+  look: (delta) => {
+    yaw += delta;
     game?.setLook(yaw);
-  }
-});
-listen(canvas, "pointerup", () => {
-  dragging = false;
-  pointerId = null;
-});
-listen(canvas, "lostpointercapture", () => {
-  dragging = false;
-  pointerId = null;
-});
-listen(window, "blur", () => {
-  dragging = false;
-  if (pointerId !== null && canvas.hasPointerCapture(pointerId))
-    canvas.releasePointerCapture(pointerId);
-  pointerId = null;
+  },
 });
 const domHud = createDomHudAdapter(hud, {
   onAction: (action) => {
@@ -291,7 +271,9 @@ async function boot() {
       await game.dispose();
       return;
     }
-    status.textContent = "WASD · Shift to run · Space to jump · Drag to look";
+    status.textContent = document.body.classList.contains("touch-controls-enabled")
+      ? "Stick to move · Drag the world to look"
+      : "WASD · Shift to run · Space to jump · Drag to look";
     if (!testMode) raf = requestAnimationFrame(loop);
   } catch (error) {
     record("boot", error);

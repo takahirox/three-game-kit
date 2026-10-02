@@ -2,7 +2,7 @@
 <html lang="en">
   <head>
     <meta charset="UTF-8" />
-    <meta name="viewport" content="width=device-width,initial-scale=1" />
+    <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover" />
     <title>Lantern Court · three-game-kit</title>
     <link rel="stylesheet" href="./style.css" />
   </head>
@@ -10,7 +10,7 @@
     <canvas
       id="world"
       tabindex="0"
-      aria-label="Lantern Court virtual world. Move with WASD, run with Shift, jump with Space, interact with E, drag to orbit the camera."
+      aria-label="Lantern Court virtual world. Move with WASD, run with Shift, jump with Space, interact with E, drag to orbit the camera. Touch: movement stick, Run and Jump buttons, lantern button to interact."
     ></canvas>
     <main id="hud">
       <header>
@@ -34,6 +34,13 @@
         <button data-hud-action="interact" data-hud-bind="extra:prompt">
           Find the central lantern
         </button>
+      </section>
+      <section class="touch-controls" data-hud-screen="playing" hidden aria-label="Touch controls">
+        <div id="move-stick" role="group" aria-label="Movement stick"><i></i><span>Move</span></div>
+        <div class="touch-actions">
+          <button id="touch-run" aria-pressed="false">Run</button>
+          <button id="touch-jump">Jump</button>
+        </div>
       </section>
       <aside class="toolbar">
         <button data-hud-action="reset">Restart</button

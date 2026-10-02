@@ -9,6 +9,7 @@
 }
 body {
   margin: 0;
+  overflow: hidden;
 }
 #world {
   display: block;
@@ -207,4 +208,100 @@ kbd {
   * {
     scroll-behavior: auto;
   }
+}
+
+.touch-controls { display: none; }
+.touch-controls-enabled {
+  --edge-left: max(16px, env(safe-area-inset-left));
+  --edge-right: max(16px, env(safe-area-inset-right));
+  --edge-top: max(12px, env(safe-area-inset-top));
+  --edge-bottom: max(12px, env(safe-area-inset-bottom));
+}
+.touch-controls-enabled #hud {
+  padding: var(--edge-top) var(--edge-right) var(--edge-bottom) var(--edge-left);
+}
+.touch-controls-enabled .touch-controls { display: block; }
+.touch-controls-enabled button, .touch-controls-enabled header a {
+  min-height: 48px;
+  touch-action: manipulation;
+}
+.touch-controls-enabled header { gap: 4px; }
+.touch-controls-enabled header a { display: flex; align-items: center; }
+.touch-controls-enabled header .eyebrow { display: none; }
+.touch-controls-enabled h1 { font-size: 22px; }
+.touch-controls-enabled .toolbar {
+  top: var(--edge-top);
+  right: var(--edge-right);
+}
+.touch-controls-enabled .toolbar button { padding: 10px 12px; }
+.touch-controls-enabled .welcome {
+  top: 50%;
+  transform: translateY(-50%);
+  left: max(6%, var(--edge-left));
+  right: var(--edge-right);
+  padding: 20px;
+  max-height: calc(100dvh - 150px - env(safe-area-inset-top) - env(safe-area-inset-bottom));
+  overflow-y: auto;
+  pointer-events: auto;
+}
+.touch-controls-enabled .welcome h2 { font-size: 30px; margin: 10px 0; }
+.touch-controls-enabled .welcome br { display: none; }
+.touch-controls-enabled .welcome p { margin: 8px 0; }
+.touch-controls-enabled .welcome .hint { display: none; }
+.touch-controls-enabled footer {
+  bottom: var(--edge-bottom);
+  left: var(--edge-left);
+  right: var(--edge-right);
+  padding: 8px 10px;
+  flex-wrap: nowrap;
+}
+.touch-controls-enabled footer span:nth-child(2) { display: none; }
+#move-stick {
+  position: absolute;
+  left: var(--edge-left);
+  bottom: calc(52px + var(--edge-bottom));
+  width: 120px;
+  height: 120px;
+  border-radius: 50%;
+  border: 2px solid #fff9;
+  background: #f8f3e299;
+  pointer-events: auto;
+  touch-action: none;
+  user-select: none;
+}
+#move-stick i {
+  position: absolute;
+  top: 50%; left: 50%;
+  width: 48px; height: 48px;
+  border-radius: 50%;
+  background: #2d524acc;
+  transform: translate(-50%, -50%);
+  pointer-events: none;
+}
+#move-stick span {
+  position: absolute; bottom: 8px; width: 100%;
+  text-align: center; font-size: 10px; pointer-events: none;
+}
+.touch-actions {
+  position: absolute;
+  bottom: calc(52px + var(--edge-bottom));
+  right: var(--edge-right);
+  display: flex;
+  gap: 8px;
+}
+.touch-actions button { min-width: 64px; min-height: 56px; }
+#touch-run[aria-pressed="true"] { background: #9b6629; outline: 2px solid #f8f3e2; }
+.touch-controls-enabled .interaction {
+  bottom: calc(120px + var(--edge-bottom));
+  left: auto;
+  right: var(--edge-right);
+  transform: none;
+  width: min(240px, calc(100vw - 172px - env(safe-area-inset-left) - env(safe-area-inset-right)));
+  max-width: none;
+}
+.touch-controls-enabled .interaction p { margin: 0 0 8px; }
+.touch-controls-enabled .interaction button { width: 100%; padding: 12px; }
+@media (max-height: 480px) {
+  .touch-controls-enabled header p { display: none; }
+  .touch-controls-enabled .welcome { max-height: calc(100dvh - 112px); }
 }
