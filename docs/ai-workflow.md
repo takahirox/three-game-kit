@@ -75,8 +75,8 @@ described in [two-client acceptance](./testing/two-client-acceptance.md).
 
 ## 6. Verify and review the diff
 
-Use the narrow command while iterating, then run the release-candidate gate before
-acceptance:
+For Feature composition changes, use the narrow command while iterating, then run
+the release-candidate gate before acceptance:
 
 ```sh
 pnpm test:node
@@ -84,6 +84,9 @@ pnpm test:m4-packed-consumer
 pnpm verify:m5
 git diff --check
 ```
+
+For documentation-only changes, follow the
+[test and CI validation guidance](./development-flow.md#apply-the-existing-checks).
 
 Review the final diff for public-export compliance, static composition, ownership,
 authority validation, cleanup, deterministic evidence, and alignment with
