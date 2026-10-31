@@ -44,6 +44,13 @@ where applicable. Use the relevant existing checks and record their results;
 the [AI workflow](./ai-workflow.md) describes deterministic validation and the
 [release checklist](./release-checklist.md) defines release-candidate evidence.
 
+Apply the [test and CI performance principles](./development-flow.md#test-and-ci-performance-principles):
+identify the additional defects covered, overlap with existing checks, and added
+execution and maintenance cost. Ask:
+
+> Does this change provide sufficient confidence with the lightest appropriate
+> validation, without redundant execution?
+
 ## Distinguish pre-merge acceptance from post-merge verification
 
 Mandatory pre-merge acceptance criteria must be achievable and verifiable before

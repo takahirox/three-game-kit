@@ -60,6 +60,7 @@ Client/Server authority wrappers.
 
 - [Development flow and language policy](./docs/development-flow.md)
 - [Review guidelines](./docs/review-guidelines.md)
+- [Test and CI performance principles](./docs/development-flow.md#test-and-ci-performance-principles)
 - [Milestone 0 traceability](./docs/m0-traceability.md)
 - [Milestone 1 verification](./docs/m1-verification.md)
 - [Milestone 2 verification](./docs/m2-verification.md)
