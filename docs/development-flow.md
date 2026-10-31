@@ -43,6 +43,7 @@ Issues.
 Record pre-merge validation results and required post-merge verification
 separately in the PR's validation report. Keep post-merge checks marked as pending
 until performed, and report failed or unperformed pre-merge checks accurately.
+Choose and report checks using the [test and CI performance principles](#test-and-ci-performance-principles).
 
 Only claim to close an Issue when the PR fully addresses it. Intentional partial
 work is fine, but state what remains, avoid closing keywords, and keep the Issue
@@ -81,6 +82,82 @@ the newly published site has the expected behavior. Keep checks pending until
 performed; approval, merge, or a successful local build does not prove they passed.
 Record failures and required follow-up work without claiming full verification
 while required checks remain pending or have failed.
+
+## Test and CI performance principles
+
+**Detect the required failures at the lightest appropriate layer, without
+redundant execution.** Preserve required behavior, regression assertions, and
+meaningful integration coverage when moving or consolidating checks.
+
+1. **Prefer the lightest meaningful layer.** Use Node tests for calculations,
+   branches, protocol validation, and broad data combinations; `pnpm test` builds
+   before running `test:node`. Reserve Playwright/Three.js rendering and real
+   WebSocket integration for behavior that needs those boundaries. Add tests that
+   catch a concrete defect rather than mirror the implementation. Preserve
+   [deterministic injection](./ai-workflow.md#5-inject-deterministic-tests),
+   isolation, ownership, and cleanup evidence.
+2. **Choose combinations deliberately.** Cover distinct Feature, asset, state,
+   and authority paths with representative cases; exhaust combinations where
+   their interactions require it. Do not automatically multiply these by every
+   browser or deployment path. Keep the required bundled-Chromium environment and
+   [canonical two-client acceptance](./testing/two-client-acceptance.md). Gallery
+   development and Pages projects exercise distinct serving/base-path behavior;
+   they are not interchangeable coverage.
+3. **Match validation to the change.** Use the guidance below for local feedback
+   and pre-merge evidence. Keep fast iteration, full regression validation, and
+   publication distinct. Applicable mandatory pre-merge checks remain required;
+   optional diagnostics do not replace them. Record genuinely post-merge-only
+   verification separately and leave it pending until performed.
+4. **Reuse work and eliminate duplicate execution.** In future test/CI changes,
+   reuse builds, package fixtures, dependency/browser downloads, and asset setup
+   with keys tied to relevant source, lockfile, toolchain, and environment; retain
+   fresh application state and independent browser contexts. The current CI runs
+   on both push and pull request: avoid equivalent runs for the same revision
+   when revising triggers. Stop superseded validation safely while preserving
+   necessary Pages deployment ordering. Measure resource use before parallelizing
+   independent work; more workers need not improve feedback time.
+5. **Review value and cost together.** Identify the additional defect each new
+   or expanded check detects, whether existing coverage already detects it, and
+   its execution and maintenance cost. Watch repeated TypeScript builds,
+   browser/renderer startup, package packing/installing, large assets, long tick
+   loops, and Cartesian-product growth. Consolidate redundant work without
+   dropping meaningful assertions or required integration evidence.
+6. **Maintain an execution-time budget.** Normal-CI duration and its target are
+   currently unmeasured in repository guidance. Establish a baseline and a
+   repository-appropriate target during actual test/CI performance work, using
+   representative runs; monitor growth and investigate overruns. Track elapsed
+   feedback time, total runner/computation time, and queue time separately.
+   Revisit setup, duplication, and validation structure while retaining required
+   coverage. This policy adds no benchmark, hardware purchase, or merge gate.
+
+### Apply the existing checks
+
+Commands are defined in [`package.json`](../package.json). The current
+[`CI workflow`](../.github/workflows/ci.yml) unconditionally runs `pnpm verify:m5`,
+the additional showcase verification commands, and `pnpm verify:gallery`.
+`verify:m5` includes build/type checks, Node tests, browser acceptance,
+catalog/documentation checks, and packed-consumer/release audits. These principles
+do not change CI selection or waive its required checks.
+
+| Change | Relevant pre-merge validation |
+| --- | --- |
+| Documentation only | Check Markdown structure, local links/anchors, consistency, and `git diff --check`; `pnpm test:m5-docs` is the existing documentation checker. Application builds, browser suites, and timing measurements are not needed solely for prose changes. |
+| UI, rendering, or showcase | Use the affected `verify:<showcase>` or Feature command from `package.json`; gallery changes use `pnpm verify:gallery`, including development and local Pages-build behavior. |
+| Core/runtime, protocol, or package boundary | Use focused Node tests while iterating after a build; `pnpm verify` covers build/type checks, Node tests, and workspace boundaries. Run applicable browser, packed-consumer, and full regression gates for affected contracts. |
+| CI/build or Pages configuration | Check changed configuration and affected commands, builds, and regression gates; use `pnpm build:pages` and local Pages checks when publication paths are affected. A local build does not prove publication. |
+
+The [AI workflow](./ai-workflow.md#6-verify-and-review-the-diff) retains the
+`pnpm verify:m5` acceptance gate for Feature composition; the
+[release checklist](./release-checklist.md) retains same-commit candidate CI and
+archive evidence. Headed runs, extra seeds, and unsupported browsers/hosts are
+optional diagnostics under [ADR 0007](./adr/0007-playwright-browser-testing.md),
+not new support commitments. The [Pages workflow](../.github/workflows/pages.yml)
+publishes on pushes to `main` or manual dispatch; for merge-triggered publication,
+verify deployment and the published site's behavior after merge as described in
+[step 6](#6-perform-post-merge-verification).
+
+Workflow, cache, worker, test-selection, and test implementation changes require
+separately scoped work; this section documents how to assess them.
 
 ## Demonstrate reusable responsibilities first
 
