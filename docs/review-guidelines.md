@@ -11,7 +11,8 @@ criterion the PR claims to resolve. Do not approve it as closing an Issue while
 required implementation work or pre-merge acceptance remains incomplete.
 Intentional partial implementation must state what remains and leave the Issue
 open. Required post-merge verification must be recorded separately as pending
-until performed, as described below.
+until performed, as described below; that pending work alone does not make an
+otherwise complete implementation partial.
 
 ## Check for unnecessary work
 
@@ -59,12 +60,29 @@ PR approval. Confirm that required post-merge verification is recorded separatel
 and reported as pending until performed, following the
 [post-merge workflow](./development-flow.md#6-perform-post-merge-verification).
 
+For an otherwise complete PR whose mandatory pre-merge acceptance is satisfied,
+preserve the normal `Closes #N` reference and approve when the review conditions
+below are met. Do not request its removal, keep the source Issue open, or withhold
+approval solely for pending post-merge-only checks. This avoids the
+Review -> Fix -> Publish -> Review loop when ProjectWeave restores the closing
+reference during publication. After successful merge, close the original Issue
+and record required post-merge evidence under the linked workflow. Actual defects
+belong in a new linked Issue (or an existing equivalent), rather than reopening
+the original solely for follow-up.
+
+Require post-merge checks only when justified by the change. Documentation-only
+work does not need routine manual approval, physical-device checks, heavyweight
+model downloads, or deployment gates.
+
 For example, for a merge-triggered deployment, review the code and deployment
 configuration, local build results, and applicable automated tests before merge.
 Verify deployment and the newly published site's expected behavior after merge.
 Pending post-merge verification does not excuse missing implementation, skipped
-applicable pre-merge tests, or inaccurate validation reporting. Do not report
-post-merge checks as passed based on pre-merge evidence.
+mandatory pre-merge tests, unmet repository protections/reviews, missing genuinely
+necessary pre-merge human acceptance, or inaccurate validation reporting. Do not
+report post-merge checks as passed based on pre-merge evidence or Issue closure.
+An unavailable environment alone is not a product defect; report the check as
+blocked and preserve historical evidence under the current post-merge workflow.
 
 ## Review outcome
 

@@ -34,10 +34,16 @@ requirements and applicable pre-merge tests still apply.
 ## Post-merge verification
 
 Record required checks possible only after merge separately, or state that none
-are needed. For example, after a merge-triggered deployment, verify publication
-and the newly published site's expected behavior. Report these checks as pending
-until performed; do not present them as passed based on pre-merge validation.
-See the [post-merge workflow](https://github.com/takahirox/three-game-kit/blob/main/docs/development-flow.md#6-perform-post-merge-verification).
+are needed for this change. Do not add routine manual, device, model-download, or
+deployment gates to documentation-only work. For example, after a merge-triggered
+deployment, verify publication and the newly published site's expected behavior.
+Report checks as pending or environment-blocked until performed; closure does not
+claim they passed. Once implementation and mandatory pre-merge acceptance are
+complete, merge and close this Issue before required post-merge verification.
+Record evidence and any actual defects in accordance with the
+[post-merge workflow](https://github.com/takahirox/three-game-kit/blob/main/docs/development-flow.md#6-perform-post-merge-verification),
+using a new linked Issue (or existing equivalent) for defects rather than reopening
+this Issue solely for follow-up.
 
 ## Context
 
