@@ -112,6 +112,12 @@ body:has(.overlay[data-hud-screen="title"]:not([hidden])) #status { opacity: 0; 
 .has-touch .cue { justify-self: center; transform: none; }
 .has-touch .cue[hidden] { display: none; }
 .has-touch .ghost-tag { justify-self: end; }
+.has-touch .cue:not([hidden]) ~ .toast {
+  position: static;
+  justify-self: center;
+  translate: none;
+  transform-origin: top center;
+}
 .has-touch .dash {
   inset: auto var(--safe-right) calc(var(--safe-bottom) + 2 * var(--touch-size) + var(--touch-gap) + 8px) var(--safe-left);
   flex-direction: row;
@@ -177,11 +183,6 @@ body:has(.overlay[data-hud-screen="title"]:not([hidden])) #status { opacity: 0; 
   .has-touch .crash { top: 56%; }
 }
 @media (orientation: landscape) and (max-height: 360px) {
-  .has-touch .cue:not([hidden]) ~ .toast {
-    position: static;
-    justify-self: center;
-    translate: none;
-  }
   .has-touch .dash {
     right: auto;
     bottom: calc(var(--safe-bottom) + var(--touch-size) + 8px);

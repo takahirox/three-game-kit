@@ -271,6 +271,7 @@ test.describe("Afterglow touchscreen", () => {
     const insets = { top: 24, left: 28, right: 36, bottom: 24 };
     for (const layout of [
       { viewport: { width: 320, height: 568 }, insets },
+      { viewport: { width: 360, height: 501 }, insets: { top: 59, left: 0, right: 0, bottom: 24 } },
       { viewport: { width: 844, height: 390 }, insets },
       { viewport: { width: 812, height: 280 }, insets: { top: 0, left: 44, right: 44, bottom: 21 } },
       { viewport: { width: 1024, height: 768 }, insets },
