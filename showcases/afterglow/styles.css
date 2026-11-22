@@ -28,9 +28,9 @@ body:has(.overlay[data-hud-screen="title"]:not([hidden])) #status { opacity: 0; 
 .cue b { font-weight: 400; font-variant-numeric: tabular-nums; }
 .cue[data-kind="gap"], .cue[data-kind="gate"], .cue[data-kind="pillar"] { background: var(--magenta); color: #fff; }.cue[data-kind="checkpoint"], .cue[data-kind="finish"] { background: var(--cyan); }
 .ghost-tag { position: absolute; right: 30px; top: 118px; padding: 6px 12px; color: #dff6ff; border: 1px solid #ffffff33; font-size: 8px; letter-spacing: .22em; background: #03050c88; }
-.toast { position: absolute; left: 50%; top: 31%; transform: translate(-50%, -50%); color: var(--paper); font-size: 22px; font-weight: 800; letter-spacing: .34em; text-shadow: 0 0 18px var(--cyan), 0 0 40px #35f2ff66; white-space: nowrap; pointer-events: none; }
+.toast { position: absolute; left: 50%; top: 31%; translate: -50% -50%; color: var(--paper); font-size: 22px; font-weight: 800; letter-spacing: .34em; text-shadow: 0 0 18px var(--cyan), 0 0 40px #35f2ff66; white-space: nowrap; pointer-events: none; }
 .toast.pop { animation: toast-pop .55s cubic-bezier(.2,.9,.2,1) both; }
-@keyframes toast-pop { 0% { opacity: 0; transform: translate(-50%, -50%) scale(1.6); letter-spacing: .6em; } 35% { opacity: 1; transform: translate(-50%, -50%) scale(1); } 100% { opacity: 1; transform: translate(-50%, -50%) scale(1); letter-spacing: .34em; } }
+@keyframes toast-pop { 0% { opacity: 0; scale: 1.6; letter-spacing: .6em; } 35% { opacity: 1; scale: 1; } 100% { opacity: 1; scale: 1; letter-spacing: .34em; } }
 #hud.is-dead .toast { color: var(--magenta); text-shadow: 0 0 18px var(--magenta), 0 0 40px #ff2d7a66; }
 .crash { position: absolute; left: 50%; top: 42%; transform: translate(-50%, -50%); text-align: center; color: var(--magenta); text-shadow: 0 0 24px #ff2d7a99; }
 .crash strong { display: block; font-size: 34px; letter-spacing: .32em; font-weight: 800; }.crash small { display: block; margin-top: 8px; font-size: 10px; letter-spacing: .3em; text-transform: uppercase; color: #ffb0cc; }
@@ -177,6 +177,11 @@ body:has(.overlay[data-hud-screen="title"]:not([hidden])) #status { opacity: 0; 
   .has-touch .crash { top: 56%; }
 }
 @media (orientation: landscape) and (max-height: 360px) {
+  .has-touch .cue:not([hidden]) ~ .toast {
+    position: static;
+    justify-self: center;
+    translate: none;
+  }
   .has-touch .dash {
     right: auto;
     bottom: calc(var(--safe-bottom) + var(--touch-size) + 8px);
