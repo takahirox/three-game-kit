@@ -125,7 +125,8 @@ export interface AfterglowGame {
   pressPhysical(input: string): void;
   setAxis(x: number): void;
   updateGamepad(deviceId: string, x: number, buttons: readonly string[]): void;
-  setTouchInput(input: TouchDriveInput | null, jump?: boolean): void;
+  setTouchInput(input: TouchDriveInput | null, jumpPointerId?: number): void;
+  finishTouchJump(pointerId: number, canceled: boolean): void;
   loadScenario(id: Scenario): void;
   snapshot(): AfterglowSnapshot;
   events(): readonly AfterglowEvent[];
@@ -233,7 +234,7 @@ class Game implements AfterglowGame {
   private touchSteer: number | null = null;
   private readonly heldBySource: Record<InputSource, HeldInput> = { desktop: NEUTRAL_HELD, touch: NEUTRAL_HELD };
   private pendingTouch: HeldInput | null = null;
-  private touchJump = false;
+  private pendingTouchJump: number | "released" | null = null;
   private readonly vehicles = createVehicleRuntime(
     [{ id: CAR_ID, seats: [{ id: DRIVER_SEAT, role: "driver" }], acceleration: TUNING.acceleration, braking: TUNING.braking, steering: 1 }],
     { integrate: (vehicle, control, dt) => this.integrate(vehicle.speed, vehicle.steering, control, dt) },
@@ -408,9 +409,9 @@ class Game implements AfterglowGame {
         actions.push(`touch:${control}-${this.pendingTouch[control] ? "start" : "end"}`);
       }
     }
-    if (this.touchJump) actions.push("jump");
+    if (this.pendingTouchJump !== null) actions.push("jump");
     this.pendingTouch = null;
-    this.touchJump = false;
+    this.pendingTouchJump = null;
     this.input.updateTouch(TOUCH_DEVICE, this.touchSteer ?? this.desktopSteer, 0, actions);
   }
 
@@ -910,17 +911,24 @@ class Game implements AfterglowGame {
     this.input.updateGamepad(deviceId, this.touchSteer ?? this.desktopSteer, 0, buttons);
   }
 
-  setTouchInput(input: TouchDriveInput | null, jump = false): void {
+  setTouchInput(input: TouchDriveInput | null, jumpPointerId?: number): void {
     if (this.isDisposed) return;
     this.touchSteer = input?.steer ?? null;
     this.pendingTouch = input;
-    // Sample a quick tap on the next tick. A lifecycle reset can still discard it.
-    this.touchJump = input !== null && (this.touchJump || jump);
     if (input === null) {
+      this.pendingTouchJump = null;
       this.setHeld(NEUTRAL_HELD, "touch");
       this.input.disconnectDevice(TOUCH_DEVICE);
       this.input.setAxis(this.desktopSteer, 0);
+    } else if (jumpPointerId !== undefined && this.pendingTouchJump === null) {
+      this.pendingTouchJump = jumpPointerId;
     }
+  }
+
+  finishTouchJump(pointerId: number, canceled: boolean): void {
+    if (this.pendingTouchJump !== pointerId) return;
+    // Keep a normally released tap queued until the next tick.
+    this.pendingTouchJump = canceled ? null : "released";
   }
 
   loadScenario(id: Scenario): void {
