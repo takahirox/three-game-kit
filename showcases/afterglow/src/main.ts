@@ -157,7 +157,7 @@ function stepTestFrame(): void {
   if (mode === "test") { game?.advance(1 / 60); renderNow(); }
 }
 
-function publishTouch(jump = false): void {
+function publishTouch(jumpPointerId?: number): void {
   const buttons = new Set(touchContacts.values());
   for (const button of touchButtons) button.toggleAttribute("data-held", buttons.has(button));
   const actions = new Set([...buttons].map((button) => button.dataset["drive"]));
@@ -168,7 +168,7 @@ function publishTouch(jump = false): void {
     throttle: actions.has("throttle"),
     brake: actions.has("brake"),
     boost: actions.has("boost"),
-  }, jump);
+  }, jumpPointerId);
 }
 
 function releaseTouch(id: number): boolean {
@@ -195,10 +195,12 @@ if (touchCapable) {
     button.setPointerCapture(event.pointerId);
     const jump = button.dataset["drive"] === "jump" && !button.hasAttribute("data-held");
     touchContacts.set(event.pointerId, button);
-    publishTouch(jump);
+    publishTouch(jump ? event.pointerId : undefined);
   }) as EventListener);
   const endTouch = ((event: PointerEvent) => {
-    if (releaseTouch(event.pointerId)) publishTouch();
+    if (!releaseTouch(event.pointerId)) return;
+    game?.finishTouchJump(event.pointerId, event.type !== "pointerup");
+    publishTouch();
   }) as EventListener;
   for (const type of ["pointerup", "pointercancel", "lostpointercapture"]) listen(touchControls, type, endTouch);
   listen(app, "contextmenu", (event) => { if (!touchControls.hidden) event.preventDefault(); });

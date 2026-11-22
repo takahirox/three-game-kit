@@ -359,6 +359,38 @@ test.describe("Afterglow touchscreen", () => {
     expect(await page.evaluate(() => window.__AFTERGLOW__!.errors())).toEqual([]);
   });
 
+  test("discards canceled jumps and keeps normal quick taps", async ({ page }) => {
+    await launchByTouch(page);
+    const cdp = await page.context().newCDPSession(page);
+    const throttle = await contactOn(page, "throttle", 1);
+    const jump = await contactOn(page, "jump", 2);
+    const jumpButton = page.locator('[data-drive="jump"]');
+    expect(await advance(page, 2)).toMatchObject({ phase: "running", car: { grounded: true } });
+
+    await dispatchTouch(cdp, "touchStart", [jump]);
+    await expect(jumpButton).toHaveAttribute("data-held", "");
+    await dispatchTouch(cdp, "touchCancel");
+    await expect(jumpButton).not.toHaveAttribute("data-held");
+    expect(await advance(page, 1 / 60)).toMatchObject({ car: { grounded: true } });
+
+    await jumpButton.evaluate((button) => {
+      button.addEventListener("gotpointercapture", (event) => button.releasePointerCapture(event.pointerId), { once: true });
+    });
+    await dispatchTouch(cdp, "touchStart", [throttle, jump]);
+    for (const offset of [4, 8]) {
+      await dispatchTouch(cdp, "touchMove", [throttle, { ...jump, x: jump.x + offset }]);
+    }
+    await expect(jumpButton).not.toHaveAttribute("data-held");
+    expect(await advance(page, 1 / 60)).toMatchObject({ held: { throttle: true }, car: { grounded: true } });
+    await dispatchTouch(cdp, "touchEnd", [jump]);
+
+    await dispatchTouch(cdp, "touchStart", [throttle, jump]);
+    await dispatchTouch(cdp, "touchEnd", [jump]);
+    expect(await advance(page, 1 / 60)).toMatchObject({ held: { throttle: true }, car: { grounded: false } });
+    await dispatchTouch(cdp, "touchEnd");
+    expect(await page.evaluate(() => window.__AFTERGLOW__!.events().filter(({ kind }) => kind === "jumped"))).toHaveLength(1);
+  });
+
   test("launches, finishes Meridian Descent, and retries using only touch", async ({ page }) => {
     test.setTimeout(120_000);
     await launchByTouch(page);
