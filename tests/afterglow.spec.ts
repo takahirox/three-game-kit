@@ -258,6 +258,16 @@ test.describe("Afterglow touchscreen", () => {
   test("keeps the HUD and controls within the safe area and clears independent contacts", async ({ page }) => {
     await launchByTouch(page);
     const cdp = await page.context().newCDPSession(page);
+    await advance(page, 1.7);
+    await dispatchTouch(cdp, "touchStart", [await contactOn(page, "throttle", 1)]);
+    const atBoostPad = await advance(page, 4);
+    expect(atBoostPad).toMatchObject({ phase: "running", cue: { kind: "pillar" } });
+    await dispatchTouch(cdp, "touchEnd");
+    const cue = page.locator("#cue");
+    const toast = page.locator("#toast");
+    await expect(cue).toContainText("PILLARS · WEAVE");
+    await expect(toast).toHaveText("BOOST");
+
     const insets = { top: 24, left: 28, right: 36, bottom: 24 };
     for (const layout of [
       { viewport: { width: 320, height: 568 }, insets },
@@ -292,15 +302,24 @@ test.describe("Afterglow touchscreen", () => {
       const timer = (await page.locator(".timer").boundingBox())!;
       const stats = (await page.locator(".stats").boundingBox())!;
       const progress = (await page.locator(".progress").boundingBox())!;
-      for (const bounds of [timer, stats, progress]) {
+      await expect(cue).toBeVisible();
+      await expect(toast).toBeVisible();
+      await expect(toast).toHaveCSS("opacity", "1");
+      const cueBounds = (await cue.boundingBox())!;
+      const toastBounds = (await toast.boundingBox())!;
+      for (const bounds of [timer, stats, progress, cueBounds, toastBounds]) {
         expect(bounds.x).toBeGreaterThanOrEqual(safeArea.left);
         expect(bounds.x + bounds.width).toBeLessThanOrEqual(viewport.width - safeArea.right);
         expect(bounds.y).toBeGreaterThanOrEqual(safeArea.top);
+        expect(bounds.y + bounds.height).toBeLessThanOrEqual(viewport.height - safeArea.bottom);
       }
       expect(timer.x + timer.width).toBeLessThanOrEqual(stats.x);
       expect(progress.y).toBeGreaterThan(Math.max(timer.y + timer.height, stats.y + stats.height));
       expect(dash.y, `dashboard must clear the progress bar at ${viewport.width} × ${viewport.height}`).toBeGreaterThan(progress.y + progress.height);
+      expect(toastBounds.y, `BOOST toast must clear the hazard cue at ${viewport.width} × ${viewport.height}`).toBeGreaterThan(cueBounds.y + cueBounds.height);
     }
+
+    await launchByTouch(page);
     const throttle = await contactOn(page, "throttle", 1);
     const left = await contactOn(page, "left", 2);
     const boost = await contactOn(page, "boost", 3);
