@@ -96,14 +96,22 @@ body:has(.overlay[data-hud-screen="title"]:not([hidden])) #status { opacity: 0; 
 }
 .has-touch .overlay::before { inset: var(--safe-top) var(--safe-right) var(--safe-bottom) var(--safe-left); }
 .has-touch .scene-caption { right: calc(var(--safe-right) + 12px); }
-.has-touch .topbar { inset: var(--safe-top) var(--safe-right) auto var(--safe-left); grid-template-columns: 1fr auto 1fr; align-items: center; gap: 8px; }
+.has-touch #hud {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  align-content: start;
+  row-gap: 8px;
+  padding: var(--safe-top) var(--safe-right) 0 var(--safe-left);
+}
+.has-touch .topbar, .has-touch .progress, .has-touch .cue, .has-touch .ghost-tag { position: static; }
+.has-touch .topbar { grid-template-columns: 1fr auto 1fr; align-items: center; gap: 8px; }
 .has-touch .timer { min-width: 0; padding: 5px 10px; }
 .has-touch .timer strong { font-size: 20px; }
 .has-touch .stats { display: flex; gap: 8px; }
 .has-touch .stats strong { font-size: 15px; }
-.has-touch .progress { inset: calc(var(--safe-top) + 62px) var(--safe-right) auto var(--safe-left); }
-.has-touch .cue { top: calc(var(--safe-top) + 72px); }
-.has-touch .ghost-tag { inset: calc(var(--safe-top) + 108px) var(--safe-right) auto auto; }
+.has-touch .cue { justify-self: center; transform: none; }
+.has-touch .cue[hidden] { display: none; }
+.has-touch .ghost-tag { justify-self: end; }
 .has-touch .dash {
   inset: auto var(--safe-right) calc(var(--safe-bottom) + 2 * var(--touch-size) + var(--touch-gap) + 8px) var(--safe-left);
   flex-direction: row;
@@ -150,9 +158,9 @@ body:has(.overlay[data-hud-screen="title"]:not([hidden])) #status { opacity: 0; 
 #touch-controls [data-drive="boost"][data-held] { background: var(--amber); }
 
 @media (max-width: 480px) {
-  .has-touch .brand { gap: 6px; }
-  .has-touch .brand-mark { display: none; }
-  .has-touch .brand small, .has-touch .stats small { letter-spacing: .08em; }
+  .has-touch .topbar { grid-template-columns: auto 1fr; }
+  .has-touch .brand { display: none; }
+  .has-touch .stats small { letter-spacing: .08em; }
   .has-touch .crash strong { font-size: 26px; }
 }
 @media (max-height: 500px) {

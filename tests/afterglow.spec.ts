@@ -255,7 +255,7 @@ async function launchByTouch(page: Page) {
 test.describe("Afterglow touchscreen", () => {
   test.use({ hasTouch: true, isMobile: true, viewport: { width: 320, height: 568 } });
 
-  test("keeps controls within the safe area and clears independent contacts", async ({ page }) => {
+  test("keeps the HUD and controls within the safe area and clears independent contacts", async ({ page }) => {
     await launchByTouch(page);
     const cdp = await page.context().newCDPSession(page);
     await cdp.send("Emulation.setSafeAreaInsetsOverride", { insets: { top: 24, left: 28, right: 36, bottom: 24 } });
@@ -281,6 +281,17 @@ test.describe("Afterglow touchscreen", () => {
       const dash = (await page.locator(".dash").boundingBox())!;
       const controls = (await page.locator("#touch-controls").boundingBox())!;
       expect(dash.y + dash.height).toBeLessThan(controls.y);
+
+      const timer = (await page.locator(".timer").boundingBox())!;
+      const stats = (await page.locator(".stats").boundingBox())!;
+      const progress = (await page.locator(".progress").boundingBox())!;
+      for (const bounds of [timer, stats, progress]) {
+        expect(bounds.x).toBeGreaterThanOrEqual(28);
+        expect(bounds.x + bounds.width).toBeLessThanOrEqual(viewport.width - 36);
+        expect(bounds.y).toBeGreaterThanOrEqual(24);
+      }
+      expect(timer.x + timer.width).toBeLessThanOrEqual(stats.x);
+      expect(progress.y).toBeGreaterThan(Math.max(timer.y + timer.height, stats.y + stats.height));
     }
     const throttle = await contactOn(page, "throttle", 1);
     const left = await contactOn(page, "left", 2);
