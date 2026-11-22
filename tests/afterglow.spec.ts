@@ -258,18 +258,29 @@ test.describe("Afterglow touchscreen", () => {
   test("keeps the HUD and controls within the safe area and clears independent contacts", async ({ page }) => {
     await launchByTouch(page);
     const cdp = await page.context().newCDPSession(page);
-    await cdp.send("Emulation.setSafeAreaInsetsOverride", { insets: { top: 24, left: 28, right: 36, bottom: 24 } });
-    for (const viewport of [{ width: 320, height: 568 }, { width: 844, height: 390 }, { width: 1024, height: 768 }]) {
+    const insets = { top: 24, left: 28, right: 36, bottom: 24 };
+    for (const layout of [
+      { viewport: { width: 320, height: 568 }, insets },
+      { viewport: { width: 844, height: 390 }, insets },
+      { viewport: { width: 812, height: 280 }, insets: { top: 0, left: 44, right: 44, bottom: 21 } },
+      { viewport: { width: 1024, height: 768 }, insets },
+    ]) {
+      const { viewport, insets: safeArea } = layout;
       await page.setViewportSize(viewport);
+      await cdp.send("Emulation.setSafeAreaInsetsOverride", { insets: safeArea });
+      const dash = (await page.locator(".dash").boundingBox())!;
       const buttons = await page.locator("#touch-controls button").all();
       expect(buttons).toHaveLength(6);
       for (const button of buttons) {
         const bounds = (await button.boundingBox())!;
         expect(bounds.width).toBeGreaterThanOrEqual(48);
         expect(bounds.height).toBeGreaterThanOrEqual(48);
-        expect(bounds.x).toBeGreaterThanOrEqual(28);
-        expect(bounds.x + bounds.width).toBeLessThanOrEqual(viewport.width - 36);
-        expect(bounds.y + bounds.height).toBeLessThanOrEqual(viewport.height - 24);
+        expect(bounds.x).toBeGreaterThanOrEqual(safeArea.left);
+        expect(bounds.x + bounds.width).toBeLessThanOrEqual(viewport.width - safeArea.right);
+        expect(bounds.y + bounds.height).toBeLessThanOrEqual(viewport.height - safeArea.bottom);
+        if (bounds.x < dash.x + dash.width && bounds.x + bounds.width > dash.x) {
+          expect(bounds.y, "touch button must clear the dashboard").toBeGreaterThan(dash.y + dash.height);
+        }
         expect(await button.evaluate((element) => {
           const bounds = element.getBoundingClientRect();
           return {
@@ -278,20 +289,17 @@ test.describe("Afterglow touchscreen", () => {
           };
         })).toEqual({ hit: true, labelFits: true });
       }
-      const dash = (await page.locator(".dash").boundingBox())!;
-      const controls = (await page.locator("#touch-controls").boundingBox())!;
-      expect(dash.y + dash.height).toBeLessThan(controls.y);
-
       const timer = (await page.locator(".timer").boundingBox())!;
       const stats = (await page.locator(".stats").boundingBox())!;
       const progress = (await page.locator(".progress").boundingBox())!;
       for (const bounds of [timer, stats, progress]) {
-        expect(bounds.x).toBeGreaterThanOrEqual(28);
-        expect(bounds.x + bounds.width).toBeLessThanOrEqual(viewport.width - 36);
-        expect(bounds.y).toBeGreaterThanOrEqual(24);
+        expect(bounds.x).toBeGreaterThanOrEqual(safeArea.left);
+        expect(bounds.x + bounds.width).toBeLessThanOrEqual(viewport.width - safeArea.right);
+        expect(bounds.y).toBeGreaterThanOrEqual(safeArea.top);
       }
       expect(timer.x + timer.width).toBeLessThanOrEqual(stats.x);
       expect(progress.y).toBeGreaterThan(Math.max(timer.y + timer.height, stats.y + stats.height));
+      expect(dash.y, `dashboard must clear the progress bar at ${viewport.width} × ${viewport.height}`).toBeGreaterThan(progress.y + progress.height);
     }
     const throttle = await contactOn(page, "throttle", 1);
     const left = await contactOn(page, "left", 2);

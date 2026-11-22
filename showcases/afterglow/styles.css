@@ -176,5 +176,11 @@ body:has(.overlay[data-hud-screen="title"]:not([hidden])) #status { opacity: 0; 
   .has-touch .toast { top: 43%; font-size: 16px; }
   .has-touch .crash { top: 56%; }
 }
+@media (orientation: landscape) and (max-height: 360px) {
+  .has-touch .dash {
+    right: auto;
+    bottom: calc(var(--safe-bottom) + var(--touch-size) + 8px);
+  }
+}
 
 @media (prefers-reduced-motion: reduce) { *, *::before, *::after { transition-duration: .01ms !important; animation-duration: .01ms !important; } }
