@@ -2,7 +2,7 @@
 <html lang="en">
   <head>
     <meta charset="utf-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
     <title>Afterglow</title>
     <link rel="stylesheet" href="./styles.css" />
   </head>
@@ -25,7 +25,7 @@
         <div id="crash" class="crash" hidden><strong>SIGNAL LOST</strong><small data-hud-bind="extra:deathCause"></small></div>
         <div class="dash">
           <div class="speed"><small>VELOCITY</small><strong data-hud-bind="extra:speed">0</strong><em>KM/H</em><div class="track"><i id="speed-bar"></i></div></div>
-          <div class="heat"><small data-hud-bind="extra:heatLabel">HEAT</small><div class="track"><i id="heat-bar"></i></div><em>SHIFT · BOOST</em></div>
+          <div class="heat"><small data-hud-bind="extra:heatLabel">HEAT</small><div class="track"><i id="heat-bar"></i></div><em class="keyboard-hint">SHIFT · BOOST</em></div>
         </div>
         <div class="controls">W THROTTLE · A/D STEER · SPACE JUMP · SHIFT BOOST · S BRAKE · R RESTART</div>
         <section class="overlay" data-hud-screen="title">
@@ -37,12 +37,13 @@
             <button type="button" data-hud-action="start">LAUNCH <span>↗</span></button>
             <dl class="mission-meta"><div><dt>LENGTH</dt><dd>1350 M</dd></div><div><dt>BEST</dt><dd data-hud-bind="extra:best">—</dd></div><div><dt>MODE</dt><dd>SPRINT</dd></div></dl>
           </div>
-          <small>W THROTTLE · A/D STEER · SPACE JUMP · SHIFT BOOST · GAMEPAD SUPPORTED</small>
+          <small class="keyboard-hint">W THROTTLE · A/D STEER · SPACE JUMP · SHIFT BOOST · GAMEPAD SUPPORTED</small>
           <div class="scene-caption"><span>LIVE FEED</span><b>SECTOR 07<br />ALT +30 M</b></div>
         </section>
         <section class="overlay countdown" data-hud-screen="countdown" hidden>
           <strong data-hud-bind="extra:countdown">3</strong>
-          <small>HOLD W · SHIFT TO BOOST</small>
+          <small class="keyboard-hint">HOLD W · SHIFT TO BOOST</small>
+          <small class="touch-hint">HOLD THROTTLE</small>
         </section>
         <section class="overlay results" data-hud-screen="results" hidden>
           <div class="eyebrow">RUN COMPLETE</div>
@@ -55,9 +56,21 @@
             <div><dt>BEST</dt><dd data-hud-bind="extra:best">—</dd></div>
           </dl>
           <button type="button" data-hud-action="restart">RUN AGAIN <span>↻</span></button>
-          <small>GOLD 0:44 · SILVER 0:55 · BRONZE 1:15 · PRESS SPACE TO RETRY</small>
+          <small>GOLD 0:44 · SILVER 0:55 · BRONZE 1:15<span class="keyboard-hint"> · PRESS SPACE TO RETRY</span></small>
         </section>
       </section>
+      <div id="touch-controls" role="group" aria-label="Touch driving controls" hidden>
+        <div class="touch-steering">
+          <button type="button" data-drive="left" aria-label="Steer left" tabindex="-1">←</button>
+          <button type="button" data-drive="right" aria-label="Steer right" tabindex="-1">→</button>
+        </div>
+        <div class="touch-actions">
+          <button type="button" data-drive="boost" tabindex="-1">Boost</button>
+          <button type="button" data-drive="jump" tabindex="-1">Jump</button>
+          <button type="button" data-drive="brake" tabindex="-1">Brake</button>
+          <button type="button" data-drive="throttle" tabindex="-1">Throttle</button>
+        </div>
+      </div>
       <p id="status" role="status" aria-live="polite"></p>
     </main>
     <script type="module" src="./src/main.ts"></script>

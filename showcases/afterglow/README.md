@@ -18,6 +18,8 @@ Open <http://127.0.0.1:4174/showcases/afterglow/index.html>.
 
 Controls: `W` / `↑` throttle, `A` / `D` or `←` / `→` steer, `Space` jump, `Shift` boost, `S` / `↓` brake, `R` restart from the results screen. A standard gamepad also works: left stick steers, right trigger throttles, left trigger brakes, `A` jumps or launches, `RB` / `X` boosts, `Start` restarts.
 
+On a touchscreen, tap **Launch**, then hold an arrow on the left to steer. On the right, hold **Throttle**, **Brake**, or **Boost** and tap **Jump**. Each button tracks its own contacts, so you can steer and accelerate while using boost or jump with another finger. Tap **Run Again** on the results screen to retry.
+
 ## Game structure
 
 - **Sprint.** One run from the start pad to the finish gate. The clock runs from the "GO" of the countdown until the finish line, crashes included.
@@ -34,7 +36,7 @@ The showcase imports no framework internals. One public Client Runtime installs 
 
 | Feature id | Public entrypoint | Role in Afterglow |
 | --- | --- | --- |
-| `input-experience-extensions` | `@three-game-kit/client/advanced` | Context-aware bindings (`menu` / `drive`), keyboard and gamepad physical inputs, steering axis with dead zone |
+| `input-experience-extensions` | `@three-game-kit/client/advanced` | Context-aware bindings (`menu` / `drive`), keyboard, gamepad, and touch actions, steering axis with dead zone |
 | `afterglow.controls` | game-specific | Translates held throttle / brake / boost and the steering axis into vehicle control requests |
 | `vehicles.client` | `@three-game-kit/client/advanced` + `@three-game-kit/shared/advanced` | Driver seat, control validation, and the custom speed / steering integrator |
 | `afterglow.rules` | game-specific | Track-space movement, jumps, gravity, hazards, boost heat, checkpoints, ghost recording, cues |
@@ -51,4 +53,4 @@ Simulation runs at a fixed 60 Hz in track space (`s` along the spline, `x` acros
 
 ## Deterministic test mode
 
-Append `?test=1` to disable the animation-frame loop. `window.__AFTERGLOW__` exposes `start`, `restart`, `setInput`, `press`, `advance(seconds)`, `loadScenario("start" | "gap" | "laser" | "boost" | "slalom" | "finish")`, `setBloomEnabled`, frozen `snapshot()`, `events()`, `errors()`, `inspectRuntime()`, `inspectRenderer()`, `inspectSave()`, `inspectLeaks()`, and `dispose()`. `pnpm run verify:afterglow` runs the public-import boundary check, the asset intake gate, the showcase typecheck, and the Playwright acceptance test.
+Append `?test=1` to disable the animation-frame loop. `window.__AFTERGLOW__` exposes `start`, `restart`, `setInput`, `press`, `advance(seconds)`, `loadScenario("start" | "gap" | "laser" | "boost" | "slalom" | "finish")`, `setBloomEnabled`, frozen `snapshot()`, `events()`, `errors()`, `inspectRuntime()`, `inspectRenderer()`, `inspectSave()`, `inspectLeaks()`, and `dispose()`. `pnpm run verify:afterglow` runs the public-import boundary check, the asset intake gate, the showcase typecheck, and the Playwright acceptance suite. The suite emulates portrait phone, landscape phone, and tablet layouts with safe-area insets, exercises multi-touch and input cleanup, and completes and restarts the full sprint with browser touch events.

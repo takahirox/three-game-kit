@@ -75,4 +75,98 @@ body:has(.overlay[data-hud-screen="title"]:not([hidden])) #status { opacity: 0; 
 #status { position: fixed; z-index: 11; left: 50%; bottom: 10px; transform: translateX(-50%); color: #78928d; font: 8px/1 ui-monospace,monospace; letter-spacing: .1em; white-space: nowrap; }
 
 @media (max-width: 900px) { .mission-meta, .scene-caption, .stats { display: none; }.title-rail { width: min(420px, 75vw); margin-bottom: 30px; }.topbar { grid-template-columns: 1fr auto; }.timer { min-width: 0; }.controls { display: none; }.overlay { padding: 32px; }.overlay::before { inset: 12px; }.overlay h1 { font-size: clamp(55px,14vw,82px); }.overlay p { max-width: 440px; }.dash { flex-direction: column; align-items: stretch; }.speed, .heat { min-width: 0; } }
+
+.touch-hint { display: none; }
+.has-touch {
+  --safe-top: max(12px, env(safe-area-inset-top, 0px));
+  --safe-right: max(12px, env(safe-area-inset-right, 0px));
+  --safe-bottom: max(12px, env(safe-area-inset-bottom, 0px));
+  --safe-left: max(12px, env(safe-area-inset-left, 0px));
+  --touch-size: clamp(56px, 8vmin, 72px);
+  --touch-gap: 8px;
+}
+.has-touch .keyboard-hint, .has-touch .controls { display: none; }
+.has-touch .touch-hint { display: block; }
+.touch-driving { touch-action: none; user-select: none; -webkit-user-select: none; }
+.touch-driving #game-canvas, #touch-controls button { touch-action: none; }
+.has-touch .overlay button { min-height: 48px; touch-action: manipulation; }
+.has-touch .overlay {
+  padding-block: calc(var(--safe-top) + 12px) calc(var(--safe-bottom) + 12px);
+  padding-inline: max(var(--safe-left), 24px) max(var(--safe-right), 24px);
+}
+.has-touch .overlay::before { inset: var(--safe-top) var(--safe-right) var(--safe-bottom) var(--safe-left); }
+.has-touch .scene-caption { right: calc(var(--safe-right) + 12px); }
+.has-touch .topbar { inset: var(--safe-top) var(--safe-right) auto var(--safe-left); grid-template-columns: 1fr auto 1fr; align-items: center; gap: 8px; }
+.has-touch .timer { min-width: 0; padding: 5px 10px; }
+.has-touch .timer strong { font-size: 20px; }
+.has-touch .stats { display: flex; gap: 8px; }
+.has-touch .stats strong { font-size: 15px; }
+.has-touch .progress { inset: calc(var(--safe-top) + 62px) var(--safe-right) auto var(--safe-left); }
+.has-touch .cue { top: calc(var(--safe-top) + 72px); }
+.has-touch .ghost-tag { inset: calc(var(--safe-top) + 108px) var(--safe-right) auto auto; }
+.has-touch .dash {
+  inset: auto var(--safe-right) calc(var(--safe-bottom) + 2 * var(--touch-size) + var(--touch-gap) + 8px) var(--safe-left);
+  flex-direction: row;
+  align-items: flex-end;
+  gap: 8px;
+}
+.has-touch .speed, .has-touch .heat { min-width: 96px; padding: 6px 8px; }
+.has-touch .speed strong { font-size: 22px; }
+.has-touch .track { height: 4px; margin-top: 4px; }
+.has-touch #status { bottom: 0; pointer-events: none; }
+.touch-driving #status { opacity: 0; }
+
+#touch-controls {
+  position: fixed;
+  z-index: 11;
+  inset: auto var(--safe-right) var(--safe-bottom) var(--safe-left);
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-end;
+  pointer-events: none;
+}
+#touch-controls[hidden] { display: none; }
+.touch-steering, .touch-actions { display: grid; grid-template-columns: repeat(2, var(--touch-size)); gap: var(--touch-gap); }
+#touch-controls button {
+  pointer-events: auto;
+  height: var(--touch-size);
+  padding: 0;
+  border: 1px solid #35f2ff99;
+  border-radius: 10px;
+  background: #071526ed;
+  color: var(--paper);
+  font-family: inherit;
+  font-size: 10px;
+  font-weight: 700;
+  line-height: 1;
+  text-transform: uppercase;
+  -webkit-tap-highlight-color: transparent;
+  -webkit-touch-callout: none;
+}
+#touch-controls .touch-steering button { font-size: 25px; }
+#touch-controls [data-drive="throttle"] { background: #115165; }
+#touch-controls [data-drive="boost"] { border-color: var(--amber); }
+#touch-controls button[data-held] { background: var(--cyan); color: var(--ink); }
+#touch-controls [data-drive="boost"][data-held] { background: var(--amber); }
+
+@media (max-width: 480px) {
+  .has-touch .brand { gap: 6px; }
+  .has-touch .brand-mark { display: none; }
+  .has-touch .brand small, .has-touch .stats small { letter-spacing: .08em; }
+  .has-touch .crash strong { font-size: 26px; }
+}
+@media (max-height: 500px) {
+  .has-touch .title-rail { margin-bottom: 16px; }
+  .has-touch .eyebrow { margin-bottom: 10px; }
+  .has-touch .overlay h1 { font-size: clamp(38px, 13vh, 64px); }
+  .has-touch .overlay p { margin: 16px 0; font-size: 12px; }
+  .has-touch .countdown strong { font-size: clamp(52px, 23vh, 90px); }
+  .has-touch .results h2 { font-size: 56px; }
+  .has-touch .results .medal { margin: 8px 0 12px; }
+  .has-touch .results .results-meta { margin-bottom: 14px; }
+  .has-touch .overlay > small { margin-top: 10px; }
+  .has-touch .toast { top: 43%; font-size: 16px; }
+  .has-touch .crash { top: 56%; }
+}
+
 @media (prefers-reduced-motion: reduce) { *, *::before, *::after { transition-duration: .01ms !important; animation-duration: .01ms !important; } }

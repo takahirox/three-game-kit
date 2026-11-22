@@ -32,7 +32,7 @@ export interface AfterglowHandle {
   inspectRenderer(): AfterglowRendererInspection | null;
   inspectVfx(): VfxInspection | null;
   inspectSave(): AfterglowSaveInspection | null;
-  inspectLeaks(): Readonly<{ hostListeners: number; rafActive: boolean; hostDisposed: boolean; game: AfterglowLeakInspection | null }>;
+  inspectLeaks(): Readonly<{ hostListeners: number; touchContacts: number; rafActive: boolean; hostDisposed: boolean; game: AfterglowLeakInspection | null }>;
 }
 
 declare global { interface Window { __AFTERGLOW__?: AfterglowHandle; } }
@@ -46,6 +46,11 @@ function requireElement<T extends Element>(selector: string): T {
 const canvas = requireElement<HTMLCanvasElement>("#game-canvas");
 const hud = requireElement<HTMLElement>("#hud");
 const statusElement = requireElement<HTMLElement>("#status");
+const app = requireElement<HTMLElement>("#app");
+const touchControls = requireElement<HTMLElement>("#touch-controls");
+const touchButtons = [...touchControls.querySelectorAll<HTMLButtonElement>("button[data-drive]")];
+const touchCapable = navigator.maxTouchPoints > 0 || matchMedia("(any-pointer: coarse)").matches;
+const touchContacts = new Map<number, HTMLButtonElement>();
 const mode: HostMode = new URLSearchParams(location.search).get("test") === "1" ? "test" : "normal";
 const hostErrors: HostError[] = [];
 const held = new Set<string>();
@@ -134,7 +139,7 @@ function record(source: string, cause: unknown): void {
 function statusLine(snapshot: AfterglowSnapshot): string {
   if (snapshot.phase === "results") return `Finished ${snapshot.finishTimeSeconds?.toFixed(2) ?? "?"}s · ${snapshot.deaths} crashes · ${snapshot.medal}`;
   if (snapshot.phase === "running") return `${Math.round(snapshot.car.s)} m · ${Math.round(snapshot.car.speed * 3.6)} km/h · ${snapshot.cue.label || "clear"}`;
-  return snapshot.phase === "countdown" ? "Get ready" : "Meridian Descent · press Space to launch";
+  return snapshot.phase === "countdown" ? "Get ready" : `Meridian Descent · ${touchCapable ? "tap Launch" : "press Space to launch"}`;
 }
 
 function renderNow(): void {
@@ -150,6 +155,54 @@ function updateSteer(): void {
 
 function stepTestFrame(): void {
   if (mode === "test") { game?.advance(1 / 60); renderNow(); }
+}
+
+function publishTouch(jump = false): void {
+  const buttons = new Set(touchContacts.values());
+  for (const button of touchButtons) button.toggleAttribute("data-held", buttons.has(button));
+  const actions = new Set([...buttons].map((button) => button.dataset["drive"]));
+  const left = actions.has("left");
+  const right = actions.has("right");
+  game?.setTouchInput({
+    steer: left || right ? Number(right) - Number(left) : null,
+    throttle: actions.has("throttle"),
+    brake: actions.has("brake"),
+    boost: actions.has("boost"),
+  }, jump);
+}
+
+function releaseTouch(id: number): boolean {
+  const button = touchContacts.get(id);
+  if (button === undefined) return false;
+  touchContacts.delete(id);
+  if (button.hasPointerCapture(id)) button.releasePointerCapture(id);
+  return true;
+}
+
+function resetTouch(): void {
+  for (const id of touchContacts.keys()) releaseTouch(id);
+  for (const button of touchButtons) button.removeAttribute("data-held");
+  game?.setTouchInput(null);
+}
+
+if (touchCapable) {
+  app.classList.add("has-touch");
+  listen(touchControls, "pointerdown", ((event: PointerEvent) => {
+    if (touchControls.hidden || event.pointerType !== "touch" || event.button !== 0) return;
+    const button = (event.target as Element).closest<HTMLButtonElement>("button[data-drive]");
+    if (button === null) return;
+    event.preventDefault();
+    button.setPointerCapture(event.pointerId);
+    const jump = button.dataset["drive"] === "jump" && !button.hasAttribute("data-held");
+    touchContacts.set(event.pointerId, button);
+    publishTouch(jump);
+  }) as EventListener);
+  const endTouch = ((event: PointerEvent) => {
+    if (releaseTouch(event.pointerId)) publishTouch();
+  }) as EventListener;
+  for (const type of ["pointerup", "pointercancel", "lostpointercapture"]) listen(touchControls, type, endTouch);
+  listen(app, "contextmenu", (event) => { if (!touchControls.hidden) event.preventDefault(); });
+  listen(document, "visibilitychange", () => { if (document.hidden) resetTouch(); });
 }
 
 listen(window, "keydown", ((event: KeyboardEvent) => {
@@ -172,6 +225,7 @@ listen(window, "blur", (() => {
   for (const code of [...held]) if (!STEER_KEYS.has(code)) game?.pressPhysical(`${code}:up`);
   held.clear();
   updateSteer();
+  if (touchCapable) resetTouch();
 }) as EventListener);
 listen(canvas, "pointerdown", (() => canvas.focus()) as EventListener);
 listen(window, "resize", (() => renderer?.resize()) as EventListener);
@@ -220,6 +274,15 @@ function boot(): void {
     if (action === "restart") { game?.restart(); stepTestFrame(); }
   });
   game = createAfterglowGame({ renderer, hudAdapter: adapter, saveAdapter: createSaveAdapter(), track });
+  if (touchCapable) {
+    removers.push(game.subscribe(({ kind, subject }) => {
+      if (kind !== "phase-changed") return;
+      const driving = subject === "countdown" || subject === "running";
+      app.classList.toggle("touch-driving", driving);
+      touchControls.hidden = !driving;
+      if (!driving) resetTouch();
+    }));
+  }
   if (mode === "test") {
     queueMicrotask(() => renderNow());
     return;
@@ -249,6 +312,11 @@ const handle: AfterglowHandle = Object.freeze({
     if (disposed) return;
     disposed = true;
     if (raf !== null) { cancelAnimationFrame(raf); raf = null; }
+    if (touchCapable) {
+      resetTouch();
+      touchControls.hidden = true;
+      app.classList.remove("touch-driving");
+    }
     game?.dispose();
     for (const remove of removers.splice(0)) remove();
     held.clear();
@@ -269,11 +337,12 @@ const handle: AfterglowHandle = Object.freeze({
   inspectRenderer() { return game?.inspectRenderer() ?? null; },
   inspectVfx() { return game?.inspectVfx() ?? null; },
   inspectSave() { return game?.inspectSave() ?? null; },
-  inspectLeaks() { return Object.freeze({ hostListeners: removers.length, rafActive: raf !== null, hostDisposed: disposed, game: game?.inspectLeaks() ?? null }); },
+  inspectLeaks() { return Object.freeze({ hostListeners: removers.length, touchContacts: touchContacts.size, rafActive: raf !== null, hostDisposed: disposed, game: game?.inspectLeaks() ?? null }); },
 });
 
 listen(window, "pagehide", ((event: PageTransitionEvent) => {
   if (!event.persisted) handle.dispose();
+  else if (touchCapable) resetTouch();
 }) as EventListener);
 
 window.__AFTERGLOW__ = handle;

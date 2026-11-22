@@ -1,4 +1,5 @@
-import { expect, test } from "@playwright/test";
+import { expect, test, type CDPSession, type Page } from "@playwright/test";
+import type {} from "../showcases/afterglow/src/main.js";
 
 test("Afterglow runs a deterministic public-Feature neon sprint", async ({ page }, testInfo) => {
   // Full sprint, post-processing captures and ghost replay on CI software WebGL.
@@ -37,6 +38,7 @@ test("Afterglow runs a deterministic public-Feature neon sprint", async ({ page 
   expect(boot.save).toMatchObject({ ready: true, lastLoad: "not-found", lastSave: null, bestTimeMs: null, ghostSamples: 0 });
   await expect(page.locator('[data-hud-screen="title"]')).toBeVisible();
   await expect(page.locator('[data-hud-screen="results"]')).toBeHidden();
+  await expect(page.locator("#touch-controls")).toBeHidden();
   await page.screenshot({ path: testInfo.outputPath("afterglow-title.png") });
 
   // Launch: countdown then running, driven only through public semantic input.
@@ -45,7 +47,9 @@ test("Afterglow runs a deterministic public-Feature neon sprint", async ({ page 
   expect(await page.evaluate(() => window.__AFTERGLOW__!.snapshot().phase)).toBe("countdown");
   expect(await page.evaluate(() => window.__AFTERGLOW__!.inspectRuntime()!.inputContext)).toBe("drive");
   await expect(page.locator('[data-hud-screen="countdown"]')).toBeVisible();
-  await page.evaluate(() => { const game = window.__AFTERGLOW__!; game.advance(1.2); game.setInput({ throttle: true }); game.advance(4); });
+  await page.evaluate(() => window.__AFTERGLOW__!.advance(1.2));
+  await page.keyboard.down("KeyW");
+  await page.evaluate(() => window.__AFTERGLOW__!.advance(4));
   const drive = await page.evaluate(() => ({ snapshot: window.__AFTERGLOW__!.snapshot(), renderer: window.__AFTERGLOW__!.inspectRenderer(), runtime: window.__AFTERGLOW__!.inspectRuntime() }));
   expect(drive.snapshot.phase).toBe("running");
   expect(drive.snapshot.car.s).toBeGreaterThan(120);
@@ -75,6 +79,7 @@ test("Afterglow runs a deterministic public-Feature neon sprint", async ({ page 
   expect(steered.car.steering).toBeGreaterThan(0.5);
   await page.evaluate(() => { const game = window.__AFTERGLOW__!; game.setInput({ steer: -1 }); game.advance(0.35); game.setInput({ steer: 0 }); game.advance(0.3); });
   const recentred = await page.evaluate(() => window.__AFTERGLOW__!.snapshot());
+  await page.keyboard.up("KeyW");
   expect(recentred.car.x).toBeLessThan(steered.car.x);
   expect(recentred.car.alive).toBe(true);
   expect(recentred.deaths).toBe(0);
@@ -213,4 +218,216 @@ test("Afterglow normal playback releases disconnected gamepads and shuts down on
   await page.evaluate(() => window.dispatchEvent(new PageTransitionEvent("pagehide", { persisted: false })));
   await expect.poll(() => page.evaluate(() => window.__AFTERGLOW__!.inspectLeaks())).toMatchObject({ hostListeners: 0, rafActive: false, hostDisposed: true, game: { disposed: true, activeFeatures: 0 } });
   expect(await page.evaluate(() => window.__AFTERGLOW__!.errors())).toEqual([]);
+});
+
+type Contact = { id: number; x: number; y: number };
+type DriveButton = "left" | "right" | "throttle" | "brake" | "boost" | "jump";
+
+async function dispatchTouch(cdp: CDPSession, type: "touchStart" | "touchMove" | "touchEnd" | "touchCancel", points: Contact[] = []) {
+  await cdp.send("Input.dispatchTouchEvent", { type, touchPoints: points });
+}
+
+async function contactOn(page: Page, button: DriveButton, id: number): Promise<Contact> {
+  const bounds = await page.locator(`[data-drive="${button}"]`).boundingBox();
+  expect(bounds, button).not.toBeNull();
+  return { id, x: bounds!.x + bounds!.width / 2, y: bounds!.y + bounds!.height / 2 };
+}
+
+async function advance(page: Page, seconds: number) {
+  return page.evaluate((duration) => {
+    const game = window.__AFTERGLOW__!;
+    game.advance(duration);
+    return game.snapshot();
+  }, seconds);
+}
+
+async function launchByTouch(page: Page) {
+  await page.goto("/showcases/afterglow/index.html?test=1");
+  await expect.poll(() => page.evaluate(() => window.__AFTERGLOW__?.ready)).toBe(true);
+  await expect(page.locator("#touch-controls")).toBeHidden();
+  // Match the rendering size to the emulated device in deterministic mode.
+  await page.evaluate(() => window.dispatchEvent(new Event("resize")));
+  await page.getByRole("button", { name: /launch/i }).tap();
+  await expect(page.locator("#touch-controls")).toBeVisible();
+  await expect(page.getByText("HOLD THROTTLE")).toBeVisible();
+}
+
+test.describe("Afterglow touchscreen", () => {
+  test.use({ hasTouch: true, isMobile: true, viewport: { width: 320, height: 568 } });
+
+  test("keeps controls within the safe area and clears independent contacts", async ({ page }) => {
+    await launchByTouch(page);
+    const cdp = await page.context().newCDPSession(page);
+    await cdp.send("Emulation.setSafeAreaInsetsOverride", { insets: { top: 24, left: 28, right: 36, bottom: 24 } });
+    for (const viewport of [{ width: 320, height: 568 }, { width: 844, height: 390 }, { width: 1024, height: 768 }]) {
+      await page.setViewportSize(viewport);
+      const buttons = await page.locator("#touch-controls button").all();
+      expect(buttons).toHaveLength(6);
+      for (const button of buttons) {
+        const bounds = (await button.boundingBox())!;
+        expect(bounds.width).toBeGreaterThanOrEqual(48);
+        expect(bounds.height).toBeGreaterThanOrEqual(48);
+        expect(bounds.x).toBeGreaterThanOrEqual(28);
+        expect(bounds.x + bounds.width).toBeLessThanOrEqual(viewport.width - 36);
+        expect(bounds.y + bounds.height).toBeLessThanOrEqual(viewport.height - 24);
+        expect(await button.evaluate((element) => {
+          const bounds = element.getBoundingClientRect();
+          return {
+            hit: document.elementFromPoint(bounds.x + bounds.width / 2, bounds.y + bounds.height / 2) === element,
+            labelFits: element.scrollWidth <= element.clientWidth,
+          };
+        })).toEqual({ hit: true, labelFits: true });
+      }
+      const dash = (await page.locator(".dash").boundingBox())!;
+      const controls = (await page.locator("#touch-controls").boundingBox())!;
+      expect(dash.y + dash.height).toBeLessThan(controls.y);
+    }
+    const throttle = await contactOn(page, "throttle", 1);
+    const left = await contactOn(page, "left", 2);
+    const boost = await contactOn(page, "boost", 3);
+    await dispatchTouch(cdp, "touchStart", [throttle]);
+    const driving = await advance(page, 2.4);
+    expect(driving).toMatchObject({ phase: "running", held: { throttle: true } });
+    expect(driving.car.speed).toBeGreaterThan(10);
+
+    await dispatchTouch(cdp, "touchStart", [throttle, left, boost]);
+    const boosted = await advance(page, 0.2);
+    expect(boosted).toMatchObject({ held: { throttle: true, boost: true }, steer: -1, car: { boosting: true } });
+    expect(boosted.car.x).toBeLessThan(driving.car.x);
+    expect(boosted.car.speed).toBeGreaterThan(driving.car.speed);
+
+    // Moving a captured contact over Jump neither transfers it nor activates Jump.
+    const moved = await contactOn(page, "jump", boost.id);
+    await dispatchTouch(cdp, "touchMove", [throttle, left, moved]);
+    await dispatchTouch(cdp, "touchEnd", [moved]);
+    expect(await advance(page, 1 / 60)).toMatchObject({ held: { throttle: true, boost: false }, steer: -1, car: { grounded: true } });
+    await dispatchTouch(cdp, "touchCancel");
+    expect(await advance(page, 1 / 60)).toMatchObject({ held: { throttle: false, brake: false, boost: false }, steer: 0 });
+    await expect(page.locator("[data-held]")).toHaveCount(0);
+    expect(await page.evaluate(() => ({ scroll: scrollY, scale: visualViewport?.scale }))).toEqual({ scroll: 0, scale: 1 });
+
+    const right = await contactOn(page, "right", 4);
+    const brake = await contactOn(page, "brake", 5);
+    const steering = await advance(page, 1 / 60);
+    await dispatchTouch(cdp, "touchStart", [right, brake]);
+    const slowed = await advance(page, 0.2);
+    expect(slowed).toMatchObject({ held: { brake: true }, steer: 1 });
+    expect(slowed.car.speed).toBeLessThan(steering.car.speed - 6);
+    await page.evaluate(() => window.dispatchEvent(new Event("blur")));
+    expect(await advance(page, 1 / 60)).toMatchObject({ held: { brake: false }, steer: 0 });
+    await dispatchTouch(cdp, "touchEnd");
+
+    const throttleButton = page.locator('[data-drive="throttle"]');
+    await throttleButton.evaluate((button) => {
+      button.addEventListener("gotpointercapture", (event) => {
+        button.dataset["testCapture"] = String(event.pointerId);
+      }, { once: true });
+    });
+    await page.keyboard.down("KeyW");
+    await dispatchTouch(cdp, "touchStart", [throttle]);
+    await dispatchTouch(cdp, "touchMove", [{ ...throttle, x: throttle.x + 4 }]);
+    await expect(throttleButton).toHaveAttribute("data-test-capture", /\d+/);
+    await throttleButton.evaluate((button) => button.releasePointerCapture(Number(button.dataset["testCapture"])));
+    await dispatchTouch(cdp, "touchMove", [{ ...throttle, x: throttle.x + 8 }]);
+    await expect(throttleButton).not.toHaveAttribute("data-held");
+    expect((await advance(page, 1 / 60)).held.throttle).toBe(true);
+    await page.keyboard.up("KeyW");
+    await dispatchTouch(cdp, "touchEnd");
+
+    await dispatchTouch(cdp, "touchStart", [throttle, boost]);
+    expect((await advance(page, 1 / 60)).held).toMatchObject({ throttle: true, boost: true });
+    await page.evaluate(() => {
+      Object.defineProperty(document, "hidden", { configurable: true, value: true });
+      document.dispatchEvent(new Event("visibilitychange"));
+      Reflect.deleteProperty(document, "hidden");
+    });
+    expect((await advance(page, 1 / 60)).held).toMatchObject({ throttle: false, boost: false });
+    await dispatchTouch(cdp, "touchEnd");
+
+    const jump = await contactOn(page, "jump", 6);
+    await dispatchTouch(cdp, "touchStart", [throttle, jump]);
+    expect(await advance(page, 0.2)).toMatchObject({ held: { throttle: true }, car: { grounded: false } });
+    expect(await advance(page, 1)).toMatchObject({ car: { grounded: true } });
+    expect(await page.evaluate(() => window.__AFTERGLOW__!.events().filter(({ kind }) => kind === "jumped"))).toHaveLength(1);
+
+    await page.evaluate(() => window.dispatchEvent(new PageTransitionEvent("pagehide", { persisted: false })));
+    expect(await page.evaluate(() => window.__AFTERGLOW__!.inspectLeaks())).toMatchObject({
+      hostListeners: 0, touchContacts: 0, rafActive: false, hostDisposed: true, game: { activeListeners: 0, activeFeatures: 0 },
+    });
+    await expect(page.locator("#touch-controls")).toBeHidden();
+    await dispatchTouch(cdp, "touchEnd");
+    expect(await page.evaluate(() => window.__AFTERGLOW__!.errors())).toEqual([]);
+  });
+
+  test("launches, finishes Meridian Descent, and retries using only touch", async ({ page }) => {
+    test.setTimeout(120_000);
+    await launchByTouch(page);
+    const cdp = await page.context().newCDPSession(page);
+    const throttle = await contactOn(page, "throttle", 1);
+    const left = await contactOn(page, "left", 2);
+    const right = await contactOn(page, "right", 3);
+    const jump = await contactOn(page, "jump", 4);
+    const driveTo = async (distance: number) => {
+      const state = await page.evaluate((target) => {
+        const game = window.__AFTERGLOW__!;
+        let state = game.snapshot();
+        // Step toward the next landmark with a bound above the maximum race speed.
+        for (let i = 0; i < 30 && state.car.s < target && state.car.alive && state.phase === "running"; i += 1) {
+          game.advance(Math.max(1 / 60, (target - state.car.s) / 65));
+          state = game.snapshot();
+        }
+        return state;
+      }, distance);
+      expect(state.car.alive, `driving to ${distance} m (${state.car.deathCause})`).toBe(true);
+      expect(state.car.s).toBeGreaterThanOrEqual(distance);
+    };
+    const steerFor = async (contact: Contact, ticks: number) => {
+      await dispatchTouch(cdp, "touchStart", [throttle, contact]);
+      await advance(page, ticks / 60);
+      await dispatchTouch(cdp, "touchEnd", [contact]);
+    };
+    const jumpAt = async (distance: number) => {
+      await driveTo(distance);
+      await dispatchTouch(cdp, "touchStart", [throttle, jump]);
+      await dispatchTouch(cdp, "touchEnd", [jump]);
+    };
+
+    await dispatchTouch(cdp, "touchStart", [throttle]);
+    expect((await advance(page, 2)).phase).toBe("running");
+    await jumpAt(289); // Low gate
+    await jumpAt(412); // First gap
+    await driveTo(476);
+    await steerFor(right, 12);
+    await driveTo(503);
+    await steerFor(left, 24);
+    await driveTo(548);
+    await steerFor(right, 12);
+    await driveTo(665);
+    await steerFor(right, 17); // Center gate
+    await driveTo(711);
+    await steerFor(left, 17);
+    await jumpAt(792); // Second gap
+    await jumpAt(989);
+    await jumpAt(1072); // Third gap
+    await driveTo(1138);
+    await steerFor(right, 12);
+    await driveTo(1162);
+    await steerFor(left, 24);
+    await jumpAt(1209);
+    await driveTo(1350);
+
+    await expect(page.locator('[data-hud-screen="results"]')).toBeVisible();
+    await expect(page.locator("#touch-controls")).toBeHidden();
+    expect(await advance(page, 0)).toMatchObject({ phase: "results", checkpointsPassed: 4, deaths: 0, held: { throttle: false } });
+    expect(await page.evaluate(() => window.__AFTERGLOW__!.inspectLeaks().touchContacts)).toBe(0);
+    await dispatchTouch(cdp, "touchEnd");
+    await page.getByRole("button", { name: /run again/i }).tap();
+    await expect(page.locator("#touch-controls")).toBeVisible();
+    const retry = await advance(page, 2);
+    expect(retry).toMatchObject({ phase: "running", car: { speed: 0 }, held: { throttle: false, brake: false, boost: false }, steer: 0 });
+    await dispatchTouch(cdp, "touchStart", [throttle]);
+    expect((await advance(page, 1)).car.s).toBeGreaterThan(5);
+    await dispatchTouch(cdp, "touchEnd");
+    expect(await page.evaluate(() => window.__AFTERGLOW__!.errors())).toEqual([]);
+  });
 });
