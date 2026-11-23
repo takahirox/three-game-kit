@@ -112,9 +112,21 @@ body:has(.overlay[data-hud-screen="title"]:not([hidden])) #status { opacity: 0; 
 .has-touch .cue { justify-self: center; transform: none; }
 .has-touch .cue[hidden] { display: none; }
 .has-touch .ghost-tag { justify-self: end; }
+.has-touch .toast {
+  left: var(--safe-left);
+  right: var(--safe-right);
+  translate: 0 -50%;
+  text-align: center;
+  white-space: normal;
+  overflow-wrap: anywhere;
+}
+.has-touch .toast.pop { animation-name: touch-toast-pop; }
+@keyframes touch-toast-pop {
+  0% { opacity: 0; scale: .9; }
+  35%, 100% { opacity: 1; scale: 1; }
+}
 .has-touch .cue:not([hidden]) ~ .toast {
   position: static;
-  justify-self: center;
   translate: none;
   transform-origin: top center;
 }

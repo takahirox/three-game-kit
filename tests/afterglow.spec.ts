@@ -268,9 +268,10 @@ test.describe("Afterglow touchscreen", () => {
     await expect(cue).toContainText("PILLARS · WEAVE");
     await expect(toast).toHaveText("BOOST");
 
+    const narrowViewport = { width: 320, height: 568 };
     const insets = { top: 24, left: 28, right: 36, bottom: 24 };
     for (const layout of [
-      { viewport: { width: 320, height: 568 }, insets },
+      { viewport: narrowViewport, insets },
       { viewport: { width: 360, height: 501 }, insets: { top: 59, left: 0, right: 0, bottom: 24 } },
       { viewport: { width: 844, height: 390 }, insets },
       { viewport: { width: 812, height: 280 }, insets: { top: 0, left: 44, right: 44, bottom: 21 } },
@@ -318,6 +319,37 @@ test.describe("Afterglow touchscreen", () => {
       expect(progress.y).toBeGreaterThan(Math.max(timer.y + timer.height, stats.y + stats.height));
       expect(dash.y, `dashboard must clear the progress bar at ${viewport.width} × ${viewport.height}`).toBeGreaterThan(progress.y + progress.height);
       expect(toastBounds.y, `BOOST toast must clear the hazard cue at ${viewport.width} × ${viewport.height}`).toBeGreaterThan(cueBounds.y + cueBounds.height);
+    }
+
+    await page.setViewportSize(narrowViewport);
+    await cdp.send("Emulation.setSafeAreaInsetsOverride", { insets });
+    await page.evaluate(() => window.__AFTERGLOW__!.loadScenario("laser"));
+    await dispatchTouch(cdp, "touchStart", [await contactOn(page, "throttle", 1)]);
+    expect(await advance(page, 1.2)).toMatchObject({ car: { alive: false, deathCause: "laser" } });
+    await dispatchTouch(cdp, "touchEnd");
+    expect(await advance(page, 0.8)).toMatchObject({ car: { alive: true } });
+    await expect(cue).toBeVisible();
+    await expect(toast).toHaveText("SIGNAL RESTORED");
+    const respawnTextFrames = await toast.evaluate((element) => {
+      const pop = element.getAnimations()[0]!;
+      const duration = pop.effect!.getComputedTiming().activeDuration;
+      // Measure the rendered text, which can overflow its element's box.
+      const text = document.createRange();
+      text.selectNodeContents(element);
+      pop.pause();
+      return [0.05, 0.2, 1].map((progress) => {
+        pop.currentTime = progress * duration;
+        const { left, right, top, bottom } = text.getBoundingClientRect();
+        return { progress, left, right, top, bottom };
+      });
+    });
+    const respawnCue = (await cue.boundingBox())!;
+    for (const bounds of respawnTextFrames) {
+      const frame = `respawn message at ${bounds.progress * 100}% of the animation`;
+      expect(bounds.left, frame).toBeGreaterThanOrEqual(insets.left);
+      expect(bounds.right, frame).toBeLessThanOrEqual(narrowViewport.width - insets.right);
+      expect(bounds.top, frame).toBeGreaterThan(respawnCue.y + respawnCue.height);
+      expect(bounds.bottom, frame).toBeLessThanOrEqual(narrowViewport.height - insets.bottom);
     }
 
     await launchByTouch(page);
