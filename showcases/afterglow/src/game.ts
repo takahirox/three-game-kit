@@ -60,6 +60,8 @@ import { createMeridianDescent, featureStart, type Track, type TrackFeature } fr
 
 const MAX_STEPS = 1_200;
 const CUE_RANGE = 150;
+const TOUCH_DEVICE = "afterglow-controls";
+const HELD_CONTROLS = ["throttle", "brake", "boost"] as const;
 const CHASE_DISTANCE = 11.5;
 const CHASE_HEIGHT = 4.2;
 const EMPTY = defineFeatureConfiguration<Readonly<Record<string, never>>>({
@@ -123,6 +125,8 @@ export interface AfterglowGame {
   pressPhysical(input: string): void;
   setAxis(x: number): void;
   updateGamepad(deviceId: string, x: number, buttons: readonly string[]): void;
+  setTouchInput(input: TouchDriveInput | null, jumpPointerId?: number): void;
+  finishTouchJump(pointerId: number, canceled: boolean): void;
   loadScenario(id: Scenario): void;
   snapshot(): AfterglowSnapshot;
   events(): readonly AfterglowEvent[];
@@ -135,6 +139,12 @@ export interface AfterglowGame {
   subscribe(listener: (event: AfterglowEvent) => void): () => void;
   dispose(): void;
 }
+
+export interface TouchDriveInput extends HeldInput {
+  readonly steer: number | null;
+}
+
+type InputSource = "desktop" | "touch";
 
 export interface AfterglowGameOptions {
   readonly renderer?: AfterglowRenderer;
@@ -220,6 +230,11 @@ class Game implements AfterglowGame {
   });
   private readonly frames = createDeterministicPresentationFrameSource();
   private readonly input = createInputExperienceRuntime({ contexts: INPUT_CONTEXTS, initialContext: "menu", deadZone: 0.12 });
+  private desktopSteer = 0;
+  private touchSteer: number | null = null;
+  private readonly heldBySource: Record<InputSource, HeldInput> = { desktop: NEUTRAL_HELD, touch: NEUTRAL_HELD };
+  private pendingTouch: HeldInput | null = null;
+  private pendingTouchJump: number | "released" | null = null;
   private readonly vehicles = createVehicleRuntime(
     [{ id: CAR_ID, seats: [{ id: DRIVER_SEAT, role: "driver" }], acceleration: TUNING.acceleration, braking: TUNING.braking, steering: 1 }],
     { integrate: (vehicle, control, dt) => this.integrate(vehicle.speed, vehicle.steering, control, dt) },
@@ -283,7 +298,10 @@ class Game implements AfterglowGame {
       createInputExperienceFeature({
         runtime: this.input,
         publishMovement: (command) => { this.state.steer = clampUnit(command.x); },
-        publishAction: (action) => this.handleAction(action as Action),
+        publishAction: (action) => {
+          if (action.startsWith("touch:")) this.handleAction(action.slice("touch:".length) as Action, "touch");
+          else this.handleAction(action as Action);
+        },
       }),
       gameFeature("afterglow.controls", "Translates semantic pilot input into vehicle control requests", 600, () => this.requestControls()),
       createVehiclesClientFeature(this.vehicles, (events) => {
@@ -355,20 +373,46 @@ class Game implements AfterglowGame {
     this.vehicles.requestControl(CAR_ID, PLAYER_ID, { throttle, brake, steering });
   }
 
-  private handleAction(action: Action): void {
+  private handleAction(action: Action, source: InputSource = "desktop"): void {
     switch (action) {
-      case "throttle-start": this.setHeld({ throttle: true }); return;
-      case "throttle-end": this.setHeld({ throttle: false }); return;
-      case "brake-start": this.setHeld({ brake: true }); return;
-      case "brake-end": this.setHeld({ brake: false }); return;
-      case "boost-start": this.setHeld({ boost: true }); return;
-      case "boost-end": this.setHeld({ boost: false }); return;
+      case "throttle-start": this.setHeld({ throttle: true }, source); return;
+      case "throttle-end": this.setHeld({ throttle: false }, source); return;
+      case "brake-start": this.setHeld({ brake: true }, source); return;
+      case "brake-end": this.setHeld({ brake: false }, source); return;
+      case "boost-start": this.setHeld({ boost: true }, source); return;
+      case "boost-end": this.setHeld({ boost: false }, source); return;
       default: this.pressed.add(action);
     }
   }
 
-  private setHeld(patch: Partial<HeldInput>): void {
-    this.state.held = Object.freeze({ ...this.state.held, ...patch });
+  private setHeld(patch: Partial<HeldInput>, source: InputSource = "desktop"): void {
+    this.heldBySource[source] = { ...this.heldBySource[source], ...patch };
+    const { desktop, touch } = this.heldBySource;
+    this.state.held = Object.freeze({
+      throttle: desktop.throttle || touch.throttle,
+      brake: desktop.brake || touch.brake,
+      boost: desktop.boost || touch.boost,
+    });
+  }
+
+  private resetHeld(): void {
+    this.heldBySource.desktop = NEUTRAL_HELD;
+    this.heldBySource.touch = NEUTRAL_HELD;
+    this.state.held = NEUTRAL_HELD;
+  }
+
+  private publishTouchActions(): void {
+    if (this.pendingTouch === null) return;
+    const actions: string[] = [];
+    for (const control of HELD_CONTROLS) {
+      if (this.pendingTouch[control] !== this.heldBySource.touch[control]) {
+        actions.push(`touch:${control}-${this.pendingTouch[control] ? "start" : "end"}`);
+      }
+    }
+    if (this.pendingTouchJump !== null) actions.push("jump");
+    this.pendingTouch = null;
+    this.pendingTouchJump = null;
+    this.input.updateTouch(TOUCH_DEVICE, this.touchSteer ?? this.desktopSteer, 0, actions);
   }
 
   private cameraTarget(): Vec3 {
@@ -495,7 +539,7 @@ class Game implements AfterglowGame {
     this.state.finishTimeMs = null;
     this.state.medal = "none";
     this.state.cue = NO_CUE;
-    this.state.held = NEUTRAL_HELD;
+    this.resetHeld();
     this.speedOverride = 0;
     this.speedImpulse = 0;
     this.resultsTick = -1;
@@ -574,7 +618,7 @@ class Game implements AfterglowGame {
     this.state.finishTimeMs = finishMs;
     this.state.medal = medalFor(finishMs / 1000);
     this.state.car.boosting = false;
-    this.state.held = NEUTRAL_HELD;
+    this.resetHeld();
     if (this.state.bestTimeMs === null || finishMs < this.state.bestTimeMs) {
       this.state.bestTimeMs = finishMs;
       this.state.bestGhost = Object.freeze([...this.state.runGhost]);
@@ -825,6 +869,7 @@ class Game implements AfterglowGame {
     let steps = 0;
     while (this.accumulator >= DT - 1e-9 && steps < MAX_STEPS) {
       this.accumulator -= DT;
+      this.publishTouchActions();
       const result = this.runtime.stepExact(1);
       if (!result.ok) break;
       steps += 1;
@@ -844,7 +889,7 @@ class Game implements AfterglowGame {
 
   setInput(input: Readonly<{ readonly steer?: number; readonly throttle?: boolean; readonly brake?: boolean; readonly boost?: boolean }>): void {
     if (this.isDisposed) return;
-    if (input.steer !== undefined) this.input.setAxis(clampUnit(input.steer), 0);
+    if (input.steer !== undefined) this.setAxis(input.steer);
     const patch: { throttle?: boolean; brake?: boolean; boost?: boolean } = {};
     if (input.throttle !== undefined) patch.throttle = input.throttle;
     if (input.brake !== undefined) patch.brake = input.brake;
@@ -854,8 +899,37 @@ class Game implements AfterglowGame {
 
   press(action: Action): void { if (!this.isDisposed) this.handleAction(action); }
   pressPhysical(input: string): void { if (!this.isDisposed) this.input.pressPhysical(input); }
-  setAxis(x: number): void { if (!this.isDisposed) this.input.setAxis(clampUnit(x), 0); }
-  updateGamepad(deviceId: string, x: number, buttons: readonly string[]): void { if (!this.isDisposed) this.input.updateGamepad(deviceId, clampUnit(x), 0, buttons); }
+  setAxis(x: number): void {
+    if (this.isDisposed) return;
+    this.desktopSteer = clampUnit(x);
+    this.input.setAxis(this.touchSteer ?? this.desktopSteer, 0);
+  }
+
+  updateGamepad(deviceId: string, x: number, buttons: readonly string[]): void {
+    if (this.isDisposed) return;
+    this.desktopSteer = clampUnit(x);
+    this.input.updateGamepad(deviceId, this.touchSteer ?? this.desktopSteer, 0, buttons);
+  }
+
+  setTouchInput(input: TouchDriveInput | null, jumpPointerId?: number): void {
+    if (this.isDisposed) return;
+    this.touchSteer = input?.steer ?? null;
+    this.pendingTouch = input;
+    if (input === null) {
+      this.pendingTouchJump = null;
+      this.setHeld(NEUTRAL_HELD, "touch");
+      this.input.disconnectDevice(TOUCH_DEVICE);
+      this.input.setAxis(this.desktopSteer, 0);
+    } else if (jumpPointerId !== undefined && this.pendingTouchJump === null) {
+      this.pendingTouchJump = jumpPointerId;
+    }
+  }
+
+  finishTouchJump(pointerId: number, canceled: boolean): void {
+    if (this.pendingTouchJump !== pointerId) return;
+    // Keep a normally released tap queued until the next tick.
+    this.pendingTouchJump = canceled ? null : "released";
+  }
 
   loadScenario(id: Scenario): void {
     if (this.isDisposed) return;
